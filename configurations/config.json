@@ -1,0 +1,10 @@
+{
+  "input_data_path": {
+    "cluster": "/sise/home/shanisa/PhD/sRNA_BP_analysis/Data/main_analysis",
+    "DESKTOP-KQRL8D7": "C:\\Users\\User\\OneDrive - post.bgu.ac.il\\Desktop\\PhD\\sRNA_BP_analysis\\Data\\main_analysis\\outputs"
+  },
+  "output_data_path": {
+    "cluster": "/sise/home/shanisa/PhD/sRNA_BP_analysis/Data/main_analysis/outputs",
+    "DESKTOP-KQRL8D7": "C:\\Users\\User\\OneDrive - post.bgu.ac.il\\Desktop\\PhD\\sRNA_BP_analysis\\Data\\main_analysis\\outputs"
+  }
+}
