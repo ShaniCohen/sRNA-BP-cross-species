@@ -114,8 +114,7 @@ def load_goa():
     from goatools.anno.gaf_reader import GafReader
 
     # Path to your GOA file
-    gaf_file = "path/to/your/goa_file.gaf"
-
+    gaf_file = "/sise/home/shanisa/PhD/sRNA_BP_analysis/Data/main_analysis/gene_annot/Escherichia_coli_K12_MG1655/e_coli_MG1655.goa"
     # Create a GafReader object
     gaf_reader = GafReader(gaf_file)
 
