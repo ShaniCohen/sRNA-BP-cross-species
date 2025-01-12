@@ -46,7 +46,8 @@ def load_and_process_data(conf: Dict[str, str], ecoli_k12_nm: str, ecoli_epec_nm
     data = dl.load_rna_n_inter_data(conf, ecoli_k12_nm, ecoli_epec_nm, salmonella_nm)
     data = dl.align_rna_n_inter_data(data)
     # 2 - Gene Ontology data
-
+    # TODO: read GOA data
+    out = dl.load_goa()
     return data
 
 

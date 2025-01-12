@@ -108,3 +108,20 @@ def align_rna_n_inter_data(data: Dict[str, Dict[str, pd.DataFrame]], srna_acc: s
         strain_data['unq_inter'] = strain_data['unq_inter'].rename(columns={strain_data['all_inter_mrna_acc_col']: mrna_acc})
 
     return data
+
+
+def load_goa():
+    from goatools.anno.gaf_reader import GafReader
+
+    # Path to your GOA file
+    gaf_file = "path/to/your/goa_file.gaf"
+
+    # Create a GafReader object
+    gaf_reader = GafReader(gaf_file)
+
+    # Read the GOA file
+    annotations = gaf_reader.read_gaf()
+
+    # Print the annotations
+    for gene, go_terms in annotations.items():
+        print(f"Gene: {gene}, GO Terms: {go_terms}")
