@@ -105,3 +105,4 @@ ENV/
 *.iml
 
 .vscode/
+**/_logs/** */
