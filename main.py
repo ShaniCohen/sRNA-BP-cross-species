@@ -8,10 +8,10 @@ import sys
 import os
 from analysis.data_loader import DataLoader
 from analysis.ontology import Ontology
-# import logging
-# logging.basicConfig(level=logging.INFO, stream=sys.stdout, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-# logger = logging.getLogger(__name__)
-from utils.logger import create_logger
+import logging
+logging.basicConfig(level=logging.DEBUG, stream=sys.stdout, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+# from utils.logger import create_logger
 
 
 ROOT_PATH = os.path.realpath(os.path.dirname(__file__))  # the root of the repository
@@ -23,7 +23,8 @@ print(f"\nROOT_PATH: {ROOT_PATH}")
 class AnalysisRunner:
     def __init__(self, version: str, config_path: str):
         print(f"running main, version = {version}")
-        self.logger = create_logger(logger_nm='AnalysisRunner')
+        # self.logger = create_logger(logger_nm='AnalysisRunner')
+        self.logger = logger
         self.logger.info(f"initializing AnalysisRunner, version = {version}")
         self.version = version
 
@@ -42,14 +43,15 @@ class AnalysisRunner:
         
         self.configs = configs
 
-        
     def run(self):
         self.logger.info(f"--------------   run starts   --------------")
 
         data_loader = DataLoader(self.configs['data_loader'], self.logger)
-        data = data_loader.load_and_process_data()
+        data_loader.load_and_process_data()
         ontology = Ontology(self.configs['ontology'], self.logger)
         ontology.load_go_ontology()
+
+        # TODO: load annotations
         # # 1 - set random seeds
         # init_seed()
 

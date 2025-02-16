@@ -53,13 +53,11 @@ def create_logger(logger_nm: str = None, logs_dir: str = join(ROOT_PATH, '_logs'
     # create file handler
     file_handler = logging.FileHandler(log_file_path)
     file_handler.setFormatter(formatter)
-    file_handler.setLevel(log_level)
     logger.addHandler(file_handler)
 
     # create console handler
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
-    console_handler.setLevel(console_level)
     logger.addHandler(console_handler)
 
     return logger
