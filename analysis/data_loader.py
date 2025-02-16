@@ -30,18 +30,11 @@ class DataLoader:
         self.ecoli_epec_nm = 'ecoli_epec' 
         self.salmonella_nm = 'salmonella'
         self.strains_data = {}
-        self.gene_ontology = None
 
     def load_and_process_data(self) -> Dict[str, Dict[str, pd.DataFrame]]:
         # 1 - RNA and interactions data (self.strains_data)
         self._load_rna_and_inter_data()
         self._align_data()
-        
-        # 2 - Gene Ontology data
-        self._load_go_ontology()
-        # TODO: read GOA data
-        # self._load_goa()
-        return 
 
     def _load_rna_and_inter_data(self) -> Dict[str, Dict[str, pd.DataFrame]]:
         # ---------------------------   per dataset preprocessing   ---------------------------
@@ -137,14 +130,6 @@ class DataLoader:
             # 1.4 - unique interactions
             strain_data['unq_inter'] = strain_data['unq_inter'].rename(columns={strain_data['all_inter_srna_acc_col']: srna_acc})
             strain_data['unq_inter'] = strain_data['unq_inter'].rename(columns={strain_data['all_inter_mrna_acc_col']: mrna_acc})
-
-    def _load_go_ontology(self):
-        gene_ontology_json_file = join(self.config['input_data_path'], self.config['gene_ontology_dir'], self.config['gene_ontology_json_file'])
-        with open(gene_ontology_json_file, 'r', encoding='utf-8') as f:
-            ontology = json.load(f)
-        ontology = ontology['graphs'][0]
-        
-        print()
 
     def _load_goa(self):
         from goatools.anno.gaf_reader import GafReader

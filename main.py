@@ -6,8 +6,8 @@ from os.path import join, split, dirname, basename, abspath
 import json
 import sys
 import os
-# from analysis import data_loader as dl
 from analysis.data_loader import DataLoader
+from analysis.ontology import Ontology
 # import logging
 # logging.basicConfig(level=logging.INFO, stream=sys.stdout, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 # logger = logging.getLogger(__name__)
@@ -26,23 +26,30 @@ class AnalysisRunner:
         self.logger = create_logger(logger_nm='AnalysisRunner')
         self.logger.info(f"initializing AnalysisRunner, version = {version}")
         self.version = version
-        self.config_path = config_path
 
+        # load & update configurations on-the-fly
         with open(config_path, 'r', encoding='utf-8') as f:
             configs = json.load(f)
-        self.config = configs['runner']
+        # runner
+        configs['runner']['input_data_path'] = configs['runner']['remote_data_path'] if 'shanisa' in ROOT_PATH else configs['runner']['local_data_path']
+        configs['runner']['output_data_path'] = join(configs['runner']['input_data_path'], 'outputs')
+        # data loader
+        for _dir in ['interactions_dir', 'rna_dir', 'go_annotations_dir']:
+            configs['data_loader'][_dir] = join(configs['runner']['input_data_path'], configs['data_loader'][_dir])
+        # ontology
+        for _dir in ['gene_ontology_dir']:
+            configs['ontology'][_dir] = join(configs['runner']['input_data_path'], configs['ontology'][_dir])
         
-        data_path = self.config['remote_data_path'] if 'shanisa' in ROOT_PATH else self.config['local_data_path']
-        # update data_loader config on-the-fly
-        self.data_loader_config = configs['data_loader']
-        self.data_loader_config['input_data_path'] = data_path
-        self.data_loader_config['output_data_path'] = join(data_path, 'outputs')
+        self.configs = configs
+
         
     def run(self):
         self.logger.info(f"--------------   run starts   --------------")
 
-        data_loader = DataLoader(self.data_loader_config, self.logger)
+        data_loader = DataLoader(self.configs['data_loader'], self.logger)
         data = data_loader.load_and_process_data()
+        ontology = Ontology(self.configs['ontology'], self.logger)
+        ontology.load_go_ontology()
         # # 1 - set random seeds
         # init_seed()
 
