@@ -31,24 +31,17 @@ class AnalysisRunner:
         with open(config_path, 'r', encoding='utf-8') as f:
             configs = json.load(f)
         self.config = configs['runner']
-
-
-    # def networkx_example():
-    #     import networkx as nx
-
-    #     # Enable nx-cugraph backend
-    #     import os
-    #     os.environ["NX_CUGRAPH_AUTOCONFIG"] = "True"
-
-    #     # Create a graph and run an algorithm
-    #     G = nx.erdos_renyi_graph(1000, 0.01)
-    #     centrality = nx.betweenness_centrality(G)
-
-
+        
+        data_path = self.config['remote_data_path'] if 'shanisa' in ROOT_PATH else self.config['local_data_path']
+        # update data_loader config on-the-fly
+        self.data_loader_config = configs['data_loader']
+        self.data_loader_config['input_data_path'] = data_path
+        self.data_loader_config['output_data_path'] = join(data_path, 'outputs')
+        
     def run(self):
         self.logger.info(f"--------------   run starts   --------------")
 
-        data_loader = DataLoader(self.config_path, self.logger)
+        data_loader = DataLoader(self.data_loader_config, self.logger)
         data = data_loader.load_and_process_data()
         # # 1 - set random seeds
         # init_seed()

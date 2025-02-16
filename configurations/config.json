@@ -1,13 +1,15 @@
 {
   "runner": {
+    "local_data_path": "C:\\Users\\User\\OneDrive - post.bgu.ac.il\\Desktop\\PhD\\Data\\sRNA_BP_analysis\\Data\\main_analysis",
+    "remote_data_path": "\\sise\\home\\shanisa\\PhD\\sRNA_BP_analysis\\Data\\main_analysis"
   },
   "data_loader": {
-    "input_data_path": "/sise/home/shanisa/PhD/sRNA_BP_analysis/Data/main_analysis",
+    "input_data_path": "",
     "interactions_dir": "interactions",
     "rna_dir": "rna",
     "go_annotations_dir": "go_annotations",
     "gene_ontology_dir": "gene_ontology",
     "gene_ontology_json_file": "go-basic.json",
-    "output_data_path": "/sise/home/shanisa/PhD/sRNA_BP_analysis/Data/main_analysis/outputs"
+    "output_data_path": ""
   }
 }

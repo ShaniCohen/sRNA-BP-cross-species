@@ -18,12 +18,10 @@ from analysis import data_prepro as ap
 
 
 class DataLoader:
-    def __init__(self, config_path, logger):
+    def __init__(self, config, logger):
         self.logger = logger
         self.logger.info(f"initializing DataLoader")
-        with open(config_path, 'r', encoding='utf-8') as f:
-            configs = json.load(f)
-        self.config = configs['data_loader']
+        self.config = config
         self.inter_data_path = join(self.config['input_data_path'], self.config['interactions_dir'])
         self.rna_data_path = join(self.config['input_data_path'], self.config['rna_dir'])
         self.go_annot_path = join(self.config['input_data_path'], self.config['go_annotations_dir'])
@@ -42,7 +40,7 @@ class DataLoader:
         # 2 - Gene Ontology data
         self._load_go_ontology()
         # TODO: read GOA data
-        self._load_goa()
+        # self._load_goa()
         return 
 
     def _load_rna_and_inter_data(self) -> Dict[str, Dict[str, pd.DataFrame]]:
