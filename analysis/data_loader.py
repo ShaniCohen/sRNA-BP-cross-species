@@ -35,6 +35,7 @@ class DataLoader:
         # 1 - RNA and interactions data (self.strains_data)
         self._load_rna_and_inter_data()
         self._align_data()
+        se
 
     def _load_rna_and_inter_data(self) -> Dict[str, Dict[str, pd.DataFrame]]:
         # ---------------------------   per dataset preprocessing   ---------------------------
