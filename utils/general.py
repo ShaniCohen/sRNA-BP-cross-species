@@ -37,6 +37,8 @@ def read_df(file_path, encoding='utf-8'):
             df = pickle.load(handle)
     elif ".txt" in basename(file_path):
         df = pd.read_csv(file_path, delimiter=" ")
+    elif ".dat" in basename(file_path):
+        df = pd.read_csv(file_path, delimiter="\t", header=None)
     else:
         raise ValueError(f"{basename(file_path)} NOT SUPPORTED - only .csv OR .txt")
     return df

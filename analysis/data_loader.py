@@ -56,9 +56,20 @@ class DataLoader:
         k12_mrna = read_df(file_path=join(self.config['rna_dir'], k12_dir, "mrna_eco.csv"))
         k12_srna = read_df(file_path=join(self.config['rna_dir'], k12_dir, "srna_eco.csv"))
         k12_inter = read_df(file_path=join(self.config['interactions_dir'], k12_dir, 'sInterBase_interactions_post_processing.csv'))
-        k12_annot = load_goa(file_path=join(self.config['go_annotations_dir'], k12_dir, 'e_coli_MG1655.goa'))
-        k12_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], k12_dir, 'InterProScan', 'Ecoli_k12_protein_sample.fasta.json'))
-
+        k12_annot_uniport = load_goa(file_path=join(self.config['go_annotations_dir'], k12_dir, 'e_coli_MG1655.goa'))
+        k12_annot_map_uniport_to_locus = read_df(file_path=join(self.config['go_annotations_dir'], k12_dir, 'ECOLI_83333_idmapping.dat'))
+        # k12_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], k12_dir, 'InterProScan', 'Ecoli_k12_protein_sample.fasta.json'))
+        
+        # TODO: process k12_annot_map_uniport_to_locus  (in ap)
+        # keep the following rows, then generate a dict mapping UniProt to these keys
+        # {
+        #   UniProt: {
+        #       'Gene_OrderedLocusName': ['b0001'],
+        #       'Gene_Name': ['thrL'],
+        #       'Gene_Synonym': ['ECK0001'],
+        #       'BioCyc': ['EG11277']}
+        # }
+        # ['Gene_OrderedLocusName', 'Gene_Name', 'Gene_Synonym', 'BioCyc']
 
         k12_mrna, k12_srna, k12_inter = \
             ap.preprocess_ecoli_k12_inter(mrna_data=k12_mrna, srna_data=k12_srna, inter_data=k12_inter)
@@ -74,9 +85,7 @@ class DataLoader:
                 'all_srna_acc_col': 'EcoCyc_accession_id',
                 'all_mrna_acc_col': 'EcoCyc_accession_id',
                 'all_inter_srna_acc_col': 'sRNA_accession_id_Eco',
-                'all_inter_mrna_acc_col': 'mRNA_accession_id_Eco',
-                'k12_annot': k12_annot,
-                'k12_annot_interproscan': k12_annot_interproscan
+                'all_inter_mrna_acc_col': 'mRNA_accession_id_Eco'
             }
         })
 
@@ -146,4 +155,3 @@ class DataLoader:
             # 1.4 - unique interactions
             strain_data['unq_inter'] = strain_data['unq_inter'].rename(columns={strain_data['all_inter_srna_acc_col']: self.srna_acc_col})
             strain_data['unq_inter'] = strain_data['unq_inter'].rename(columns={strain_data['all_inter_mrna_acc_col']: self.mrna_acc_col})
-            
