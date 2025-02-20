@@ -18,7 +18,7 @@ def add_accessions_to_rna_names_in_inter_df(
         inder_df_1: pd.DataFrame, srna_nm_col_1: str, mrna_nm_col_1: str, label_col_1: str,
         srna_acc_df_2: pd.DataFrame, srna_nm_col_2: str, srna_acc_col_2: str,
         mrna_acc_df_3: pd.DataFrame, mrna_nm_col_3: str, mrna_acc_col_3: str,
-        remove_mrna_names_with_multi_accessions: bool) -> (pd.DataFrame, pd.DataFrame):
+        remove_mrna_names_with_multi_accessions: bool) -> Tuple[pd.DataFrame, pd.DataFrame]:
     logger.debug(f"add_accessions_to_rna_names_in_inter_df --> remove = {remove_mrna_names_with_multi_accessions}")
 
     out_col_multi_mrna_acc = 'is_mRNA_with_multi_acc'
@@ -111,7 +111,7 @@ def check_interacting_rna_names_included_in_all_rnas(inter_df: pd.DataFrame, int
 def find_srna_mrna_intersection(nm1: str, all_srna1: pd.DataFrame, all_mrna1: pd.DataFrame, srna_nm_col_1: str, mrna_nm_col_1: str,
                                 nm2: str, all_srna2: pd.DataFrame, all_mrna2: pd.DataFrame, srna_nm_col_2: str, mrna_nm_col_2: str,
                                 dataset_out_col: str = 'dataset') \
-        -> (List[str], List[str], pd.DataFrame):
+        -> Tuple[List[str], List[str], pd.DataFrame]:
     logger.info(f"find_srna_mrna_intersection: {nm1} vs. {nm2}")
     srna1 = sorted(set(all_srna1[srna_nm_col_1]))
     mrna1 = sorted(set(all_mrna1[mrna_nm_col_1]))
@@ -219,7 +219,7 @@ def _set_agnodice_target(rna_nm: str, rna_ncbi_id: str, rna_biocyc_id: str) -> s
     return tar
 
 
-def analyze_agnodice_inter(inter_data: pd.DataFrame, out_path: str = None) -> (pd.DataFrame, pd.DataFrame):
+def analyze_agnodice_inter(inter_data: pd.DataFrame, out_path: str = None) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     "Escherichia coli str. K-12 substr. MG1655",
     "Escherichia coli O127:H6 str. E2348/69",
@@ -314,7 +314,7 @@ def analyze_agnodice_inter(inter_data: pd.DataFrame, out_path: str = None) -> (p
     return unq_inter, df_sum
 
 
-def analyze_target_rna3_inter(inter_data: pd.DataFrame) -> (pd.DataFrame, pd.DataFrame):
+def analyze_target_rna3_inter(inter_data: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     "Escherichia coli str. K-12 substr. MG1655"                          (4162) srna = 61
     "Salmonella enterica subsp. enterica serovar Typhimurium str. SL1344"  (34) srna = 2
