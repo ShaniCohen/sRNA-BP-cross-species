@@ -9,13 +9,13 @@ import json
 import sys
 import os
 
-
 ROOT_PATH = str(Path(__file__).resolve().parents[1])
 if ROOT_PATH not in sys.path:
     sys.path.append(ROOT_PATH)
 print(f"\nROOT_PATH: {ROOT_PATH}")
 
-from analysis import data_prepro as ap
+from preprocessing import rna_inter_pr as ap
+from preprocessing import annotations_pr as ap_annot
 
 
 def load_goa(file_path):
@@ -177,8 +177,8 @@ class DataLoader:
         k12_annot_map_uniport_to_locus.columns = ['UniProt_ID', 'Database', 'Mapped_ID']
         k12_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], k12_dir, 'InterProScan', 'Ecoli_k12_protein_sample.fasta.json'))
         
-        interproscan_annot, i_header_col = ap.preprocess_interproscan_annot(k12_annot_interproscan)
-        curated_annot, c_locus_col = ap.preprocess_curated_annot(self.ecoli_k12_nm, k12_annot_uniport, k12_annot_map_uniport_to_locus)
+        interproscan_annot, i_header_col = ap_annot.preprocess_interproscan_annot(k12_annot_interproscan)
+        curated_annot, c_locus_col = ap_annot.preprocess_curated_annot(self.ecoli_k12_nm, k12_annot_uniport, k12_annot_map_uniport_to_locus)
 
         # 1.1 - update info
         if self.ecoli_k12_nm not in self.strains_data:
@@ -209,10 +209,8 @@ class DataLoader:
     def _preprocess_annotations(self):
         for strain, data in self.strains_data.items():
             if 'curated_annot' in data:
-                data['all_mrna_w_curated_annt'] = ap.annotate_mrnas_w_curated_annt(strain, data['all_mrna'], data['all_mrna_locus_col'], data['curated_annot'], data['curated_locus_col'])
+                data['all_mrna_w_curated_annt'] = ap_annot.annotate_mrnas_w_curated_annt(strain, data['all_mrna'], data['all_mrna_locus_col'], data['curated_annot'], data['curated_locus_col'])
             if 'interproscan_annot' in data:
-                data['interproscan_annot'] = ap.parse_header_to_acc_locus_and_name(data['interproscan_annot'], data['interproscan_header_col'], data['mrna_acc_col'], data['all_mrna_locus_col'], data['all_mrna_name_col'])
-                data['interproscan_annot'] = ap.annotate_mrnas_w_interproscan_annt(strain, data['all_mrna'], data['all_mrna_locus_col'], data['interproscan_annot'], data['interproscan_header_col'])
-
-
+                data['interproscan_annot'] = ap_annot.parse_header_to_acc_locus_and_name(data['interproscan_annot'], data['interproscan_header_col'], data['mrna_acc_col'], data['all_mrna_locus_col'], data['all_mrna_name_col'])
+                data['interproscan_annot'] = ap_annot.annotate_mrnas_w_interproscan_annt(strain, data['all_mrna'], data['mrna_acc_col'], data['interproscan_annot'], data['interproscan_header_col'])
 
