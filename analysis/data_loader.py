@@ -58,18 +58,11 @@ class DataLoader:
         k12_inter = read_df(file_path=join(self.config['interactions_dir'], k12_dir, 'sInterBase_interactions_post_processing.csv'))
         k12_annot_uniport = load_goa(file_path=join(self.config['go_annotations_dir'], k12_dir, 'e_coli_MG1655.goa'))
         k12_annot_map_uniport_to_locus = read_df(file_path=join(self.config['go_annotations_dir'], k12_dir, 'ECOLI_83333_idmapping.dat'))
-        # k12_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], k12_dir, 'InterProScan', 'Ecoli_k12_protein_sample.fasta.json'))
+        k12_annot_map_uniport_to_locus.columns = ['UniProt_ID', 'Database', 'Mapped_ID']
+        k12_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], k12_dir, 'InterProScan', 'Ecoli_k12_protein_sample.fasta.json'))
         
-        # TODO: process k12_annot_map_uniport_to_locus  (in ap)
-        # keep the following rows, then generate a dict mapping UniProt to these keys
-        # {
-        #   UniProt: {
-        #       'Gene_OrderedLocusName': ['b0001'],
-        #       'Gene_Name': ['thrL'],
-        #       'Gene_Synonym': ['ECK0001'],
-        #       'BioCyc': ['EG11277']}
-        # }
-        # ['Gene_OrderedLocusName', 'Gene_Name', 'Gene_Synonym', 'BioCyc']
+        locus_nm_to_go_terms_df = ap.preprocess_ecoli_k12_annot_map(k12_annot_uniport, k12_annot_map_uniport_to_locus)
+        header_to_go_terms_df = ap.preprocess_interproscan(k12_annot_interproscan)
 
         k12_mrna, k12_srna, k12_inter = \
             ap.preprocess_ecoli_k12_inter(mrna_data=k12_mrna, srna_data=k12_srna, inter_data=k12_inter)

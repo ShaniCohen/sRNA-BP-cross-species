@@ -1,7 +1,7 @@
 {
   "runner": {
     "local_data_path": "C:\\Users\\User\\OneDrive - post.bgu.ac.il\\Desktop\\PhD\\Data\\sRNA_BP_analysis\\Data\\main_analysis",
-    "remote_data_path": "\\sise\\home\\shanisa\\PhD\\sRNA_BP_analysis\\Data\\main_analysis",
+    "remote_data_path": "/sise/home/shanisa/PhD/sRNA_BP_analysis/Data/main_analysis",
     "input_data_path": "",
     "output_data_path": ""
   },
