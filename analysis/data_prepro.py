@@ -827,7 +827,7 @@ def preprocess_salmonella_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame
     return mrna_data, srna_data, inter_data
 
 
-def preprocess_interproscan(d: Dict[str, Set[str]]):
+def preprocess_interproscan_annot(d: Dict[str, Set[str]]):
     """_summary_
 
     Args:
@@ -920,18 +920,15 @@ def preprocess_interproscan(d: Dict[str, Set[str]]):
     assert len(input_df) == len(d['results']), "some results are duplicated / missing"
     matches_df = pd.DataFrame(records)
     df = pd.merge(input_df, matches_df, on=[out_col_header, out_col_seq], how='left')
-    return df
+    return df, out_col_header
 
 
-def preprocess_ecoli_k12_annot_map(annot_uniport: Dict[str, Set[str]], annot_map_uniport_to_locus: pd.DataFrame):
+def preprocess_curated_annot(strain_nm: str, annot_uniport: Dict[str, Set[str]], annot_map_uniport_to_locus: pd.DataFrame):
     """
-    "Escherichia coli str. K-12 substr. MG1655"
-
     Args:
         annot_uniport (Dict[str, Set[str]]): _description_
         annot_map_uniport_to_locus (pd.DataFrame): table mapping UniProt to other IDs (columns = ['UniProt_ID', 'Database', 'Mapped_ID'])
     """
-    strain_nm = "Escherichia coli str. K-12 substr. MG1655"
     # 1 - prepare a dict mapping UniProt_ID to the following keys
     # ['Gene_OrderedLocusName', 'Gene_Name', 'Gene_Synonym', 'BioCyc']
     col_uniport_id = 'UniProt_ID'
@@ -962,29 +959,57 @@ def preprocess_ecoli_k12_annot_map(annot_uniport: Dict[str, Set[str]], annot_map
     multi_locus_nm = sum(valid_locus_nm.str.len() > 1)
     logger.info(f"{strain_nm}: out of {len(uniport_go_terms)} GO annotations ({col_uniport_id}) - {missing_locus_nm} are missing locus names, {multi_locus_nm} has multi locus names")
 
-    return df
+    return df, out_col_locus_nm
 
-def preprocess_go_terms_per_locus_nm(go_terms_per_locus_nm, all_mrna, mrna_locus_col):
+def annotate_mrnas_w_curated_annt(strain_nm: str, all_mrna: pd.DataFrame, all_mrna_locus_col: str, curated_annot: pd.DataFrame, 
+                                  curated_annot_locus_col: str) -> pd.DataFrame:
     """
     Preprocess GO terms per locus name.
     """
-    # Example preprocessing steps
-    processed_go_terms = {}
-    for locus, terms in go_terms_per_locus_nm.items():
-        if locus in all_mrna[mrna_locus_col].values:
-            processed_go_terms[locus] = terms
-    return processed_go_terms
+    # 1 - merge GO terms with all mRNAs
+    all_mrna_w_curated_annt = pd.merge(all_mrna, curated_annot, left_on=all_mrna_locus_col, right_on=curated_annot_locus_col, how='left')
+    assert len(all_mrna) == len(all_mrna_w_curated_annt), "duplicate locus names"
 
-def preprocess_go_terms_per_header(go_terms_per_header):
+    # 2 - log statistics
+    num_mrna = len(all_mrna)
+    num_mrna_w_annt = sum(pd.notnull(all_mrna_w_curated_annt['Locus_Name']))
+    logger.info(f"{strain_nm}: out of {num_mrna} mRNAs {num_mrna_w_annt} have curated GO annotations ({(num_mrna_w_annt/num_mrna)*100:.2f})%")
+
+    return all_mrna_w_curated_annt
+
+def annotate_mrnas_w_interproscan_annt(interproscan_annot):
     """
-    Preprocess GO terms per header.
+    Preprocess InterProScan annotations (GO terms per header).
     """
     # Example preprocessing steps
     processed_go_terms = {}
-    for header, terms in go_terms_per_header.items():
+    for header, terms in interproscan_annot.items():
         # Example processing: filter out certain terms or modify structure
         processed_go_terms[header] = [term for term in terms if 'example_filter' not in term]
     return processed_go_terms
+
+def parse_header_to_acc_locus_and_name(df: pd.DataFrame, df_header_col: str, acc_col: str, locus_col: str, name_col: str) -> pd.DataFrame:
+    """
+    Parse the header column in the InterProScan annotations dataframe to extract accession, locus, and name.
+    
+    Args:
+        df (pd.DataFrame): DataFrame containing the InterProScan annotations.
+        df_header_col (str): Name of the column containing the header.
+        acc_col (str): Name of the column to store the accession.
+        locus_col (str): Name of the column to store the locus.
+        name_col (str): Name of the column to store the name.
+    
+    Returns:
+        pd.DataFrame: DataFrame with the new columns added.
+    """
+    def parse_header(header: str):
+        parts = header.split('|')
+        if len(parts) == 4:
+            return parts[1], parts[2], parts[3]
+        return None, None, None
+
+    df[[acc_col, locus_col, name_col]] = df[df_header_col].apply(lambda x: pd.Series(parse_header(x)))
+    return df
 
 
 
