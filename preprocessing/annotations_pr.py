@@ -76,9 +76,11 @@ def preprocess_interproscan_annot(d: Dict[str, Set[str]]):
             go_xrefs_entry = entry.get('goXRefs', []) if pd.notnull(entry) else []
 
             if len(go_xrefs) > 0 and len(go_xrefs_entry) > 0:
-                raise ValueError(f"both goXRefs and goXRefs_entry are not null")
+                logger.warning(f"both goXRefs and goXRefs_entry are not null")
             
             go_xrefs += go_xrefs_entry
+            # TOOD: make it unique
+            # go_xrefs = list(set(go_xrefs))
             if len(go_xrefs) > 0:
                 rec = {
                     out_col_header: input_header,
