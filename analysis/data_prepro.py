@@ -588,6 +588,23 @@ def analyze_ecoli_k12_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, in
     df_sum['total_sRNAs'] = len(srna_data)
     df_sum['total_mRNAs'] = len(mrna_data)
 
+    # -------------- align columns
+    for rna in ['sRNA', 'mRNA']:
+        rename_map = {
+            'EcoCyc_locus_tag': f'{rna}_locus_tag',
+            'EcoCyc_rna_name': f'{rna}_name',
+            'EcoCyc_rna_name_synonyms': f'{rna}_name_synonyms',
+            'EcoCyc_start': f'{rna}_start',
+            'EcoCyc_end': f'{rna}_end',
+            'EcoCyc_strand': f'{rna}_strand',
+            'EcoCyc_sequence': f'{rna}_sequence',
+            'EcoCyc_accession-2': f'{rna}_accession_2'
+        }
+        if rna == 'sRNA':
+            srna_data = srna_data.rename(columns=rename_map)
+        else:
+            mrna_data = mrna_data.rename(columns=rename_map)
+
     return unq_inter, df_sum, srna_data, mrna_data
 
 
@@ -822,7 +839,8 @@ def preprocess_interproscan(d: Dict[str, Set[str]]):
                         'xref': {'name': str <the header of the input fasta file>},
                          ... ,
                         'matches': [
-                            {
+                            {   
+                                'goXRefs': [],
                                 'signature': {
                                     'accession': ,
                                     'name': ,
@@ -945,6 +963,28 @@ def preprocess_ecoli_k12_annot_map(annot_uniport: Dict[str, Set[str]], annot_map
     logger.info(f"{strain_nm}: out of {len(uniport_go_terms)} GO annotations ({col_uniport_id}) - {missing_locus_nm} are missing locus names, {multi_locus_nm} has multi locus names")
 
     return df
+
+def preprocess_go_terms_per_locus_nm(go_terms_per_locus_nm, all_mrna, mrna_locus_col):
+    """
+    Preprocess GO terms per locus name.
+    """
+    # Example preprocessing steps
+    processed_go_terms = {}
+    for locus, terms in go_terms_per_locus_nm.items():
+        if locus in all_mrna[mrna_locus_col].values:
+            processed_go_terms[locus] = terms
+    return processed_go_terms
+
+def preprocess_go_terms_per_header(go_terms_per_header):
+    """
+    Preprocess GO terms per header.
+    """
+    # Example preprocessing steps
+    processed_go_terms = {}
+    for header, terms in go_terms_per_header.items():
+        # Example processing: filter out certain terms or modify structure
+        processed_go_terms[header] = [term for term in terms if 'example_filter' not in term]
+    return processed_go_terms
 
 
 

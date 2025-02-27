@@ -43,47 +43,43 @@ class DataLoader:
         self.mrna_acc_col = 'mRNA_accession_id'
 
     def load_and_process_data(self) -> Dict[str, Dict[str, pd.DataFrame]]:
-        # 1 - RNA and interactions data (self.strains_data)
+        """store all data in a self.strains_data dictionary
+        """
+        # 1 - RNA and interactions data
         self._load_rna_and_inter_data()
-        self._align_data()
-
+        self._align_rna_and_inter_data()
+        # 2 - GO annotations
+        self._load_annotations()
+        self._preprocess_annotations()
+    
     def _load_rna_and_inter_data(self) -> Dict[str, Dict[str, pd.DataFrame]]:
         # ---------------------------   per dataset preprocessing   ---------------------------
         # 1 - Escherichia coli K12 MG1655
-        #     srna_eco: includes 94 unique sRNAs of Escherichia coli K12 MG1655 (NC_000913) from EcoCyc.
-        #     mrna_eco: includes 4300 unique mRNAs of Escherichia coli K12 MG1655 (NC_000913) from EcoCyc.
-        k12_dir = "Escherichia_coli_K12_MG1655"
+        k12_dir = self.config['k12_dir']
         k12_mrna = read_df(file_path=join(self.config['rna_dir'], k12_dir, "mrna_eco.csv"))
         k12_srna = read_df(file_path=join(self.config['rna_dir'], k12_dir, "srna_eco.csv"))
         k12_inter = read_df(file_path=join(self.config['interactions_dir'], k12_dir, 'sInterBase_interactions_post_processing.csv'))
-        k12_annot_uniport = load_goa(file_path=join(self.config['go_annotations_dir'], k12_dir, 'e_coli_MG1655.goa'))
-        k12_annot_map_uniport_to_locus = read_df(file_path=join(self.config['go_annotations_dir'], k12_dir, 'ECOLI_83333_idmapping.dat'))
-        k12_annot_map_uniport_to_locus.columns = ['UniProt_ID', 'Database', 'Mapped_ID']
-        k12_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], k12_dir, 'InterProScan', 'Ecoli_k12_protein_sample.fasta.json'))
-        
-        locus_nm_to_go_terms_df = ap.preprocess_ecoli_k12_annot_map(k12_annot_uniport, k12_annot_map_uniport_to_locus)
-        header_to_go_terms_df = ap.preprocess_interproscan(k12_annot_interproscan)
 
         k12_mrna, k12_srna, k12_inter = \
             ap.preprocess_ecoli_k12_inter(mrna_data=k12_mrna, srna_data=k12_srna, inter_data=k12_inter)
         k12_unq_inter, k12_sum, k12_srna, k12_mrna = ap.analyze_ecoli_k12_inter(mrna_data=k12_mrna, srna_data=k12_srna,
                                                                                 inter_data=k12_inter)
         # 1.1 - update info
-        self.strains_data.update({
-            self.ecoli_k12_nm: {
-                'all_mrna': k12_mrna,
-                'all_srna': k12_srna,
-                'unq_inter': k12_unq_inter,
-                'all_inter': k12_inter,
-                'all_srna_acc_col': 'EcoCyc_accession_id',
-                'all_mrna_acc_col': 'EcoCyc_accession_id',
-                'all_inter_srna_acc_col': 'sRNA_accession_id_Eco',
-                'all_inter_mrna_acc_col': 'mRNA_accession_id_Eco'
-            }
+        if self.ecoli_k12_nm not in self.strains_data:
+            self.strains_data[self.ecoli_k12_nm] = {}
+        self.strains_data[self.ecoli_k12_nm].update({
+            'all_mrna': k12_mrna,
+            'all_srna': k12_srna,
+            'unq_inter': k12_unq_inter,
+            'all_inter': k12_inter,
+            'all_srna_acc_col': 'EcoCyc_accession_id',
+            'all_mrna_acc_col': 'EcoCyc_accession_id',
+            'all_inter_srna_acc_col': 'sRNA_accession_id_Eco',
+            'all_inter_mrna_acc_col': 'mRNA_accession_id_Eco'
         })
 
         # 2 - Escherichia coli EPEC E2348/69
-        epec_dir = 'Mizrahi_2021_EPEC'
+        epec_dir = self.config['epec_dir']
         epec_mrna = read_df(file_path=join(self.config['rna_dir'], epec_dir, "mizrahi_epec_all_mRNA_molecules.csv"))
         epec_srna = read_df(file_path=join(self.config['rna_dir'], epec_dir, "mizrahi_epec_all_sRNA_molecules.csv"))
         epec_inter = read_df(file_path=join(self.config['interactions_dir'], epec_dir, "mizrahi_epec_interactions.csv"))
@@ -93,21 +89,21 @@ class DataLoader:
         epec_unq_inter, epec_sum, epec_srna, epec_mrna = \
             ap.analyze_ecoli_epec_inter(mrna_data=epec_mrna, srna_data=epec_srna, inter_data=epec_inter)
         # 2.1 - update info
-        self.strains_data.update({
-            self.ecoli_epec_nm: {
-                'all_mrna': epec_mrna,
-                'all_srna': epec_srna,
-                'unq_inter': epec_unq_inter,
-                'all_inter': epec_inter,
-                'all_srna_acc_col': 'sRNA_accession_id',
-                'all_mrna_acc_col': 'mRNA_accession_id',
-                'all_inter_srna_acc_col': 'sRNA_accession_id_Eco',
-                'all_inter_mrna_acc_col': 'mRNA_accession_id_Eco'
-            }
+        if self.ecoli_epec_nm not in self.strains_data:
+            self.strains_data[self.ecoli_epec_nm] = {}
+        self.strains_data[self.ecoli_epec_nm].update({
+            'all_mrna': epec_mrna,
+            'all_srna': epec_srna,
+            'unq_inter': epec_unq_inter,
+            'all_inter': epec_inter,
+            'all_srna_acc_col': 'sRNA_accession_id',
+            'all_mrna_acc_col': 'mRNA_accession_id',
+            'all_inter_srna_acc_col': 'sRNA_accession_id_Eco',
+            'all_inter_mrna_acc_col': 'mRNA_accession_id_Eco'
         })
 
         # 3 - Salmonella enterica serovar Typhimurium strain SL1344,  Genome: NC_016810.1  (Matera_2022)
-        salmonella_dir = 'Matera_2022_salmonella'
+        salmonella_dir = self.config['salmonella_dir']
         salmonella_mrna = read_df(file_path=join(self.config['rna_dir'], salmonella_dir, "matera_salmonella_all_mRNA_molecules.csv"))
         salmonella_srna = read_df(file_path=join(self.config['rna_dir'], salmonella_dir, "matera_salmonella_all_sRNA_molecules.csv"))
         salmonella_inter = read_df(file_path=join(self.config['interactions_dir'], salmonella_dir, "matera_salmonella_interactions.csv"))
@@ -118,33 +114,115 @@ class DataLoader:
         salmo_unq_inter, salmo_sum, salmo_srna, salmo_mrna = \
             ap.analyze_salmonella_inter(mrna_data=salmonella_mrna, srna_data=salmonella_srna, inter_data=salmonella_inter)
         # 3.1 - update info
-        self.strains_data.update({
-            self.salmonella_nm: {
-                'all_mrna': salmo_mrna,
-                'all_srna': salmo_srna,
-                'unq_inter': salmo_unq_inter,
-                'all_inter': salmonella_inter,
-                'all_srna_acc_col': 'sRNA_accession_id',
-                'all_mrna_acc_col': 'mRNA_accession_id',
-                'all_inter_srna_acc_col': 'sRNA_accession_id',
-                'all_inter_mrna_acc_col': 'mRNA_accession_id'
-            }
+        if self.salmonella_nm not in self.strains_data:
+            self.strains_data[self.salmonella_nm] = {}
+        self.strains_data[self.salmonella_nm].update({
+            'all_mrna': salmo_mrna,
+            'all_srna': salmo_srna,
+            'unq_inter': salmo_unq_inter,
+            'all_inter': salmonella_inter,
+            'all_srna_acc_col': 'sRNA_accession_id',
+            'all_mrna_acc_col': 'mRNA_accession_id',
+            'all_inter_srna_acc_col': 'sRNA_accession_id',
+            'all_inter_mrna_acc_col': 'mRNA_accession_id'
         })
 
         # 4 - Vibrio cholerae, NCBI Genomes:  NC_002505.1 and NC_002506.1  (Huber 2022)
 
         # 5 - Klebsiella pneumoniae str. SGH10; KL1, ST23  (Goh_2024)
 
-    def _align_data(self) -> Dict[str, Dict[str, pd.DataFrame]]:
-        # 1 - align RNA accession ids for all datasets
+
+    def _align_rna_and_inter_data(self) -> Dict[str, Dict[str, pd.DataFrame]]:
+        self._align_accession_ids_between_rna_and_inter()
+        self._assert_rna_df_columns()
+    
+    def _align_accession_ids_between_rna_and_inter(self) -> Dict[str, Dict[str, pd.DataFrame]]:
         for strain_data in self.strains_data.values():
-            # 1.1 - all sRNA
+            # 1 - all sRNA
             strain_data['all_srna'] = strain_data['all_srna'].rename(columns={strain_data['all_srna_acc_col']: self.srna_acc_col})
-            # 1.2 - all mRNA
+            # 2 - all mRNA
             strain_data['all_mrna'] = strain_data['all_mrna'].rename(columns={strain_data['all_mrna_acc_col']: self.mrna_acc_col})
-            # 1.3 - all interactions
+            # 3 - all interactions
             strain_data['all_inter'] = strain_data['all_inter'].rename(columns={strain_data['all_inter_srna_acc_col']: self.srna_acc_col})
             strain_data['all_inter'] = strain_data['all_inter'].rename(columns={strain_data['all_inter_mrna_acc_col']: self.mrna_acc_col})
-            # 1.4 - unique interactions
+            # 4 - unique interactions
             strain_data['unq_inter'] = strain_data['unq_inter'].rename(columns={strain_data['all_inter_srna_acc_col']: self.srna_acc_col})
             strain_data['unq_inter'] = strain_data['unq_inter'].rename(columns={strain_data['all_inter_mrna_acc_col']: self.mrna_acc_col})
+            # 5 - update keys
+            strain_data['srna_acc_col'] = self.srna_acc_col
+            strain_data['mrna_acc_col'] = self.mrna_acc_col
+            strain_data.pop('all_srna_acc_col', None)
+            strain_data.pop('all_mrna_acc_col', None)
+            strain_data.pop('all_inter_srna_acc_col', None)
+            strain_data.pop('all_inter_mrna_acc_col', None)
+    
+    def _assert_rna_df_columns(self) -> Dict[str, Dict[str, pd.DataFrame]]:
+        for strain_data in self.strains_data.values():
+            # 1 - assert
+            for rna in ['sRNA', 'mRNA']:
+                expected_cols = [f'{rna}_locus_tag', f'{rna}_name', f'{rna}_name_synonyms', f'{rna}_start', f'{rna}_end', f'{rna}_strand', f'{rna}_sequence']
+                rna_df = strain_data[f'all_{rna.lower()}']
+                assert all([col in rna_df.columns for col in expected_cols]), f"missing columns in {rna} data"
+        # 2 - set self columns
+        self.mrna_locus_col = 'mRNA_locus_tag'
+        self.mrna_name_col = 'mRNA_name'
+        self.mrna_name_syn_col = 'mRNA_name_synonyms'
+    
+    def _load_annotations(self) -> Dict[str, Dict[str, pd.DataFrame]]:
+        # ---------------------------   per dataset preprocessing   ---------------------------
+        # 1 - Escherichia coli K12 MG1655
+        k12_dir = self.config['k12_dir']
+        k12_annot_uniport = load_goa(file_path=join(self.config['go_annotations_dir'], k12_dir, 'e_coli_MG1655.goa'))
+        k12_annot_map_uniport_to_locus = read_df(file_path=join(self.config['go_annotations_dir'], k12_dir, 'ECOLI_83333_idmapping.dat'))
+        k12_annot_map_uniport_to_locus.columns = ['UniProt_ID', 'Database', 'Mapped_ID']
+        k12_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], k12_dir, 'InterProScan', 'Ecoli_k12_protein_sample.fasta.json'))
+        
+        go_terms_per_header = ap.preprocess_interproscan(k12_annot_interproscan)
+        go_terms_per_locus_nm = ap.preprocess_ecoli_k12_annot_map(k12_annot_uniport, k12_annot_map_uniport_to_locus)
+
+        # 1.1 - update info
+        if self.ecoli_k12_nm not in self.strains_data:
+            self.strains_data[self.ecoli_k12_nm] = {}
+        self.strains_data[self.ecoli_k12_nm].update({
+            "go_terms_per_locus_nm": go_terms_per_locus_nm,
+            "go_terms_per_header": go_terms_per_header
+        })
+
+        """
+        # 2 - Escherichia coli EPEC E2348/69
+        epec_dir = self.config['epec_dir']
+        epec_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], epec_dir, 'InterProScan', ''))
+        
+        go_terms_per_header = ap.preprocess_interproscan(epec_annot_interproscan)
+
+        # 2.1 - update info
+        if self.ecoli_epec_nm not in self.strains_data:
+            self.strains_data[self.ecoli_epec_nm] = {}
+        self.strains_data[self.ecoli_epec_nm].update({
+            "go_terms_per_header": go_terms_per_header
+        })
+
+        # 3 - Salmonella enterica serovar Typhimurium strain SL1344,  Genome: NC_016810.1  (Matera_2022)
+        salmonella_dir = self.config['salmonella_dir']
+        salmonella_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], salmonella_dir, 'InterProScan', ''))
+        
+        go_terms_per_header = ap.preprocess_interproscan(salmonella_annot_interproscan)
+
+        # 3.1 - update info
+        if self.salmonella_nm not in self.strains_data:
+            self.strains_data[self.salmonella_nm] = {}
+        self.strains_data[self.salmonella_nm].update({
+            "go_terms_per_header": go_terms_per_header
+        })
+
+        # 4 - Vibrio cholerae, NCBI Genomes:  NC_002505.1 and NC_002506.1  (Huber 2022)
+
+        # 5 - Klebsiella pneumoniae str. SGH10; KL1, ST23  (Goh_2024)
+        """
+
+    def _preprocess_annotations(self):
+        for strain, data in self.strains_data.items():
+            if 'go_terms_per_locus_nm' in data:
+                data['go_terms_per_locus_nm'] = ap.preprocess_go_terms_per_locus_nm(data['go_terms_per_locus_nm'], data['all_mrna'], self.mrna_locus_col)
+            if 'go_terms_per_header' in data:
+                data['go_terms_per_header'] = ap.preprocess_go_terms_per_header(data['go_terms_per_header'])
