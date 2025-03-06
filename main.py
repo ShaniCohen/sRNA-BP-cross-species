@@ -51,19 +51,23 @@ class AnalysisRunner:
         ontology = Ontology(self.configs['ontology'], self.logger)
         ontology.load_go_ontology()
 
-        # TODO: load annotations
-        # # 1 - set random seeds
-        # init_seed()
-
-        # # 2 - set version and config
-        # version = '0.0.1'
-        # logger.info(f"running main, version = {version}")
-        # conf = get_config(name="config")
-        # output_data_path = join(conf['output_data_path'][conf['machine']], version)
-
-        # # 3 - load + preprocess data
-        # ecoli_k12_nm, ecoli_epec_nm, salmonella_nm = 'ecoli_k12', 'ecoli_epec', 'salmonella'
-        # data = load_and_process_data(conf=conf, ecoli_k12_nm=ecoli_k12_nm, ecoli_epec_nm=ecoli_epec_nm, salmonella_nm=salmonella_nm)
+        for strain, data in data_loader.strains_data.items():
+            self.logger.info(f"strain: {strain}")
+            self.logger.info(f"  {data.keys()}")
+            if 'all_mrna_w_curated_annot' in data.keys():
+                # TODO: 
+                # (1) match curated annotations to GO terms ontology (check with are PB, MF and CC)
+                # (2) report stats
+                self.logger.info(f"    all_mrna_w_curated_annot: {data['all_mrna_w_curated_annot'].shape}")
+            if 'all_mrna_w_ips_annot' in data.keys():
+                # TODO: 
+                # (3) match curated annotations to GO terms ontology (check with are PB, MF and CC)
+                # (4) report stats
+                self.logger.info(f"    all_mrna_w_ips_annot: {data['all_mrna_w_ips_annot'].shape}")
+            # TODO: 
+            # (5) compare curated and IPS annotations (optional)
+            # (6) start thinking about the analysis (Sahar PPT)
+            # (7) describe proprocessing in the latex paper
         
         self.logger.info(f"--------------   run completed   --------------")
         return

@@ -243,7 +243,7 @@ def annotate_mrnas_w_curated_annt(strain_nm: str, data: dict) -> pd.DataFrame:
     # 2 - log statistics
     num_mrna = len(all_mrna)
     num_mrna_w_annt = sum(pd.notnull(all_mrna_w_curated_annt['Locus_Name']))
-    logger.info(f"{strain_nm}: out of {num_mrna} mRNAs {num_mrna_w_annt} have curated GO annotations ({(num_mrna_w_annt/num_mrna)*100:.2f})%")
+    logger.info(f"{strain_nm}: out of {num_mrna} mRNAs {num_mrna_w_annt} have curated GO annotations ({(num_mrna_w_annt/num_mrna)*100:.2f}%)")
 
     return all_mrna_w_curated_annt
 
@@ -283,12 +283,18 @@ def annotate_mrnas_w_interproscan_annt(strain_nm: str, data: dict) -> pd.DataFra
     data['interproscan_annot'] = _parse_header_to_acc_locus_and_name(data['interproscan_annot'], data['interproscan_header_col'], mrna_acc_col, mrna_locus_col, mrna_name_col)
     
     # 1 - merge GO terms with all mRNAs
-    all_mrna_w_curated_annt = pd.merge(all_mrna, curated_annot, left_on=all_mrna_locus_col, right_on=curated_annot_locus_col, how='left')
-    assert len(all_mrna) == len(all_mrna_w_curated_annt), "duplicate locus names"
+    ips_annot = data['interproscan_annot'][[mrna_acc_col, 'protein_sequence', 'BP_go_xrefs', 'MF_go_xrefs', 'CC_go_xrefs']]
+    all_mrna_w_ips_annt = pd.merge(all_mrna, ips_annot, on=mrna_acc_col, how='left')
+    assert len(all_mrna) == len(all_mrna_w_ips_annt), "duplicate accession numbers"
+
+    # 1.1
+    for a in ['BP_go_xrefs', 'MF_go_xrefs', 'CC_go_xrefs']:
+        all_mrna_w_ips_annt[a] = all_mrna_w_ips_annt[a].apply(lambda x: x if isinstance(x, list) and len(x) > 0 else None)
 
     # 2 - log statistics
     num_mrna = len(all_mrna)
-    num_mrna_w_annt = sum(pd.notnull(all_mrna_w_curated_annt['Locus_Name']))
-    logger.info(f"{strain_nm}: out of {num_mrna} mRNAs {num_mrna_w_annt} have curated GO annotations ({(num_mrna_w_annt/num_mrna)*100:.2f})%")
+    num_mrna_w_annt = sum(pd.notnull(all_mrna_w_ips_annt['protein_sequence']))
+    num_mrna_w_bp_annt = sum(pd.notnull(all_mrna_w_ips_annt['BP_go_xrefs']))
+    logger.info(f"{strain_nm}: out of {num_mrna} mRNAs {num_mrna_w_annt} have interproscan GO annotations ({(num_mrna_w_annt/num_mrna)*100:.2f}%) {num_mrna_w_bp_annt} have interproscan BP GO annotations ({(num_mrna_w_bp_annt/num_mrna)*100:.2f}%)")
 
-    return all_mrna_w_curated_annt
+    return all_mrna_w_ips_annt
