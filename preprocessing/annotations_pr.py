@@ -6,7 +6,13 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def _remove_go_xrefs_duplications(go_xrefs: List[Dict[str, str]]) -> List[Dict[str, str]]:
+def _add_library_to_go_xrefs(go_xrefs: List[Dict[str, str]], library):
+    for go_xref in go_xrefs:
+        go_xref['library'] = library
+    return go_xrefs
+
+
+def _remove_duplicated_go_xrefs(go_xrefs: List[Dict[str, str]]) -> List[Dict[str, str]]:
     """
     Remove duplications in GO xrefs.
     """
@@ -18,7 +24,27 @@ def _remove_go_xrefs_duplications(go_xrefs: List[Dict[str, str]]) -> List[Dict[s
     return go_xrefs_no_dup
 
 
-def preprocess_interproscan_annot(d: Dict[str, Set[str]]):
+def _split_go_xrefs_to_categories(go_xrefs: List[Dict[str, str]]) -> Tuple[list, list, list]:
+    # 'category': 'BIOLOGICAL_PROCESS', 'MOLECULAR_FUNCTION', 'CELLULAR_COMPONENT'
+    bp, mf, cc = [], [], []
+    for d in go_xrefs:
+        if d['category'] == 'BIOLOGICAL_PROCESS':
+            bp.append(d)
+        elif d['category'] == 'MOLECULAR_FUNCTION':
+            mf.append(d)
+        elif d['category'] == 'CELLULAR_COMPONENT':
+            cc.append(d)
+    return bp, mf, cc
+
+
+def preprocess_interproscan_annot(raw_interproscan_annot: Dict[str, Set[str]]) -> Tuple[pd.DataFrame, str]:
+    interproscan_annot, header_col, protein_seq_col, lib_col = _preprocess_raw_interproscan_annot(raw_interproscan_annot)
+    interproscan_annot = _filter_interproscan_annot(interproscan_annot, lib_col)
+    interproscan_annot = _group_interproscan_annot_per_protein(interproscan_annot, header_col, protein_seq_col)
+    return interproscan_annot, header_col
+
+
+def _preprocess_raw_interproscan_annot(d: Dict[str, Set[str]]) -> Tuple[pd.DataFrame, str, str, str, str]:
     """_summary_
 
     Args:
@@ -72,7 +98,8 @@ def preprocess_interproscan_annot(d: Dict[str, Set[str]]):
     logger.info(f"Preprocess {len(d['results'])} interproscan results. interproscan-version = {d['interproscan-version']}")
     headers, seqs = [], []
     out_col_header = 'input_header'
-    out_col_seq = 'protein_sequence'
+    out_col_protein_seq = 'protein_sequence'
+    out_col_lib = 'signature_library'
 
     records = []
     for res in d['results']:
@@ -86,33 +113,81 @@ def preprocess_interproscan_annot(d: Dict[str, Set[str]]):
             sig = match['signature']
             entry = sig['entry']
             go_xrefs_entry = entry.get('goXRefs', []) if pd.notnull(entry) else []
+            library = sig['signatureLibraryRelease']['library']
 
             if len(go_xrefs) > 0 and len(go_xrefs_entry) > 0:
                 logger.warning(f"both goXRefs and goXRefs_entry are not null")
             
             go_xrefs += go_xrefs_entry
-            go_xrefs = _remove_go_xrefs_duplications(go_xrefs)
+
             if len(go_xrefs) > 0:
+                go_xrefs = _remove_duplicated_go_xrefs(go_xrefs)
+                bp, mf, cc = _split_go_xrefs_to_categories(go_xrefs)
+                # go_xrefs = _add_library_to_go_xrefs(go_xrefs, library)  # Note: if this is ebabled, revisit the grouping function (where duplications are removed for BP, MF and CC)
+
                 rec = {
                     out_col_header: input_header,
-                    out_col_seq: protein_sequence,
+                    out_col_protein_seq: protein_sequence,
                     # 'signature_accession': sig['accession'],
                     # 'signature_name': sig['name'],
                     # 'signature_description': sig['description'],
-                    'signature_library': sig['signatureLibraryRelease']['library'],
+                    out_col_lib: library,
                     # 'entry_accession': entry['accession'],
                     # 'entry_name': entry['name'],
                     # 'entry_description': entry['description'],
                     # 'entry_type': entry['type'],
-                    'go_xrefs': go_xrefs
+                    'go_xrefs': go_xrefs,
+                    'BP_go_xrefs': bp,
+                    'MF_go_xrefs': mf,
+                    'CC_go_xrefs': cc
                 }
                 records.append(rec)
 
-    input_df = pd.DataFrame({out_col_header: headers, out_col_seq: seqs}).drop_duplicates().reset_index(drop=True)
+    input_df = pd.DataFrame({out_col_header: headers, out_col_protein_seq: seqs}).drop_duplicates().reset_index(drop=True)
     assert len(input_df) == len(d['results']), "some results are duplicated / missing"
     matches_df = pd.DataFrame(records)
-    df = pd.merge(input_df, matches_df, on=[out_col_header, out_col_seq], how='left')
-    return df, out_col_header
+    df = pd.merge(input_df, matches_df, on=[out_col_header, out_col_protein_seq], how='left')
+    return df, out_col_header, out_col_protein_seq, out_col_lib
+
+
+def _filter_interproscan_annot(df: pd.DataFrame, lib_col: str) -> pd.DataFrame:
+    # 1 - filter out certain libraries
+    mask = pd.Series([True] * len(df))
+    # valid_libs = ['Pfam', 'TIGRFAM', 'Gene3D', 'SUPERFAMILY', 'SMART', 'CDD', 'HAMAP', 'ProSiteProfiles', 'ProSitePatterns', 'PRINTS', 'PIRSF', 'PANTHER', 'SFLD', 'CATH-Gene3D', 'SFLD', 'InterPro']
+    # mask = df[lib_col].isin(valid_libs)
+    _len = len(df)
+    df = df[mask].reset_index(drop=True)
+    logger.info(f"Libraries filtering: Filter out {(_len - len(df))} interproscan annotations")
+
+    return df
+
+
+def _group_interproscan_annot_per_protein(df: pd.DataFrame, header_col: str, protein_seq_col: str) -> pd.DataFrame:
+    """
+    Group InterProScan annotations per protein (optional add library information to GO xrefs).
+    
+    Args:
+        df (pd.DataFrame): DataFrame containing the InterProScan annotations.
+        header_col (str): Name of the column containing the header.
+        protein_seq_col (str): Name of the column containing the protein sequence.
+    
+    Returns:
+        pd.DataFrame: DataFrame with grouped annotations per protein.
+    """
+    def ensure_list(x):
+        return x if isinstance(x, list) else []
+
+    df['BP_go_xrefs'] = df['BP_go_xrefs'].apply(ensure_list)
+    df['MF_go_xrefs'] = df['MF_go_xrefs'].apply(ensure_list)
+    df['CC_go_xrefs'] = df['CC_go_xrefs'].apply(ensure_list)
+
+    grouped_df = df.groupby([header_col, protein_seq_col]).agg({
+        'BP_go_xrefs': lambda x: _remove_duplicated_go_xrefs([item for sublist in x for item in sublist]),
+        'MF_go_xrefs': lambda x: _remove_duplicated_go_xrefs([item for sublist in x for item in sublist]),
+        'CC_go_xrefs': lambda x: _remove_duplicated_go_xrefs([item for sublist in x for item in sublist])
+    }).reset_index()
+    
+    return grouped_df
 
 
 def preprocess_curated_annot(strain_nm: str, annot_uniport: Dict[str, Set[str]], annot_map_uniport_to_locus: pd.DataFrame):
@@ -153,6 +228,7 @@ def preprocess_curated_annot(strain_nm: str, annot_uniport: Dict[str, Set[str]],
 
     return df, out_col_locus_nm
 
+
 def annotate_mrnas_w_curated_annt(strain_nm: str, all_mrna: pd.DataFrame, all_mrna_locus_col: str, curated_annot: pd.DataFrame, 
                                   curated_annot_locus_col: str) -> pd.DataFrame:
     """
@@ -169,16 +245,6 @@ def annotate_mrnas_w_curated_annt(strain_nm: str, all_mrna: pd.DataFrame, all_mr
 
     return all_mrna_w_curated_annt
 
-def annotate_mrnas_w_interproscan_annt(strain_nm: str, all_mrna: pd.DataFrame, all_mrna_acc_col: str, interproscan_annot: pd.DataFrame, interproscan_header_col: str):
-    """
-    Preprocess InterProScan annotations (GO terms per header).
-    """
-    # Example preprocessing steps
-    processed_go_terms = {}
-    for header, terms in interproscan_annot.items():
-        # Example processing: filter out certain terms or modify structure
-        processed_go_terms[header] = [term for term in terms if 'example_filter' not in term]
-    return processed_go_terms
 
 def parse_header_to_acc_locus_and_name(df: pd.DataFrame, df_header_col: str, acc_col: str, locus_col: str, name_col: str) -> pd.DataFrame:
     """
@@ -202,3 +268,16 @@ def parse_header_to_acc_locus_and_name(df: pd.DataFrame, df_header_col: str, acc
 
     df[[acc_col, locus_col, name_col]] = df[df_header_col].apply(lambda x: pd.Series(parse_header(x)))
     return df
+
+
+
+
+def annotate_mrnas_w_interproscan_annt(strain_nm: str, all_mrna: pd.DataFrame, interproscan_annot: pd.DataFrame, mrna_acc_col: str):
+    """
+    """
+    # Example preprocessing steps
+    processed_go_terms = {}
+    for header, terms in interproscan_annot.items():
+        # Example processing: filter out certain terms or modify structure
+        processed_go_terms[header] = [term for term in terms if 'example_filter' not in term]
+    return processed_go_terms

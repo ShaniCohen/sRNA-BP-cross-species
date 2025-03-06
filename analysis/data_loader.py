@@ -215,7 +215,7 @@ class DataLoader:
                 # stats = self.compute_unique_mrna_names()  # log stats
                 # TODO: get updated interproscan files for K12. 
                 # (2) find how many mRNAs were mapped to go terms.
-                data['interproscan_annot'] = ap_annot.annotate_mrnas_w_interproscan_annt(strain, data['all_mrna'], data['mrna_acc_col'], data['interproscan_annot'], data['interproscan_header_col'])
+                data['interproscan_annot'] = ap_annot.annotate_mrnas_w_interproscan_annt(strain, data['all_mrna'], data['interproscan_annot'], data['mrna_acc_col'])
 
     def compute_unique_mrna_names(self) -> pd.DataFrame:
         """Compute the number of unique mRNA_name for each value of signature_library in interproscan_annot."""
