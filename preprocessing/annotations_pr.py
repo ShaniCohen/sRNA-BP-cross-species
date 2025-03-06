@@ -229,11 +229,13 @@ def preprocess_curated_annot(strain_nm: str, annot_uniport: Dict[str, Set[str]],
     return df, out_col_locus_nm
 
 
-def annotate_mrnas_w_curated_annt(strain_nm: str, all_mrna: pd.DataFrame, all_mrna_locus_col: str, curated_annot: pd.DataFrame, 
-                                  curated_annot_locus_col: str) -> pd.DataFrame:
+def annotate_mrnas_w_curated_annt(strain_nm: str, data: dict) -> pd.DataFrame:
     """
     Preprocess GO terms per locus name.
     """
+    all_mrna, all_mrna_locus_col = data['all_mrna'], data['all_mrna_locus_col'], 
+    curated_annot, curated_annot_locus_col = data['curated_annot'], data['curated_locus_col']
+
     # 1 - merge GO terms with all mRNAs
     all_mrna_w_curated_annt = pd.merge(all_mrna, curated_annot, left_on=all_mrna_locus_col, right_on=curated_annot_locus_col, how='left')
     assert len(all_mrna) == len(all_mrna_w_curated_annt), "duplicate locus names"
@@ -246,7 +248,7 @@ def annotate_mrnas_w_curated_annt(strain_nm: str, all_mrna: pd.DataFrame, all_mr
     return all_mrna_w_curated_annt
 
 
-def parse_header_to_acc_locus_and_name(df: pd.DataFrame, df_header_col: str, acc_col: str, locus_col: str, name_col: str) -> pd.DataFrame:
+def _parse_header_to_acc_locus_and_name(df: pd.DataFrame, df_header_col: str, acc_col: str, locus_col: str, name_col: str) -> pd.DataFrame:
     """
     Parse the header column in the InterProScan annotations dataframe to extract accession, locus, and name.
     
@@ -270,14 +272,23 @@ def parse_header_to_acc_locus_and_name(df: pd.DataFrame, df_header_col: str, acc
     return df
 
 
-
-
-def annotate_mrnas_w_interproscan_annt(strain_nm: str, all_mrna: pd.DataFrame, interproscan_annot: pd.DataFrame, mrna_acc_col: str):
+def annotate_mrnas_w_interproscan_annt(strain_nm: str, data: dict) -> pd.DataFrame:
     """
     """
-    # Example preprocessing steps
-    processed_go_terms = {}
-    for header, terms in interproscan_annot.items():
-        # Example processing: filter out certain terms or modify structure
-        processed_go_terms[header] = [term for term in terms if 'example_filter' not in term]
-    return processed_go_terms
+    all_mrna = data['all_mrna']
+    mrna_locus_col, mrna_name_col = data['all_mrna_locus_col'], data['all_mrna_name_col']
+    mrna_acc_col = data['mrna_acc_col']
+
+    # 1 - parse header to extract accession, locus, and name (use the same columns used data['all_mrna'])
+    data['interproscan_annot'] = _parse_header_to_acc_locus_and_name(data['interproscan_annot'], data['interproscan_header_col'], mrna_acc_col, mrna_locus_col, mrna_name_col)
+    
+    # 1 - merge GO terms with all mRNAs
+    all_mrna_w_curated_annt = pd.merge(all_mrna, curated_annot, left_on=all_mrna_locus_col, right_on=curated_annot_locus_col, how='left')
+    assert len(all_mrna) == len(all_mrna_w_curated_annt), "duplicate locus names"
+
+    # 2 - log statistics
+    num_mrna = len(all_mrna)
+    num_mrna_w_annt = sum(pd.notnull(all_mrna_w_curated_annt['Locus_Name']))
+    logger.info(f"{strain_nm}: out of {num_mrna} mRNAs {num_mrna_w_annt} have curated GO annotations ({(num_mrna_w_annt/num_mrna)*100:.2f})%")
+
+    return all_mrna_w_curated_annt

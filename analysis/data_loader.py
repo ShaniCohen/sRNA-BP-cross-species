@@ -50,7 +50,7 @@ class DataLoader:
         self._align_rna_and_inter_data()
         # 2 - GO annotations
         self._load_annotations()
-        self._preprocess_annotations()
+        self._match_annotations_to_mrnas()
     
     def _load_rna_and_inter_data(self) -> Dict[str, Dict[str, pd.DataFrame]]:
         # ---------------------------   per dataset preprocessing   ---------------------------
@@ -206,25 +206,21 @@ class DataLoader:
         # 5 - Klebsiella pneumoniae str. SGH10; KL1, ST23  (Goh_2024)
         """
 
-    def _preprocess_annotations(self):
+    def _match_annotations_to_mrnas(self):
         for strain, data in self.strains_data.items():
             if 'curated_annot' in data:
-                data['all_mrna_w_curated_annt'] = ap_annot.annotate_mrnas_w_curated_annt(strain, data['all_mrna'], data['all_mrna_locus_col'], data['curated_annot'], data['curated_locus_col'])
+                data['all_mrna_w_curated_annot'] = ap_annot.annotate_mrnas_w_curated_annt(strain, data)
             if 'interproscan_annot' in data:
-                data['interproscan_annot'] = ap_annot.parse_header_to_acc_locus_and_name(data['interproscan_annot'], data['interproscan_header_col'], data['mrna_acc_col'], data['all_mrna_locus_col'], data['all_mrna_name_col'])
-                # stats = self.compute_unique_mrna_names()  # log stats
-                # TODO: get updated interproscan files for K12. 
-                # (2) find how many mRNAs were mapped to go terms.
-                data['interproscan_annot'] = ap_annot.annotate_mrnas_w_interproscan_annt(strain, data['all_mrna'], data['interproscan_annot'], data['mrna_acc_col'])
+                data['all_mrna_w_ips_annot'] = ap_annot.annotate_mrnas_w_interproscan_annt(strain, data)
 
-    def compute_unique_mrna_names(self) -> pd.DataFrame:
-        """Compute the number of unique mRNA_name for each value of signature_library in interproscan_annot."""
-        results = []
-        for strain, data in self.strains_data.items():
-            if 'interproscan_annot' in data:
-                unique_counts = data['interproscan_annot'].groupby('signature_library')['mRNA_name'].nunique().reset_index()
-                unique_counts.columns = ['signature_library', 'unique_mrna_name_count']
-                unique_counts['strain'] = strain
-                results.append(unique_counts)
-        return pd.concat(results, ignore_index=True)
+    # def compute_unique_mrna_names(self) -> pd.DataFrame:
+    #     """Compute the number of unique mRNA_name for each value of signature_library in interproscan_annot."""
+    #     results = []
+    #     for strain, data in self.strains_data.items():
+    #         if 'interproscan_annot' in data:
+    #             unique_counts = data['interproscan_annot'].groupby('signature_library')['mRNA_name'].nunique().reset_index()
+    #             unique_counts.columns = ['signature_library', 'unique_mrna_name_count']
+    #             unique_counts['strain'] = strain
+    #             results.append(unique_counts)
+    #     return pd.concat(results, ignore_index=True)
 
