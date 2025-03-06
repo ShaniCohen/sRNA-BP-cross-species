@@ -6,6 +6,18 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _remove_go_xrefs_duplications(go_xrefs: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    """
+    Remove duplications in GO xrefs.
+    """
+    go_xrefs_no_dup, go_ids = [], []
+    for d in go_xrefs:
+        if d['id'] not in go_ids:
+            go_xrefs_no_dup.append(d)
+            go_ids.append(d['id'])
+    return go_xrefs_no_dup
+
+
 def preprocess_interproscan_annot(d: Dict[str, Set[str]]):
     """_summary_
 
@@ -79,8 +91,7 @@ def preprocess_interproscan_annot(d: Dict[str, Set[str]]):
                 logger.warning(f"both goXRefs and goXRefs_entry are not null")
             
             go_xrefs += go_xrefs_entry
-            # TOOD: make it unique
-            # go_xrefs = list(set(go_xrefs))
+            go_xrefs = _remove_go_xrefs_duplications(go_xrefs)
             if len(go_xrefs) > 0:
                 rec = {
                     out_col_header: input_header,

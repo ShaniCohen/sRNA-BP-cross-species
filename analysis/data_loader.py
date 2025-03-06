@@ -212,9 +212,8 @@ class DataLoader:
                 data['all_mrna_w_curated_annt'] = ap_annot.annotate_mrnas_w_curated_annt(strain, data['all_mrna'], data['all_mrna_locus_col'], data['curated_annot'], data['curated_locus_col'])
             if 'interproscan_annot' in data:
                 data['interproscan_annot'] = ap_annot.parse_header_to_acc_locus_and_name(data['interproscan_annot'], data['interproscan_header_col'], data['mrna_acc_col'], data['all_mrna_locus_col'], data['all_mrna_name_col'])
-                # stats = self.compute_unique_mrna_names()
+                # stats = self.compute_unique_mrna_names()  # log stats
                 # TODO: get updated interproscan files for K12. 
-                # (1) make GO ref list unique (in load_annotations)
                 # (2) find how many mRNAs were mapped to go terms.
                 data['interproscan_annot'] = ap_annot.annotate_mrnas_w_interproscan_annt(strain, data['all_mrna'], data['mrna_acc_col'], data['interproscan_annot'], data['interproscan_header_col'])
 
