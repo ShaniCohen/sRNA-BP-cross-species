@@ -42,33 +42,37 @@ class AnalysisRunner:
             configs['ontology'][_dir] = join(configs['runner']['input_data_path'], configs['ontology'][_dir])
         
         self.configs = configs
+    
+    def _map_annotations_to_ontology(self, strain, data, ontology):
+        self.logger.info(f"mapping annotations to ontology for {strain}")
+        if 'all_mrna_w_curated_annot' in data.keys():
+            # TODO: 
+            # (1) match curated annotations to GO terms ontology (check with are PB, MF and CC)
+            # (2) report stats
+            self.logger.info(f"    all_mrna_w_curated_annot: {data['all_mrna_w_curated_annot'].shape}")
+        if 'all_mrna_w_ips_annot' in data.keys():
+            # TODO: 
+            # (3) match curated annotations to GO terms ontology (check with are PB, MF and CC)
+            # (4) report stats
+            self.logger.info(f"    all_mrna_w_ips_annot: {data['all_mrna_w_ips_annot'].shape}")
+        # TODO: 
+        # (5) compare curated and IPS annotations (optional)
+        # (6) start thinking about the analysis (Sahar PPT)
+        # (7) describe proprocessing in the latex paper
 
     def run(self):
         self.logger.info(f"--------------   run starts   --------------")
 
         data_loader = DataLoader(self.configs['data_loader'], self.logger)
         data_loader.load_and_process_data()
+        
         ontology = Ontology(self.configs['ontology'], self.logger)
         ontology.load_go_ontology()
         ontology.create_ontology_nx_graphs()
 
-        for strain, data in data_loader.strains_data.items():
-            self.logger.info(f"strain: {strain}")
-            self.logger.info(f"  {data.keys()}")
-            if 'all_mrna_w_curated_annot' in data.keys():
-                # TODO: 
-                # (1) match curated annotations to GO terms ontology (check with are PB, MF and CC)
-                # (2) report stats
-                self.logger.info(f"    all_mrna_w_curated_annot: {data['all_mrna_w_curated_annot'].shape}")
-            if 'all_mrna_w_ips_annot' in data.keys():
-                # TODO: 
-                # (3) match curated annotations to GO terms ontology (check with are PB, MF and CC)
-                # (4) report stats
-                self.logger.info(f"    all_mrna_w_ips_annot: {data['all_mrna_w_ips_annot'].shape}")
-            # TODO: 
-            # (5) compare curated and IPS annotations (optional)
-            # (6) start thinking about the analysis (Sahar PPT)
-            # (7) describe proprocessing in the latex paper
+        for strain, data in data_loader.data.items():
+            self._map_annotations_to_ontology(strain, data, ontology)
+
         
         self.logger.info(f"--------------   run completed   --------------")
         return
