@@ -33,15 +33,30 @@ class Ontology:
         ontology = ontology['graphs'][0]
         # id
         self.id = ontology['id']
+        
         # nodes
-        self.class_nodes = [n for n in ontology['nodes'] if n['type'] == 'CLASS']
-        self.property_nodes = [n for n in ontology['nodes'] if n['type'] == 'PROPERTY']
-        assert len(ontology['nodes']) == len(self.class_nodes) + len(self.property_nodes)
+        nodes = self._remove_deprecated_nodes(ontology['nodes'])
+        self.class_nodes = [n for n in nodes if n['type'] == 'CLASS']
+        self.property_nodes = [n for n in nodes if n['type'] == 'PROPERTY']
+        assert len(nodes) == len(self.class_nodes) + len(self.property_nodes)
+        # remode deprecated nodes
+        self.class_nodes = [n for n in self.class_nodes if 'deprecated' not in n]
+
         # edges
         self.edges = ontology['edges']
         self.logger.info(f"Gene Ontology: {self.id}, nodes: {len(ontology['nodes'])} (class: {len(self.class_nodes)}, property: {len(self.property_nodes)}), edges: {len(self.edges)}")
+        
         # analysis
         self._log_stats()
+    
+    def _remove_deprecated_nodes(self, nodes):
+        vaild_nodes = []
+        for n in nodes:
+            if n.get("meta") and n['meta'].get("deprecated") is True:
+                continue
+            vaild_nodes.append(n)
+        self.logger.info(f"removed {len(nodes) - len(vaild_nodes)} deprecated nodes")
+        return vaild_nodes
     
     def _log_stats(self):
         # edge values

@@ -115,9 +115,9 @@ def _preprocess_raw_interproscan_annot(d: Dict[str, Set[str]]) -> Tuple[pd.DataF
             go_xrefs_entry = entry.get('goXRefs', []) if pd.notnull(entry) else []
             library = sig['signatureLibraryRelease']['library']
 
-            if len(go_xrefs) > 0 and len(go_xrefs_entry) > 0:
-                logger.warning(f"both goXRefs and goXRefs_entry are not null")
-            
+            # if len(go_xrefs) > 0 and len(go_xrefs_entry) > 0:
+                # logger.warning(f"both goXRefs and goXRefs_entry are not null")
+
             go_xrefs += go_xrefs_entry
 
             if len(go_xrefs) > 0:
