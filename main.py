@@ -50,6 +50,7 @@ class AnalysisRunner:
         data_loader.load_and_process_data()
         ontology = Ontology(self.configs['ontology'], self.logger)
         ontology.load_go_ontology()
+        ontology.create_ontology_nx_graphs()
 
         for strain, data in data_loader.strains_data.items():
             self.logger.info(f"strain: {strain}")
