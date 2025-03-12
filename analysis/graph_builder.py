@@ -82,7 +82,7 @@ class GraphBuilder:
         for strain, data in self.strains_data.items():
             self.logger.info(f"adding mRNA annotations to ontology for {strain}")
             if 'all_mrna_w_curated_annot' in data.keys():
-                self._add_mrna_and_curated_annot(strain, data['all_mrna_w_curated_annot'])
+                self._add_mrna_and_curated_bp_annot(strain, data['all_mrna_w_curated_annot'])
             elif 'all_mrna_w_ips_annot' in data.keys():
                 # TODO: 
                 # (3) match curated annotations to GO terms ontology (check with are PB, MF and CC)
@@ -93,32 +93,34 @@ class GraphBuilder:
             # (6) start thinking about the analysis (Sahar PPT)
             # (7) describe proprocessing in the latex paper
     
-    def _add_rna_node(self, id, type, strain, locus_tag, name, synonyms, start, end, strand, sequence):
+    def _add_node_rna(self, id, node_type, strain, locus_tag, name, synonyms, start, end, strand, sequence):
 
         print()
     
-    def _add_mrna_annot(self, id):
+    def _add_edge_mrna_go_annot(self, mrna_node_id, go_id):
+        self.G.add_edge(mrna_node_id, go_id, type=self._annot)
+        self.G.add_edge(go_id, mrna_node_id, type=self._annot)
+    
+    def _add_edge_srna_mrna_inter(self, mrna_node_id, srna_node_id):
+        self.G.add_edge(mrna_node_id, srna_node_id, type=self._inter)
+        self.G.add_edge(srna_node_id, mrna_node_id, type=self._inter)
 
-        print()
-
-    def _add_mrna_and_curated_annot(self, strain, cu_annot):
+    def _add_mrna_and_curated_bp_annot(self, strain, cu_annot):
         self.logger.info(f"added mRNAs and curated annotations for {strain}")
+        assert sum(pd.isnull(cu_annot['mRNA_accession_id'])) == 0
+
         for i, r in cu_annot.iterrows():
+            # 1 - add the mRNA node to graph
+            self._add_node_rna(id=r['mRNA_accession_id'], node_type=self._mrna, strain=strain, locus_tag=r['mRNA_locus_tag'], 
+                               name=r['mRNA_name'], synonyms=['mRNA_name_synonyms'], start=['mRNA_start'], end=['mRNA_end'],
+                               strand=['mRNA_strand'], sequence=['mRNA_sequence'])
             print()
             go_bp = r['GO_BP']
-            # if pd.notnull(go_bp) and len(go_bp)
-            self._add_rna_node(
-                id=r['mRNA_accession_id'],
-                type=self._mrna,
-                strain=strain,
-                locus_tag=r['mRNA_locus_tag'],
-                name=r['mRNA_name'], 
-                synonyms=['mRNA_name_synonyms'],
-                start=['mRNA_start'],
-                end=['mRNA_end'],
-                strand=['mRNA_strand'],
-                sequence=['mRNA_sequence']
-                )
+            if isinstance(go_bp, list) and len(go_bp) > 0:
+                for bp in go_bp:
+                    self._add_edge()    
+
+
 
     
     def _split(self, go_terms: set):
