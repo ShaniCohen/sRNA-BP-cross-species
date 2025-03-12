@@ -8,7 +8,7 @@ import sys
 import os
 from analysis.data_loader import DataLoader
 from analysis.ontology import Ontology
-from analysis.graph_buillder import GraphBuilder
+from analysis.graph_builder import GraphBuilder
 import logging
 logging.basicConfig(level=logging.DEBUG, stream=sys.stdout, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)

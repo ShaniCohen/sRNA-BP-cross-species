@@ -27,9 +27,16 @@ class Ontology:
         self.property_id_to_info: Dict[str, dict] = None
         self.edges = None
 
-        self.pb_type = 'biological_process'
-        self.mf_type = 'molecular_function'
-        self.cc_type = 'cellular_component'
+        self.type_bp = 'biological_process'
+        self.type_mf = 'molecular_function'
+        self.type_cc = 'cellular_component'
+
+        self.type_part_of = 'part_of'
+        self.type_regulates = 'regulates'
+        self.type_neg_regulates = 'negatively_regulates' 
+        self.type_pos_regulates = 'positively_regulates'
+        self.type_is_a = 'is_a'
+        self.type_sub_property_of = 'sub_property_of'
     
     @staticmethod
     def _go_number_from_id(original_id):
@@ -76,19 +83,19 @@ class Ontology:
 
     def create_ontology_nx_graphs(self):
         self._map_edge_id_to_type()
-        self.BP = self._create_nx_graph(self.pb_type)
-        self.MF = self._create_nx_graph(self.mf_type)
-        self.CC = self._create_nx_graph(self.cc_type)
+        self.BP = self._create_nx_graph(self.type_bp)
+        self.MF = self._create_nx_graph(self.type_mf)
+        self.CC = self._create_nx_graph(self.type_cc)
         # self.G = nx.compose_all([self.BP, self.MF, self.CC])
 
     def _map_edge_id_to_type(self):
         self.edge_id_to_type = {
-       "http://purl.obolibrary.org/obo/BFO_0000050": "part_of",  # 6583 edges
-       "http://purl.obolibrary.org/obo/RO_0002211": "regulates",  # 2996 edges
-       "http://purl.obolibrary.org/obo/RO_0002212": "negatively_regulates",  # 2618 edges
-       "http://purl.obolibrary.org/obo/RO_0002213": "positively_regulates",  # 2624 edges
-        "is_a": "is_a",  # 62678 edges
-        "subPropertyOf": "sub_property_of"  # 2 edges
+       "http://purl.obolibrary.org/obo/BFO_0000050": self.type_part_of,  # 6583 edges
+       "http://purl.obolibrary.org/obo/RO_0002211": self.type_regulates,  # 2996 edges
+       "http://purl.obolibrary.org/obo/RO_0002212": self.type_neg_regulates,  # 2618 edges
+       "http://purl.obolibrary.org/obo/RO_0002213": self.type_pos_regulates,  # 2624 edges
+        "is_a": self.type_is_a,  # 62678 edges
+        "subPropertyOf": self.type_sub_property_of  # 2 edges
         }
 
     def _create_nx_graph(self, go_node_type):
