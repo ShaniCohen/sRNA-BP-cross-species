@@ -98,6 +98,7 @@ class GraphBuilder:
         print()
     
     def _add_edge_mrna_go_annot(self, mrna_node_id, go_id):
+        # if mrna_node_id in self.G
         self.G.add_edge(mrna_node_id, go_id, type=self._annot)
         self.G.add_edge(go_id, mrna_node_id, type=self._annot)
     
