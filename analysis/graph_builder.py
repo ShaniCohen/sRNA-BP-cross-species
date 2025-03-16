@@ -100,8 +100,8 @@ class GraphBuilder:
             for _, r in data['all_srna'].iterrows():
                 srna_node_id = r[self.srna_acc_col]
                 self._add_node_rna(id=srna_node_id, type=self._srna, strain=strain, locus_tag=r['sRNA_locus_tag'], 
-								name=r['sRNA_name'], synonyms=r['sRNA_name_synonyms'], start=r['sRNA_start'], end=r['sRNA_end'],
-								strand=r['sRNA_strand'], sequence=r['sRNA_sequence'])
+								   name=r['sRNA_name'], synonyms=r['sRNA_name_synonyms'], start=r['sRNA_start'], end=r['sRNA_end'],
+								   strand=r['sRNA_strand'], sequence=r['sRNA_sequence'])
             # TODO: Decide how to use interactions data (growth cond, hfq, only pos inter, count?)
 	
     def _add_all_mrna_and_curated_bp_annot(self, strain, all_mrna_w_curated_annot):
@@ -123,7 +123,8 @@ class GraphBuilder:
                     if bp_id_is_missing:
                         missing_bp_ids.append(bp_id)
                     bp_count += 1
-        self.logger.info(f"{strain}: out of {bp_count} curated BP annotations, missing: total = {len(missing_bp_ids)}, unique: {len(set(missing_bp_ids))}")
+        dep = [m for m in set(missing_bp_ids) if m in self.ontology.deprecated_nodes]
+        self.logger.info(f"{strain}: out of {bp_count} curated BP annotations, missing: {len(missing_bp_ids)} ({len(set(missing_bp_ids))} unique), deprecated: {len(dep)}")
                     
     def _add_all_mrna_and_ips_bp_annot(self, strain, all_mrna_w_ips_annot):
         self.logger.info(f"adding mRNA nodes and InterProScan mRNA-GO annotations for {strain}")
@@ -145,7 +146,10 @@ class GraphBuilder:
                     if bp_id_is_missing:
                         missing_bp_dicts.append(bp_dict)
                     bp_count += 1
-        self.logger.info(f"{strain}: out of {bp_count} InterProScan BP annotations, missing: total = {len(missing_bp_dicts)}, unique: {len(set([x['id'] for x in missing_bp_dicts]))}")
+        # log
+        unq_missing = set([x['id'] for x in missing_bp_dicts])
+        dep = [m for m in unq_missing if m in self.ontology.deprecated_nodes]
+        self.logger.info(f"{strain}: out of {bp_count} InterProScan BP annotations, missing: {len(missing_bp_dicts)} ({len(unq_missing)} unique), deprecated: {len(dep)}")
     
     def _add_node_rna(self, id, type, strain, locus_tag, name, synonyms, start, end, strand, sequence):
         if not self.G.has_node(id):
