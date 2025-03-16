@@ -141,29 +141,29 @@ class Ontology:
         self.logger.info(f"GO type: {go_node_type}, nodes: {G.number_of_nodes()}, edges: {G.number_of_edges()}, edge types: {sorted(edge_types)}")
         return G 
 
-    def _compose_all_nx_graphs(self):
-        # Combine all graphs into one
+    # def _compose_all_nx_graphs(self):
+    #     # Combine all graphs into one
         
 
-        # add edges between different types of nodes (e.g., BP to MF)
-        edge_types = []           
-        for e in self.edges:
-            sub_go_number = self._go_number_from_id(e['sub'])
-            obj_go_number = self._go_number_from_id(e['obj'])
-            edge_id = e['pred']
-            edge_type = self.edge_id_to_type[edge_id]
-            # if edge already exists in BP, MF, or CC then skip
-            if G.has_edge(sub_go_number, obj_go_number):
-                continue
-            # add edge if both nodes exist
-            if G.has_node(sub_go_number) and G.has_node(obj_go_number):
-                G.add_edge(sub_go_number, obj_go_number, type=edge_type)
-                edge_types.append(edge_type)
-            else:
-                self.logger.warning(f"missing nodes: {sub_go_number if not G.has_node(sub_go_number) else ''}, {obj_go_number if not G.has_node(obj_go_number) else ''}")
-        self.logger.info(f"Added {len(edge_types)} edges between BP, MF, CC. Edge types added: {sorted(set(edge_types))}")
-        len(self.edges) == len(self.BP.number_of_edges) + len(self.MF.number_of_edges) + len(self.CC.number_of_edges) + len(edge_types)
-        return G
+    #     # add edges between different types of nodes (e.g., BP to MF)
+    #     edge_types = []           
+    #     for e in self.edges:
+    #         sub_go_number = self._go_number_from_id(e['sub'])
+    #         obj_go_number = self._go_number_from_id(e['obj'])
+    #         edge_id = e['pred']
+    #         edge_type = self.edge_id_to_type[edge_id]
+    #         # if edge already exists in BP, MF, or CC then skip
+    #         if G.has_edge(sub_go_number, obj_go_number):
+    #             continue
+    #         # add edge if both nodes exist
+    #         if G.has_node(sub_go_number) and G.has_node(obj_go_number):
+    #             G.add_edge(sub_go_number, obj_go_number, type=edge_type)
+    #             edge_types.append(edge_type)
+    #         else:
+    #             self.logger.warning(f"missing nodes: {sub_go_number if not G.has_node(sub_go_number) else ''}, {obj_go_number if not G.has_node(obj_go_number) else ''}")
+    #     self.logger.info(f"Added {len(edge_types)} edges between BP, MF, CC. Edge types added: {sorted(set(edge_types))}")
+    #     len(self.edges) == len(self.BP.number_of_edges) + len(self.MF.number_of_edges) + len(self.CC.number_of_edges) + len(edge_types)
+    #     return G
     
         
     def ref_create_ontology_nx_graph(self):

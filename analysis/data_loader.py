@@ -207,8 +207,10 @@ class DataLoader:
         salmonella_dir = self.config['salmonella_dir']
         salmonella_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], salmonella_dir, 'InterProScan', 'Salmonella_proteins.fasta.json'))
         interproscan_annot, i_header_col = ap_annot.preprocess_interproscan_annot(salmonella_annot_interproscan)
+        # patch to adjust Salmonella headers
+        interproscan_annot[i_header_col] = interproscan_annot[i_header_col].apply(lambda x: "|".join([x.split("|")[0]] + [x.split("|")[2]] + x.split("|")[2:]))
         
-		# 2.1 - update info
+		# 3.1 - update info
         if self.salmonella_nm not in self.strains_data:
             self.strains_data[self.salmonella_nm] = {}
         self.strains_data[self.salmonella_nm].update({
