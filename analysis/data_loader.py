@@ -189,22 +189,37 @@ class DataLoader:
             "curated_annot": curated_annot,
             "curated_locus_col": c_locus_col
         })
-
-        """
+  
         # 2 - Escherichia coli EPEC E2348/69
         epec_dir = self.config['epec_dir']
-        epec_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], epec_dir, 'InterProScan', ''))
+        epec_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], epec_dir, 'InterProScan', 'EPEC_proteins.fasta.json'))
+        interproscan_annot, i_header_col = ap_annot.preprocess_interproscan_annot(epec_annot_interproscan)
+        
+		# 2.1 - update info
+        if self.ecoli_epec_nm not in self.strains_data:
+            self.strains_data[self.ecoli_epec_nm] = {}
+        self.strains_data[self.ecoli_epec_nm].update({
+            "interproscan_annot": interproscan_annot,
+            "interproscan_header_col": i_header_col
+        })
     
-
         # 3 - Salmonella enterica serovar Typhimurium strain SL1344,  Genome: NC_016810.1  (Matera_2022)
         salmonella_dir = self.config['salmonella_dir']
-        salmonella_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], salmonella_dir, 'InterProScan', ''))
+        salmonella_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], salmonella_dir, 'InterProScan', 'Salmonella_proteins.fasta.json'))
+        interproscan_annot, i_header_col = ap_annot.preprocess_interproscan_annot(salmonella_annot_interproscan)
+        
+		# 2.1 - update info
+        if self.salmonella_nm not in self.strains_data:
+            self.strains_data[self.salmonella_nm] = {}
+        self.strains_data[self.salmonella_nm].update({
+            "interproscan_annot": interproscan_annot,
+            "interproscan_header_col": i_header_col
+        })
     
-
         # 4 - Vibrio cholerae, NCBI Genomes:  NC_002505.1 and NC_002506.1  (Huber 2022)
 
         # 5 - Klebsiella pneumoniae str. SGH10; KL1, ST23  (Goh_2024)
-        """
+        
 
     def _match_annotations_to_mrnas(self):
         for strain, data in self.strains_data.items():

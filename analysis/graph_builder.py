@@ -26,6 +26,7 @@ class GraphBuilder:
         self.mrna_acc_col = data_loader.mrna_acc_col
         
         self.ontology = ontology
+        self.curated_go_ids_missing_in_ontology = set()
         
         self.G = nx.Graph()
         self.G.add_nodes_from(ontology.BP.nodes(data=True))
@@ -71,9 +72,14 @@ class GraphBuilder:
     
     def _process_curated_annot(self):
         for strain, data in self.strains_data.items():
+            prev_missing = self.curated_go_ids_missing_in_ontology.copy()
             if 'all_mrna_w_curated_annot' in data.keys():
                 cu_annot = data['all_mrna_w_curated_annot']  
                 cu_annot[['GO_BP', 'GO_MF', 'GO_CC']] = pd.DataFrame(list(map(lambda x: self._split(x), cu_annot["GO_Terms"])))
+                new_missing = self.curated_go_ids_missing_in_ontology - prev_missing
+                deprecated = [i for i in new_missing if i in self.ontology.get_deprecated_node_ids()]
+                if len(new_missing) > 0:
+                    self.logger.warning(f"{strain}: {len(new_missing)} curated GO ids are missing in ontology, {len(deprecated)} of them are deprecated")
 
                 has_go = sum(pd.notnull(cu_annot["GO_Terms"]))
                 has_bp = sum(cu_annot['GO_BP'].apply(lambda x: len(x) > 0))
@@ -86,6 +92,7 @@ class GraphBuilder:
             if 'all_mrna_w_curated_annot' in data.keys():
                 self._add_all_mrna_and_curated_bp_annot(strain, data['all_mrna_w_curated_annot'])
             elif 'all_mrna_w_ips_annot' in data.keys():
+                print()
                 # TODO: 
                 # (3) match curated annotations to GO terms ontology (check with are PB, MF and CC)
                 # (4) report stats
@@ -157,8 +164,8 @@ class GraphBuilder:
                 elif go_id in self.ontology.CC.nodes:
                     CC_go_ids.append(go_id)
                 else:
-                    self.logger.warning(f"{go_id} is missing in ontology")
-
+                    self.curated_go_ids_missing_in_ontology.add(go_id)
+            
         return BP_go_ids, MF_go_ids, CC_go_ids
         
     def _create_3D_visualization(self, nx_graph):

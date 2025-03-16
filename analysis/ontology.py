@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Set
 import pandas as pd
 import numpy as np
 from os.path import join
@@ -24,6 +24,7 @@ class Ontology:
         self.config = config
         self.id: str = None
         self.class_nodes: List[dict] = None
+        self.deprecated_nodes: List[dict] = []
         self.property_id_to_info: Dict[str, dict] = None
         self.edges = None
 
@@ -63,11 +64,18 @@ class Ontology:
         
         # analysis
         self._log_stats()
+        
+    def get_deprecated_node_ids(self) -> List[str]:
+        dep_go_ids = []
+        for n in self.deprecated_nodes:
+            dep_go_ids.append(self._go_number_from_id(n['id']))
+        return dep_go_ids
     
     def _remove_deprecated_nodes(self, nodes):
         vaild_nodes = []
         for n in nodes:
             if n.get("meta") and n['meta'].get("deprecated") is True:
+                self.deprecated_nodes.append(n)
                 continue
             vaild_nodes.append(n)
         self.logger.info(f"removed {len(nodes) - len(vaild_nodes)} deprecated nodes")

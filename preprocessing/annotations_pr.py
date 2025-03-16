@@ -295,6 +295,9 @@ def annotate_mrnas_w_interproscan_annt(strain_nm: str, data: dict) -> pd.DataFra
     num_mrna = len(all_mrna)
     num_mrna_w_annt = sum(pd.notnull(all_mrna_w_ips_annt['protein_sequence']))
     num_mrna_w_bp_annt = sum(pd.notnull(all_mrna_w_ips_annt['BP_go_xrefs']))
-    logger.info(f"{strain_nm}: out of {num_mrna} mRNAs {num_mrna_w_annt} have interproscan GO annotations ({(num_mrna_w_annt/num_mrna)*100:.2f}%) {num_mrna_w_bp_annt} have interproscan BP GO annotations ({(num_mrna_w_bp_annt/num_mrna)*100:.2f}%)")
+    num_mrna_w_mf_annt = sum(pd.notnull(all_mrna_w_ips_annt['MF_go_xrefs']))
+    num_mrna_w_cc_annt = sum(pd.notnull(all_mrna_w_ips_annt['CC_go_xrefs']))
+    logger.info(f"{strain_nm} - out of {num_mrna} mRNAs, {num_mrna_w_annt} have interproscan GO annotations ({(num_mrna_w_annt/num_mrna)*100:.2f}%)")
+    logger.info(f"{num_mrna_w_bp_annt} have BP annotations ({(num_mrna_w_bp_annt/num_mrna)*100:.2f}%), {num_mrna_w_mf_annt} have MF annotations ({(num_mrna_w_mf_annt/num_mrna)*100:.2f}%), {num_mrna_w_cc_annt} have CC annotations ({(num_mrna_w_cc_annt/num_mrna)*100:.2f}%)") 
 
     return all_mrna_w_ips_annt
