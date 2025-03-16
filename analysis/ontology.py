@@ -15,7 +15,6 @@ import matplotlib.pyplot as plt
 ROOT_PATH = str(Path(__file__).resolve().parents[1])
 if ROOT_PATH not in sys.path:
     sys.path.append(ROOT_PATH)
-print(f"\nROOT_PATH: {ROOT_PATH}")
 
 class Ontology:
     def __init__(self, config, logger):

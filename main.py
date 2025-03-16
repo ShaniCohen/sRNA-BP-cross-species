@@ -56,7 +56,6 @@ class AnalysisRunner:
 
         graph_builder = GraphBuilder(self.configs['graph_builder'], self.logger, data_loader, ontology)
         graph_builder.build_graph()
-
         
         self.logger.info(f"--------------   run completed   --------------")
         return

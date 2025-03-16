@@ -12,7 +12,6 @@ import os
 ROOT_PATH = str(Path(__file__).resolve().parents[1])
 if ROOT_PATH not in sys.path:
     sys.path.append(ROOT_PATH)
-print(f"\nROOT_PATH: {ROOT_PATH}")
 
 from preprocessing import rna_inter_pr as ap
 from preprocessing import annotations_pr as ap_annot
@@ -113,6 +112,8 @@ class DataLoader:
                                         inter_data=salmonella_inter)
         salmo_unq_inter, salmo_sum, salmo_srna, salmo_mrna = \
             ap.analyze_salmonella_inter(mrna_data=salmonella_mrna, srna_data=salmonella_srna, inter_data=salmonella_inter)
+        
+		# TODO: check sRNA SL1344_0808
         # 3.1 - update info
         if self.salmonella_nm not in self.strains_data:
             self.strains_data[self.salmonella_nm] = {}

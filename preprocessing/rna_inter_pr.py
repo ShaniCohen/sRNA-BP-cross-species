@@ -426,7 +426,11 @@ def analyze_salmonella_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, i
     unq_inter = inter_data.copy()[g_cols + ['count']].groupby(g_cols, as_index=False).count().reset_index(drop=True)
     assert list(set(inter_data[strain_col])) == list(set(unq_inter[strain_col]))
 
-    # -------------- convert sRNA names
+    # -------------- adjust sRNA acc names
+    rnm = {'SL1344_0808': 'SL1344_0808_5utr'}
+    srna_data[srna_acc_col] = srna_data[srna_acc_col].apply(lambda x: rnm.get(x, x))
+    
+	# -------------- convert sRNA names
 
     # -------------- summary
     strain_col = 'strain_name'

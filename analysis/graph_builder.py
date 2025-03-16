@@ -12,8 +12,6 @@ import os
 ROOT_PATH = str(Path(__file__).resolve().parents[1])
 if ROOT_PATH not in sys.path:
     sys.path.append(ROOT_PATH)
-print(f"\nROOT_PATH: {ROOT_PATH}")
-
 
 class GraphBuilder:
     def __init__(self, config, logger, data_loader, ontology):
@@ -92,14 +90,7 @@ class GraphBuilder:
             if 'all_mrna_w_curated_annot' in data.keys():
                 self._add_all_mrna_and_curated_bp_annot(strain, data['all_mrna_w_curated_annot'])
             elif 'all_mrna_w_ips_annot' in data.keys():
-                print()
-                # TODO: 
-                # (3) match curated annotations to GO terms ontology (check with are PB, MF and CC)
-                # (4) report stats
-                self.logger.info(f"    all_mrna_w_ips_annot: {data['all_mrna_w_ips_annot'].shape}")
-            # TODO: 
-            # (5) compare curated and IPS annotations (optional)
-            # (6) start thinking about the analysis (Sahar PPT)
+                self._add_all_mrna_and_ips_bp_annot(strain, data['all_mrna_w_ips_annot'])
             # (7) describe proprocessing in the latex paper
             
     def _add_srna_nodes_and_interaction_edges(self):
@@ -112,11 +103,11 @@ class GraphBuilder:
 								name=r['sRNA_name'], synonyms=r['sRNA_name_synonyms'], start=r['sRNA_start'], end=r['sRNA_end'],
 								strand=r['sRNA_strand'], sequence=r['sRNA_sequence'])
             # TODO: Decide how to use interactions data (growth cond, hfq, only pos inter, count?)
-            print()
 	
     def _add_all_mrna_and_curated_bp_annot(self, strain, all_mrna_w_curated_annot):
         self.logger.info(f"adding mRNA nodes and curated mRNA-GO annotations for {strain}")
         assert sum(pd.isnull(all_mrna_w_curated_annot['mRNA_accession_id'])) == 0
+        bp_count, missing_bp_ids = 0, []
 
         for _, r in all_mrna_w_curated_annot.iterrows():
             # 1 - add the mRNA node to graph
@@ -128,21 +119,48 @@ class GraphBuilder:
             go_bp_ids = r['GO_BP']
             if isinstance(go_bp_ids, list) and len(go_bp_ids) > 0:
                 for bp_id in go_bp_ids:
-                    self._add_edge_mrna_go_annot(mrna_node_id, bp_id)
+                    bp_id_is_missing = self._add_edge_mrna_go_annot(mrna_node_id, bp_id)
+                    if bp_id_is_missing:
+                        missing_bp_ids.append(bp_id)
+                    bp_count += 1
+        self.logger.info(f"{strain}: out of {bp_count} curated BP annotations, missing: total = {len(missing_bp_ids)}, unique: {len(set(missing_bp_ids))}")
+                    
+    def _add_all_mrna_and_ips_bp_annot(self, strain, all_mrna_w_ips_annot):
+        self.logger.info(f"adding mRNA nodes and InterProScan mRNA-GO annotations for {strain}")
+        assert sum(pd.isnull(all_mrna_w_ips_annot['mRNA_accession_id'])) == 0
+        bp_count, missing_bp_dicts = 0, []
+
+        for _, r in all_mrna_w_ips_annot.iterrows():
+            # 1 - add the mRNA node to graph
+            mrna_node_id = r[self.mrna_acc_col]
+            self._add_node_rna(id=mrna_node_id, type=self._mrna, strain=strain, locus_tag=r['mRNA_locus_tag'], 
+                               name=r['mRNA_name'], synonyms=r['mRNA_name_synonyms'], start=r['mRNA_start'], end=r['mRNA_end'],
+                               strand=r['mRNA_strand'], sequence=r['mRNA_sequence'])
+            # 2 - add annotation edges between the mRNA node and BP nodes
+            bp_go_xrefs = r['BP_go_xrefs']
+            if isinstance(bp_go_xrefs, list) and len(bp_go_xrefs) > 0:
+                for bp_dict in bp_go_xrefs:
+                    bp_id = bp_dict['id'].split(":")[1]
+                    bp_id_is_missing = self._add_edge_mrna_go_annot(mrna_node_id, bp_id)
+                    if bp_id_is_missing:
+                        missing_bp_dicts.append(bp_dict)
+                    bp_count += 1
+        self.logger.info(f"{strain}: out of {bp_count} InterProScan BP annotations, missing: total = {len(missing_bp_dicts)}, unique: {len(set([x['id'] for x in missing_bp_dicts]))}")
     
     def _add_node_rna(self, id, type, strain, locus_tag, name, synonyms, start, end, strand, sequence):
         if not self.G.has_node(id):
             self.G.add_node(id, type=type, 
 							strain=strain, locus_tag=locus_tag, name=name, synonyms=synonyms, start=start, end=end, strand=strand, sequence=sequence)
         else:
-            self.logger.warning(f"node {id} already in graph")
+            self.logger.warning(f"{type} node {id} already in graph")
     
-    def _add_edge_mrna_go_annot(self, mrna_node_id, go_id):
-        if self.G.has_node(mrna_node_id) and self.G.has_node(go_id):
+    def _add_edge_mrna_go_annot(self, mrna_node_id, go_id) -> bool:
+        assert self.G.has_node(mrna_node_id), f"mRNA id {mrna_node_id} is missing in the graph"
+        if self.G.has_node(go_id):
             self.G.add_edge(mrna_node_id, go_id, type=self._annot)
             self.G.add_edge(go_id, mrna_node_id, type=self._annot)
-        else:
-            self.logger.warning("mRNA and/or GO nodes are missing in the Graph")
+            return False
+        return True
     
     def _add_edge_srna_mrna_inter(self, mrna_node_id, srna_node_id):
         if self.G.has_node(mrna_node_id) and self.G.has_node(srna_node_id):
