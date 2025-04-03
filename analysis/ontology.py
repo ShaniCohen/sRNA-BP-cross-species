@@ -5,6 +5,7 @@ from os.path import join
 from pathlib import Path
 from utils.general import read_df, write_df
 from typing import List, Dict
+import pickle
 import json
 import sys
 import os
@@ -26,18 +27,25 @@ class Ontology:
         self.deprecated_nodes: List[dict] = []
         self.property_id_to_info: Dict[str, dict] = None
         self.edges = None
-
+        
+		# ---- Nodes properties ----
+		# 	type
         self.type_bp = 'biological_process'
         self.type_mf = 'molecular_function'
         self.type_cc = 'cellular_component'
+        # 	lbl
+		# 	meta
+        #   po2vec_embeddings (optional)
 
+		# ---- Edge properties ----
+		# 	type
         self.type_part_of = 'part_of'
         self.type_regulates = 'regulates'
         self.type_neg_regulates = 'negatively_regulates' 
         self.type_pos_regulates = 'positively_regulates'
         self.type_is_a = 'is_a'
         self.type_sub_property_of = 'sub_property_of'
-    
+        
     @staticmethod
     def _go_number_from_id(original_id):
         return original_id.split('/')[-1].split('_')[-1]
@@ -63,6 +71,14 @@ class Ontology:
         
         # analysis
         self._log_stats()
+    
+    def load_po2vec_go_embeddings(self):
+        embeddings_pkl_file = join(self.config['go_embeddings_dir'], self.config['po2vec_go_embeddings_pkl_file'])
+        embeddings_df = pd.read_pickle(embeddings_pkl_file)
+        go_id_to_emb = dict(zip(embeddings_df['terms'].apply(lambda x: x.split(':')[1]), 
+                                embeddings_df['embeddings'].apply(lambda x: np.array(x))))
+        # add embeddings to nodes
+        self._add_embeddings_to_graph_nodes('po2vec_embeddings', go_id_to_emb)
         
     def get_deprecated_node_ids(self) -> List[str]:
         dep_go_ids = []
@@ -140,81 +156,66 @@ class Ontology:
         self.logger.info(f"GO type: {go_node_type}, nodes: {G.number_of_nodes()}, edges: {G.number_of_edges()}, edge types: {sorted(edge_types)}")
         return G 
 
-    # def _compose_all_nx_graphs(self):
-    #     # Combine all graphs into one
-        
-
-    #     # add edges between different types of nodes (e.g., BP to MF)
-    #     edge_types = []           
-    #     for e in self.edges:
-    #         sub_go_number = self._go_number_from_id(e['sub'])
-    #         obj_go_number = self._go_number_from_id(e['obj'])
-    #         edge_id = e['pred']
-    #         edge_type = self.edge_id_to_type[edge_id]
-    #         # if edge already exists in BP, MF, or CC then skip
-    #         if G.has_edge(sub_go_number, obj_go_number):
-    #             continue
-    #         # add edge if both nodes exist
-    #         if G.has_node(sub_go_number) and G.has_node(obj_go_number):
-    #             G.add_edge(sub_go_number, obj_go_number, type=edge_type)
-    #             edge_types.append(edge_type)
-    #         else:
-    #             self.logger.warning(f"missing nodes: {sub_go_number if not G.has_node(sub_go_number) else ''}, {obj_go_number if not G.has_node(obj_go_number) else ''}")
-    #     self.logger.info(f"Added {len(edge_types)} edges between BP, MF, CC. Edge types added: {sorted(set(edge_types))}")
-    #     len(self.edges) == len(self.BP.number_of_edges) + len(self.MF.number_of_edges) + len(self.CC.number_of_edges) + len(edge_types)
-    #     return G
+    def _add_embeddings_to_graph_nodes(self, emb_type: str, node_id_to_emb: Dict[str, np.ndarray]):
+        """
+        Iterates over all nodes in self.BP, self.MF, and self.CC and add their embeddings vectors.
+        """
+        for graph, graph_name in [(self.BP, "BP"), (self.MF, "MF"), (self.CC, "CC")]:
+            for node_id in graph.nodes:
+                emb = node_id_to_emb.get(node_id, None)
+                if emb is not None:
+                	graph.nodes[node_id][emb_type] = emb
     
-        
-    def ref_create_ontology_nx_graph(self):
-        G = nx.Graph()
+	# def ref_create_ontology_nx_graph(self):
+    #     G = nx.Graph()
 
-        # Add nodes with different types
-        G.add_node("Person1", type="person")
-        G.add_node("Person2", type="person")
-        G.add_node("Company1", type="company")
-        G.add_node("Company2", type="company")
-        G.add_node("Event1", type="event")
-        G.add_node("Event2", type="event")
+    #     # Add nodes with different types
+    #     G.add_node("Person1", type="person")
+    #     G.add_node("Person2", type="person")
+    #     G.add_node("Company1", type="company")
+    #     G.add_node("Company2", type="company")
+    #     G.add_node("Event1", type="event")
+    #     G.add_node("Event2", type="event")
 
-        # Add edges between the nodes
-        G.add_edge("Person1", "Company1")
-        G.add_edge("Person2", "Company2")
-        G.add_edge("Person1", "Event1")
-        G.add_edge("Person2", "Event2")
-        G.add_edge("Company1", "Event1")
-        G.add_edge("Company2", "Event2")
+    #     # Add edges between the nodes
+    #     G.add_edge("Person1", "Company1")
+    #     G.add_edge("Person2", "Company2")
+    #     G.add_edge("Person1", "Event1")
+    #     G.add_edge("Person2", "Event2")
+    #     G.add_edge("Company1", "Event1")
+    #     G.add_edge("Company2", "Event2")
 
-        # Create another graph H
-        H = nx.Graph()
+    #     # Create another graph H
+    #     H = nx.Graph()
 
-        # Add nodes to the new graph H
-        H.add_node("Person3", type="person")
-        H.add_node("Company3", type="company")
-        H.add_node("Event3", type="event")
+    #     # Add nodes to the new graph H
+    #     H.add_node("Person3", type="person")
+    #     H.add_node("Company3", type="company")
+    #     H.add_node("Event3", type="event")
 
-        # Add edges within graph H
-        H.add_edge("Person3", "Company3")
-        H.add_edge("Company3", "Event3")
-        H.add_edge("Event3", "Person3")
+    #     # Add edges within graph H
+    #     H.add_edge("Person3", "Company3")
+    #     H.add_edge("Company3", "Event3")
+    #     H.add_edge("Event3", "Person3")
 
-        # Add edges connecting nodes from H to nodes in G
-        H.add_edge("Person3", "Company1")
-        H.add_edge("Company3", "Event1")
+    #     # Add edges connecting nodes from H to nodes in G
+    #     H.add_edge("Person3", "Company1")
+    #     H.add_edge("Company3", "Event1")
 
-        # Combine both graphs into a new graph
-        F = nx.compose(G, H)
+    #     # Combine both graphs into a new graph
+    #     F = nx.compose(G, H)
 
-        # Draw the combined graph with different colors for different types of nodes
-        pos = nx.spring_layout(F)
-        node_colors = []
-        for node in F.nodes(data=True):
-            if node[1]['type'] == 'person':
-                node_colors.append('blue')
-            elif node[1]['type'] == 'company':
-                node_colors.append('green')
-            elif node[1]['type'] == 'event':
-                node_colors.append('red')
+    #     # Draw the combined graph with different colors for different types of nodes
+    #     pos = nx.spring_layout(F)
+    #     node_colors = []
+    #     for node in F.nodes(data=True):
+    #         if node[1]['type'] == 'person':
+    #             node_colors.append('blue')
+    #         elif node[1]['type'] == 'company':
+    #             node_colors.append('green')
+    #         elif node[1]['type'] == 'event':
+    #             node_colors.append('red')
 
-        nx.draw(F, pos, with_labels=True, node_color=node_colors, node_size=3000, font_size=12, font_color='white')
-        plt.show()
-        return
+    #     nx.draw(F, pos, with_labels=True, node_color=node_colors, node_size=3000, font_size=12, font_color='white')
+    #     plt.show()
+    #     return

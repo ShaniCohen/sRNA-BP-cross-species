@@ -39,7 +39,7 @@ class AnalysisRunner:
         for _dir in ['interactions_dir', 'rna_dir', 'go_annotations_dir']:
             configs['data_loader'][_dir] = join(configs['runner']['input_data_path'], configs['data_loader'][_dir])
         # ontology
-        for _dir in ['gene_ontology_dir']:
+        for _dir in ['gene_ontology_dir', 'go_embeddings_dir']:
             configs['ontology'][_dir] = join(configs['runner']['input_data_path'], configs['ontology'][_dir])
         
         self.configs = configs
@@ -53,6 +53,7 @@ class AnalysisRunner:
         ontology = Ontology(self.configs['ontology'], self.logger)
         ontology.load_go_ontology()
         ontology.create_ontology_nx_graphs()
+        ontology.load_go_embeddings()
 
         graph_builder = GraphBuilder(self.configs['graph_builder'], self.logger, data_loader, ontology)
         graph_builder.build_graph()

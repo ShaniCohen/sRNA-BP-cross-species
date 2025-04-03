@@ -15,7 +15,9 @@
   },
   "ontology": {
     "gene_ontology_dir": "gene_ontology",
-    "gene_ontology_json_file": "go-basic.json"
+    "gene_ontology_json_file": "go-basic.json",
+	"go_embeddings_dir": "go_embeddings",
+    "po2vec_go_embeddings_pkl_file": "PO2Vec_terms_annotated_embeddings.pkl"
   },
   "graph_builder":{}
 }
