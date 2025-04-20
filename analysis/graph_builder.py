@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import List
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -52,6 +52,9 @@ class GraphBuilder:
         self._annot = "annotation"
         # sRNA <--> mRNA     
         self._inter = "interaction"
+    
+    def get_strains(self) -> List[str]:
+        return list(self.strains_data.keys())
 
     def build_graph(self):
         """
@@ -103,11 +106,90 @@ class GraphBuilder:
                 self._add_node_rna(id=srna_node_id, type=self._srna, strain=strain, locus_tag=r['sRNA_locus_tag'], 
 								   name=r['sRNA_name'], synonyms=r['sRNA_name_synonyms'], start=r['sRNA_start'], end=r['sRNA_end'],
 								   strand=r['sRNA_strand'], sequence=r['sRNA_sequence'])
+            
             # TODO: Decide how to use interactions data (growth cond, hfq, only pos inter, count?)
+            # 2 - add sRNA-mRNA interaction edges
+            for _, r in data['unq_inter'].iterrows():
+                # 2.1 - add the interaction edges between sRNA and mRNA nodes
+                srna_node_id = r[self.srna_acc_col]
+                mrna_node_id = r[self.mrna_acc_col]
+                self._add_edge_srna_mrna_inter(srna_node_id, mrna_node_id)
     
     def _log_graph_info(self):
-        print()
-        return
+        self.logger.info("Logging graph information...")
+        strains = self.get_strains()
+        
+        for strain in strains:
+            # --------------------------------
+            #              mRNA
+            # --------------------------------
+            # Filter mRNA nodes for the current strain
+            mrna_nodes = [n for n, d in self.G.nodes(data=True) if d['type'] == self._mrna and d['strain'] == strain]
+            mrna_count = len(mrna_nodes)
+
+            # Count mRNA nodes with interactions (sRNA-mRNA)
+            mrna_with_interactions = [
+                n for n in mrna_nodes if any(
+                    self.G.edges[n, neighbor]['type'] == self._inter and
+                    self.G.nodes[neighbor]['type'] == self._srna
+                    for neighbor in self.G.neighbors(n)
+                )
+            ]
+            mrna_with_interactions_count = len(mrna_with_interactions)
+
+            # mRNA nodes with interactions (sRNA-mRNA) and BP GO annotations
+            mrna_bp_annotations = {
+                n: [
+                    neighbor for neighbor in self.G.neighbors(n)
+                    if self.G.edges[n, neighbor]['type'] == self._annot and 
+                    self.G.nodes[neighbor]['type'] == self._bp  # node_types = [self._bp, self._mf, self._cc]
+                ]
+                for n in mrna_with_interactions
+            }
+
+            emb_type = self.ontology.emb_type_po2vec
+            mrna_w_bp_annot = 0
+            mrna_w_bp_annot_and_at_least_1_emb = 0
+            for n, bp_nodes in mrna_bp_annotations.items():
+                if len(bp_nodes) > 0:
+                    mrna_w_bp_annot += 1
+                    # Check if any of the BP nodes have embeddings
+                    if any(emb_type in self.G.nodes[go_id] for go_id in bp_nodes):
+                        mrna_w_bp_annot_and_at_least_1_emb += 1
+            
+            # --------------------------------
+            #              sRNA
+            # --------------------------------
+            # Filter sRNA nodes for the current strain
+            srna_nodes = [n for n, d in self.G.nodes(data=True) if d['type'] == self._srna and d['strain'] == strain]
+            srna_count = len(srna_nodes)
+
+            # Count sRNA nodes with interactions (sRNA-mRNA)
+            srna_with_interactions = [
+                n for n in srna_nodes if any(
+                    self.G.edges[n, neighbor]['type'] == self._inter and
+                    self.G.nodes[neighbor]['type'] == self._mrna
+                    for neighbor in self.G.neighbors(n)
+                )
+            ]
+            srna_with_interactions_count = len(srna_with_interactions)
+
+            
+
+            # --------------------------------
+            #        Log the information
+            # --------------------------------
+            self.logger.info(
+                f"\n   Strain: {strain} "
+                f"\n   _______________________________ "
+                f"\n   mRNA count: {mrna_count} "
+                f"\n   mRNA with interactions: {mrna_with_interactions_count} "
+                f"\n   mRNA with interactions and BP annotations: {mrna_w_bp_annot} "
+                f"\n   mRNA with interactions and BP annotations and at least 1 embedding: {mrna_w_bp_annot_and_at_least_1_emb} "
+                f"\n   sRNA count: {srna_count} "
+                f"\n   sRNA with interactions: {srna_with_interactions_count} "
+            )
+            print()
     
     def _add_all_mrna_and_curated_bp_annot(self, strain, all_mrna_w_curated_annot):
         self.logger.info(f"adding mRNA nodes and curated mRNA-GO annotations for {strain}")
