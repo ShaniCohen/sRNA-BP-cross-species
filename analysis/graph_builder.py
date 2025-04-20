@@ -67,6 +67,7 @@ class GraphBuilder:
         self._process_curated_annot()
         self._add_mrna_nodes_and_annotation_edges()
         self._add_srna_nodes_and_interaction_edges()
+        self._log_graph_info()
     
     def _process_curated_annot(self):
         for strain, data in self.strains_data.items():
@@ -103,7 +104,11 @@ class GraphBuilder:
 								   name=r['sRNA_name'], synonyms=r['sRNA_name_synonyms'], start=r['sRNA_start'], end=r['sRNA_end'],
 								   strand=r['sRNA_strand'], sequence=r['sRNA_sequence'])
             # TODO: Decide how to use interactions data (growth cond, hfq, only pos inter, count?)
-	
+    
+    def _log_graph_info(self):
+        print()
+        return
+    
     def _add_all_mrna_and_curated_bp_annot(self, strain, all_mrna_w_curated_annot):
         self.logger.info(f"adding mRNA nodes and curated mRNA-GO annotations for {strain}")
         assert sum(pd.isnull(all_mrna_w_curated_annot['mRNA_accession_id'])) == 0
