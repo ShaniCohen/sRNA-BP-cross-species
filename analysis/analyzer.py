@@ -47,17 +47,18 @@ class Analyzer:
         self._srna = graph_builder._srna
 
         # edge types
-        # GO <--> GO
+        # GO --> GO
         self._part_of = graph_builder._part_of
         self._regulates = graph_builder._regulates
         self._neg_regulates = graph_builder._neg_regulates
         self._pos_regulates = graph_builder._pos_regulates
         self._is_a = graph_builder._is_a
         self._sub_property_of = graph_builder._sub_property_of
-        # mRNA <--> GO
-        self._annot = graph_builder._annot
-        # sRNA <--> mRNA     
-        self._inter = graph_builder._inter
+        # mRNA --> GO
+        self._annotated = graph_builder._annotated
+        # sRNA --> mRNA     
+        self._targets = graph_builder._targets
+
     
     def run_analysis(self):
         """
@@ -84,13 +85,13 @@ class Analyzer:
                 if srna == 'EG30027':
                     print()
                 srna_targets = [
-                    n for n in self.G.neighbors(srna) if n['type'] == self._mrna and self.G[srna][n]['type'] == self._inter
+                    n for n in self.G.neighbors(srna) if n['type'] == self._mrna and self.G[srna][n]['type'] == self._targets
                 ]
                 targets_to_bp = {}
                 for target in srna_targets:
                     # Find the biological processes associated with the target
                     for neighbor in self.G.neighbors(target):
-                        if neighbor['type'] == self._bp and self.G[target][neighbor]['type'] == self._annot:
+                        if neighbor['type'] == self._bp and self.G[target][neighbor]['type'] == self._annotated:
                             bp_id = neighbor['id_str']
                             if target not in targets_to_bp:
                                 targets_to_bp[target] = []

@@ -142,26 +142,23 @@ class GraphBuilder:
             mrna_nodes = [n for n, d in self.G.nodes(data=True) if d['type'] == self._mrna and d['strain'] == strain]
             mrna_count = len(mrna_nodes)
 
-            # Count mRNA nodes with interactions (sRNA-mRNA)
-            # The edge ('0030632', 'EG10001') is not in the graph.
+            # Count mRNA nodes with interactions (sRNA --targets--> mRNA)
             # mRNA = 'EG10001'
             # sorted([(u, v) for u, v, d in self.G.edges(data=True) if u == 'EG10001' or v == 'EG10001'])
             # d = self.strains_data[strain]['unq_inter'][self.strains_data[strain]['unq_inter'][self.mrna_acc_col] == 'EG10001']
-            # TODO: fix the issue with the edge not being in the graph
             mrna_with_interactions = [
                 n for n in mrna_nodes if any(
-                    self.G.edges[neighbor, n]['type'] == self._targets and
-                    self.G.nodes[neighbor]['type'] == self._srna
-                    for neighbor in self.G.neighbors(n)
+                    self.G.nodes[p]['type'] == self._srna and self.G.edges[p, n]['type'] == self._targets
+                    for p in self.G.predecessors(n)
                 )
             ]
             mrna_with_interactions_count = len(mrna_with_interactions)
 
-            # mRNA nodes with interactions (sRNA-mRNA) and BP GO annotations
+            # mRNA nodes with interactions (sRNA --targets--> mRNA) and BP GO annotations (mRNA --annotation--> BP)
             mrna_bp_annotations = {
                 n: [
                     neighbor for neighbor in self.G.neighbors(n)
-                    if self.G.edges[n, neighbor]['type'] == self._annot and 
+                    if self.G.edges[n, neighbor]['type'] == self._annotated and 
                     self.G.nodes[neighbor]['type'] == self._bp  # node_types = [self._bp, self._mf, self._cc]
                 ]
                 for n in mrna_with_interactions
@@ -183,6 +180,9 @@ class GraphBuilder:
             # --------------------------------
             #              sRNA
             # --------------------------------
+            # sRNA = 'G0-16636'
+            # sorted([(u, v) for u, v, d in self.G.edges(data=True) if u == 'G0-16636' or v == 'G0-16636'])
+            # d = self.strains_data[strain]['unq_inter'][self.strains_data[strain]['unq_inter'][self.srna_acc_col] == 'G0-16636']
             # Filter sRNA nodes for the current strain
             srna_nodes = [n for n, d in self.G.nodes(data=True) if d['type'] == self._srna and d['strain'] == strain]
             srna_count = len(srna_nodes)
@@ -219,7 +219,6 @@ class GraphBuilder:
                 f"\n   sRNA with interactions: {srna_with_interactions_count} "
                 f"\n   sRNA with interactions and BP annotations: {srna_w_bp_annot_count} "
             )
-            print()
     
     def _add_all_mrna_and_curated_bp_annot(self, strain, all_mrna_w_curated_annot):
         self.logger.info(f"adding mRNA nodes and curated mRNA-GO annotations for {strain}")
