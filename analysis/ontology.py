@@ -10,7 +10,7 @@ import json
 import sys
 import os
 import networkx as nx
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 
 ROOT_PATH = str(Path(__file__).resolve().parents[1])

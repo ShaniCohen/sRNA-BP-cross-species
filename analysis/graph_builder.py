@@ -29,6 +29,7 @@ class GraphBuilder:
         self.G = nx.Graph()
         self.G.add_nodes_from(ontology.BP.nodes(data=True))
         self.G.add_edges_from(ontology.BP.edges(data=True))
+        self.graph_is_built = False
 
         # node types
         # GO
@@ -55,6 +56,11 @@ class GraphBuilder:
     
     def get_strains(self) -> List[str]:
         return list(self.strains_data.keys())
+    
+    def get_graph(self) -> nx.Graph:
+        if not self.graph_is_built:
+            raise Exception("Graph is not built yet. Please call build_graph() first.")
+        return self.G
 
     def build_graph(self):
         """
@@ -71,6 +77,8 @@ class GraphBuilder:
         self._add_mrna_nodes_and_annotation_edges()
         self._add_srna_nodes_and_interaction_edges()
         self._log_graph_info()
+        self.graph_is_built = True
+        self.logger.info(f"graph is built")
     
     def _process_curated_annot(self):
         for strain, data in self.strains_data.items():
@@ -148,14 +156,17 @@ class GraphBuilder:
             }
 
             emb_type = self.ontology.emb_type_po2vec
-            mrna_w_bp_annot = 0
-            mrna_w_bp_annot_and_at_least_1_emb = 0
+            mrna_w_bp_annot = []
+            mrna_w_bp_annot_and_at_least_1_emb = []
             for n, bp_nodes in mrna_bp_annotations.items():
                 if len(bp_nodes) > 0:
-                    mrna_w_bp_annot += 1
+                    mrna_w_bp_annot.append(n)
                     # Check if any of the BP nodes have embeddings
                     if any(emb_type in self.G.nodes[go_id] for go_id in bp_nodes):
-                        mrna_w_bp_annot_and_at_least_1_emb += 1
+                        mrna_w_bp_annot_and_at_least_1_emb.append(n)
+            
+            mrna_w_bp_annot_count = len(mrna_w_bp_annot)
+            mrna_w_bp_annot_and_at_least_1_emb_count = len(mrna_w_bp_annot_and_at_least_1_emb)
             
             # --------------------------------
             #              sRNA
@@ -174,7 +185,13 @@ class GraphBuilder:
             ]
             srna_with_interactions_count = len(srna_with_interactions)
 
-            
+            # Count sRNA nodes with interactions (sRNA-mRNA) and BP GO annotations
+            srna_w_bp_annot = [
+                n for n in srna_nodes if any(
+                    neighbor in mrna_w_bp_annot for neighbor in self.G.neighbors(n)
+                )
+            ]
+            srna_w_bp_annot_count = len(srna_w_bp_annot)
 
             # --------------------------------
             #        Log the information
@@ -184,10 +201,11 @@ class GraphBuilder:
                 f"\n   _______________________________ "
                 f"\n   mRNA count: {mrna_count} "
                 f"\n   mRNA with interactions: {mrna_with_interactions_count} "
-                f"\n   mRNA with interactions and BP annotations: {mrna_w_bp_annot} "
-                f"\n   mRNA with interactions and BP annotations and at least 1 embedding: {mrna_w_bp_annot_and_at_least_1_emb} "
+                f"\n   mRNA with interactions and BP annotations: {mrna_w_bp_annot_count} "
+                f"\n   mRNA with interactions and BP annotations and at least 1 embedding: {mrna_w_bp_annot_and_at_least_1_emb_count} "
                 f"\n   sRNA count: {srna_count} "
                 f"\n   sRNA with interactions: {srna_with_interactions_count} "
+                f"\n   sRNA with interactions and BP annotations: {srna_w_bp_annot_count} "
             )
             print()
     

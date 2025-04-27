@@ -19,5 +19,6 @@
 	"go_embeddings_dir": "go_embeddings",
     "po2vec_go_embeddings_pkl_file": "PO2Vec_terms_annotated_embeddings.pkl"
   },
-  "graph_builder":{}
+  "graph_builder":{},
+  "analyzer":{}
 }

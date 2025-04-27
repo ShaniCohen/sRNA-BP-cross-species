@@ -9,6 +9,7 @@ import os
 from analysis.data_loader import DataLoader
 from analysis.ontology import Ontology
 from analysis.graph_builder import GraphBuilder
+from analysis.analyzer import Analyzer
 import logging
 logging.basicConfig(level=logging.DEBUG, stream=sys.stdout, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -57,6 +58,9 @@ class AnalysisRunner:
 
         graph_builder = GraphBuilder(self.configs['graph_builder'], self.logger, data_loader, ontology)
         graph_builder.build_graph()
+
+        analyzer = Analyzer(self.configs['analyzer'], self.logger, graph_builder)
+        analyzer.run_analysis()
         
         self.logger.info(f"--------------   run completed   --------------")
         return
