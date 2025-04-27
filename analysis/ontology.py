@@ -129,6 +129,10 @@ class Ontology:
         self.MF = self._create_nx_graph(self.type_mf)
         self.CC = self._create_nx_graph(self.type_cc)
         # self.G = nx.compose_all([self.BP, self.MF, self.CC])
+        # Example in self.BP:
+        #        '0099590'  neurotransmitter receptor internalization
+        # <is a> '0031503'  protein-containing complex localization
+        # <is a> '0031623'  receptor internalization
 
     def _map_edge_id_to_type(self):
         self.edge_id_to_type = {
@@ -146,7 +150,7 @@ class Ontology:
             "http://www.geneontology.org/formats/oboInOwl#hasOBONamespace"  -->   meta['basicPropertyValues']['val'] is BP, MF, CC 
             "http://www.geneontology.org/formats/oboInOwl#hasAlternativeId"
         """
-        G = nx.Graph()
+        G = nx.DiGraph()
         # add nodes
         for n in self.class_nodes:
             go_number = self._go_number_from_id(n['id'])
