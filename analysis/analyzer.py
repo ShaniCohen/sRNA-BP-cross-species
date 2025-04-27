@@ -32,6 +32,9 @@ class Analyzer:
         self.strains = graph_builder.get_strains()
         self.G = graph_builder.get_graph()
 
+        # TODO: remove after testing
+        self.strains_data = graph_builder.strains_data
+
         # node types
         # GO
         self._bp = graph_builder._bp
@@ -74,14 +77,33 @@ class Analyzer:
         Generate a mapping of sRNA to biological processes (BPs) based on the edges in the graph.
         The mapping is a dictionary where the keys are sRNA IDs and the values are lists of associated BP IDs.
         """
-        srna_bp_mapping = {}
-        for edge in self.G.edges(data=True):
-            if edge[0].startswith('sRNA') and edge[1].startswith('GO'):
-                srna_id = edge[0]
-                bp_id = edge[1]
-                if srna_id not in srna_bp_mapping:
-                    srna_bp_mapping[srna_id] = []
-                srna_bp_mapping[srna_id].append(bp_id)
+        for strain in self.strains:
+            # Filter sRNA nodes for the current strain
+            srna_nodes = [n for n, d in self.G.nodes(data=True) if d['type'] == self._srna and d['strain'] == strain]
+            for srna in srna_nodes:
+                if srna == 'EG30027':
+                    print()
+                srna_targets = [
+                    n for n in self.G.neighbors(srna) if n['type'] == self._mrna and self.G[srna][n]['type'] == self._inter
+                ]
+                targets_to_bp = {}
+                for target in srna_targets:
+                    # Find the biological processes associated with the target
+                    for neighbor in self.G.neighbors(target):
+                        if neighbor['type'] == self._bp and self.G[target][neighbor]['type'] == self._annot:
+                            bp_id = neighbor['id_str']
+                            if target not in targets_to_bp:
+                                targets_to_bp[target] = []
+                            targets_to_bp[target].append(bp_id)
+            
+            srna_bp_mapping = {}
+            for edge in self.G.edges(data=True):
+                if edge[0].startswith('sRNA') and edge[1].startswith('GO'):
+                    srna_id = edge[0]
+                    bp_id = edge[1]
+                    if srna_id not in srna_bp_mapping:
+                        srna_bp_mapping[srna_id] = []
+                    srna_bp_mapping[srna_id].append(bp_id)
         return srna_bp_mapping
 
     def _apply_enrichment(self):

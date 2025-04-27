@@ -60,6 +60,9 @@ class AnalysisRunner:
         graph_builder.build_graph()
 
         analyzer = Analyzer(self.configs['analyzer'], self.logger, graph_builder)
+        # TODO: remove post testing
+        TEST_df = graph_builder.strains_data['ecoli_k12']['unq_inter']
+        # sorted(set(TEST_df[TEST_df['sRNA_accession_id']=='EG30027']['mRNA_accession_id']))
         analyzer.run_analysis()
         
         self.logger.info(f"--------------   run completed   --------------")
