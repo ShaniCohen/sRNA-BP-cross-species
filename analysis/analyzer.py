@@ -40,7 +40,6 @@ class Analyzer:
         self._bp = graph_builder._bp
         self._mf = graph_builder._mf
         self._cc = graph_builder._cc
-
         # mRNA
         self._mrna = graph_builder._mrna
         # sRNA
@@ -59,7 +58,6 @@ class Analyzer:
         # sRNA --> mRNA     
         self._targets = graph_builder._targets
 
-    
     def run_analysis(self):
         """
         GO node is represented as a dict item:
@@ -71,9 +69,10 @@ class Analyzer:
         """
         self.logger.info(f"running analysis")
         bp_mapping = self._generate_srna_bp_mapping()
-        # TODO: implement the enrichment analysis
-        self._apply_enrichment()
-
+        self._log_mapping(bp_mapping)
+        bp_mapping_post_en = self._apply_enrichment(bp_mapping)
+        self._log_mapping(bp_mapping_post_en)
+        
     def _generate_srna_bp_mapping(self) -> dict:
         """
         Generate a mapping of sRNA to biological processes (BPs) based on the edges in the graph.
@@ -111,14 +110,48 @@ class Analyzer:
 
         return bp_mapping
 
-    def _apply_enrichment(self):
+    def _log_mapping(self, mapping: dict):
+        for strain, srna_data in mapping.items():
+            srna_count = len(srna_data)
+            mrna_targets = [mrna for srna_targets in srna_data.values() for mrna in srna_targets.keys()]
+            unique_mrna_targets = set(mrna_targets)
+            bp_list = [bp for srna_targets in srna_data.values() for bps in srna_targets.values() for bp in bps]
+            unique_bps = set(bp_list)
+
+            self.logger.info(
+                f"Strain: {strain} \n"
+                f"  Number of sRNA keys: {srna_count} \n"
+                f"  Number of mRNA targets: {len(mrna_targets)} \n"
+                f"  Number of unique mRNA targets: {len(unique_mrna_targets)} \n"
+                f"  Number of BPs: {len(bp_list)} \n"
+                f"  Number of unique BPs: {len(unique_bps)}"
+            )
+
+    def _apply_enrichment(self, mapping: dict) -> dict:
         """
         Enrichment (per strain): 
             per sRNA, find and keep only significant biological processes (BPs) that its targets invovlved in.
             significant BPs are found using a hypergeometric test.
         """
-        self.logger.info(f"applying enrichment (finding significant biological processes)")
-        self._run_hypergeometric_test(M=52, n=26, N=12, k=7)
+        self.logger.info(f"applying enrichment (finding significant BPs)")
+        for strain, srna_data in mapping.items():
+            srna_count = len(srna_data)
+            mrna_targets = [mrna for srna_targets in srna_data.values() for mrna in srna_targets.keys()]
+            unique_mrna_targets = set(mrna_targets)
+            bp_list = [bp for srna_targets in srna_data.values() for bps in srna_targets.values() for bp in bps]
+            unique_bps = set(bp_list)
+
+            self.logger.info(
+                f"Strain: {strain} \n"
+                f"  Number of sRNA keys: {srna_count} \n"
+                f"  Number of mRNA targets: {len(mrna_targets)} \n"
+                f"  Number of unique mRNA targets: {len(unique_mrna_targets)} \n"
+                f"  Number of BPs: {len(bp_list)} \n"
+                f"  Number of unique BPs: {len(unique_bps)}"
+            )
+            #####################
+            test_pv = self._run_hypergeometric_test(M=52, n=26, N=12, k=7)
+        
         return
     
     def _run_hypergeometric_test(self, M: int, n: int, N: int, k: int) -> float:
