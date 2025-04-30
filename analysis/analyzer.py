@@ -221,9 +221,7 @@ class Analyzer:
                     k = len(targets)
 
                     # 4.2 - Run hypergeometric test
-                    # TODO: verift the test again ---> test_pv = self._run_hypergeometric_test(M=52, n=26, N=12, k=7)
                     test_pv = self._run_hypergeometric_test(M=M, n=n, N=N, k=k)
-
                     if test_pv <= self.enrichment_pv_threshold:
                         significant_srna_bps.append(bp)
                 
@@ -247,28 +245,18 @@ class Analyzer:
         """
         Hypergeometric test to find the cumulative probability of observing k or more marked elements in a selection of N elements 
         from a population of M elements, where n is the number of marked elements in the population.
-        fornmally:
+        fornmally:  
+                    P(X >= k) = sum_{i=k}^{min(n, N)} (n choose i) * (M-n choose N-i) / (M choose N)
 
-        P(X >= k) = sum_{i=k}^{min(n, N)} (n choose i) * (M-n choose N-i) / (M choose N)
-        
-        Parameters:
-        M (int): Total number of elements in the population.
-        n (int): Number of marked elements in the population (i.e. genes associated to this biological process).
-        N (int): Size of the selection.
-        k (int): Number of marked elements in the selection (i.e. genes of the group of interest that are associated to this biological process).
+        Args:
+            M (int): Total number of elements in the population.
+            n (int): Number of marked elements in the population (i.e. genes associated to this biological process).
+            N (int): Size of the selection.
+            k (int): Number of marked elements in the selection (i.e. genes of the group of interest that are associated to this biological process).
+
+        Returns:
+            float: P(X >= k)
         """
         test_pv = hypergeom(M=M, n=n, N=N).sf(k-1)
-
-        """
-        g = 75  ## Number of submitted genes
-        k = 59  ## Size of the selection, i.e. submitted genes with at least one annotation in GO biological processes
-        m = 611  ## Number of "marked" elements, i.e. genes associated to this biological process
-        N = 13588  ## Total number of genes with some annotation in GOTERM_BP_FAT.
-        n = N - m  ## Number of "non-marked" elements, i.e. genes not associated to this biological process
-        x = 19  ## Number of "marked" elements in the selection, i.e. genes of the group of interest that are associated to this biological process
-
-        # Python
-        hypergeom(M=N, n=m, N=k).sf(x-1)
-        """
 
         return test_pv
