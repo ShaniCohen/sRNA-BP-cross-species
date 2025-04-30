@@ -58,6 +58,9 @@ class Analyzer:
         # sRNA --> mRNA     
         self._targets = graph_builder._targets
 
+        # enrichment pv threshold
+        self.enrichment_pv_threshold = 0.05
+
     def run_analysis(self):
         """
         GO node is represented as a dict item:
@@ -126,33 +129,119 @@ class Analyzer:
                 f"  Number of BPs: {len(bp_list)} \n"
                 f"  Number of unique BPs: {len(unique_bps)}"
             )
+    
+    def compare_bp_to_accociated_mrnas(self, bp_to_accociated_mrnas, bp_to_accociated_mrnas_g):
+        # Check if keys are the same
+        keys1 = set(bp_to_accociated_mrnas.keys())
+        keys2 = set(bp_to_accociated_mrnas_g.keys())
+        
+        if keys1 != keys2:
+            missing_in_g = keys1 - keys2
+            missing_in_original = keys2 - keys1
+            self.logger.info(f"Keys missing in bp_to_accociated_mrnas_g: {missing_in_g}")
+            self.logger.info(f"Keys missing in bp_to_accociated_mrnas: {missing_in_original}")
+        
+        # Compare values for each key
+        for key in keys1.intersection(keys2):
+            value1 = set(bp_to_accociated_mrnas[key])
+            value2 = set(bp_to_accociated_mrnas_g[key])
+            
+            if value1 != value2:
+                self.logger.info(f"Difference for key {key}:")
+                self.logger.info(f"  In bp_to_accociated_mrnas: {value1 - value2}")
+                self.logger.info(f"  In bp_to_accociated_mrnas_g: {value2 - value1}")
 
     def _apply_enrichment(self, mapping: dict) -> dict:
         """
         Enrichment (per strain): 
             per sRNA, find and keep only significant biological processes (BPs) that its targets invovlved in.
             significant BPs are found using a hypergeometric test.
+
+        Args:
+            mapping (dict): A dictionary in the following format:
+            {
+                <strain_id>: {
+                        <sRNA_id>: {
+                            <mRNA_target_id>: [<bp_id1>, <bp_id2>, ...],
+                            ...
+                        },
+                        ...
+                },
+                ...
+            }   
+        
+        Returns:
+            dict: A dictionary in the same format post filtering of insignificant BPs.
         """
         self.logger.info(f"applying enrichment (finding significant BPs)")
-        for strain, srna_data in mapping.items():
-            srna_count = len(srna_data)
-            mrna_targets = [mrna for srna_targets in srna_data.values() for mrna in srna_targets.keys()]
-            unique_mrna_targets = set(mrna_targets)
-            bp_list = [bp for srna_targets in srna_data.values() for bps in srna_targets.values() for bp in bps]
-            unique_bps = set(bp_list)
+        filtered_mapping = {}
+        for strain, d in mapping.items():
+            ############  Population
+            #   population (mrna_targets) = all mRNA targets (of all sRNAs) in the strain
+            mrna_targets = sorted(set([target for target_to_bp in d.values() for target in target_to_bp.keys()]))
+            #   population size (M)
+            M = len(mrna_targets)
 
-            self.logger.info(
-                f"Strain: {strain} \n"
-                f"  Number of sRNA keys: {srna_count} \n"
-                f"  Number of mRNA targets: {len(mrna_targets)} \n"
-                f"  Number of unique mRNA targets: {len(unique_mrna_targets)} \n"
-                f"  Number of BPs: {len(bp_list)} \n"
-                f"  Number of unique BPs: {len(unique_bps)}"
-            )
-            #####################
-            test_pv = self._run_hypergeometric_test(M=52, n=26, N=12, k=7)
+            # 1 - for each BP in the population, find the number of mRNA TARGETS associated to it (n per BP)
+            strain_bps = sorted(set([bp for target_to_bp in d.values() for bp_lst in target_to_bp.values() for bp in bp_lst]))
+            bp_to_accociated_mrna_targets = {bp: set() for bp in strain_bps}
+            for target_to_bp in d.values():
+                for target, bp_lst in target_to_bp.items():
+                    for bp in bp_lst:
+                        bp_to_accociated_mrna_targets[bp].add(target)
+
+            ############  Selection
+            #   For each sRNA, keep only significant BPs
+            d_filtered = {}
+            for srna, target_to_bp_of_srna in d.items():
+                # 1 - Define selection
+                #   selection (mrna_targets_of_srna) = all mRNA targets of a specific sRNA in the strain
+                mrna_targets_of_srna = sorted(set(target_to_bp_of_srna.keys()))
+                #   selection size (N)
+                N = len(mrna_targets_of_srna)
+
+                # 2 - for each BP in the selection, find the number of mRNA TARGETS associated to it (k per BP)
+                srna_bps = sorted(set([bp for bp_lst in target_to_bp_of_srna.values() for bp in bp_lst]))
+                bp_to_accociated_mrna_targets_of_srna = {bp: set() for bp in srna_bps}
+                for target, bp_lst in target_to_bp_of_srna.items():
+                    for bp in bp_lst:
+                        bp_to_accociated_mrna_targets_of_srna[bp].add(target)
+
+                # 3 - per BP, assert that the mRNA targets in the selection (k) is a subset of the mRNA targets in the population (n)
+                for bp, targets in bp_to_accociated_mrna_targets_of_srna.items():
+                    assert targets.issubset(bp_to_accociated_mrna_targets[bp])
+                
+                # 4 - find significant BPs for the sRNA
+                significant_srna_bps = []
+                for bp, targets in bp_to_accociated_mrna_targets_of_srna.items():
+                    # 4.1 - Define marked elements
+                    #   number of marked elements in the population (n) = number of mRNA targets in the population associated to this BP
+                    n = len(bp_to_accociated_mrna_targets[bp])
+                    #   number of marked elements in the selection (k) = number of mRNA targets in the selection (sRNA) associated to this BP
+                    k = len(targets)
+
+                    # 4.2 - Run hypergeometric test
+                    # TODO: verift the test again ---> test_pv = self._run_hypergeometric_test(M=52, n=26, N=12, k=7)
+                    test_pv = self._run_hypergeometric_test(M=M, n=n, N=N, k=k)
+
+                    if test_pv <= self.enrichment_pv_threshold:
+                        significant_srna_bps.append(bp)
+                
+                # 5 - Keep only significant BPs for each target of the sRNA
+                filtered_target_to_bp_of_srna = {}
+                for target, bp_lst in target_to_bp_of_srna.items():
+                    # Keep only significant BPs for the target
+                    filtered_bps = [bp for bp in bp_lst if bp in significant_srna_bps]
+                    if filtered_bps:
+                        filtered_target_to_bp_of_srna[target] = filtered_bps
+                
+                # 6 - if the sRNA has at least one significant BP, keep it in the filtered mapping
+                if filtered_target_to_bp_of_srna:
+                    d_filtered[srna] = filtered_target_to_bp_of_srna
+                
+            filtered_mapping[strain] = d_filtered
         
-        return
+        return filtered_mapping
     
     def _run_hypergeometric_test(self, M: int, n: int, N: int, k: int) -> float:
         """
