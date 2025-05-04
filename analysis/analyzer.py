@@ -137,17 +137,59 @@ class Analyzer:
     
     def _dump_metadata(self, metadata: dict):
         """
-        Dump metadata to a JSON file.
-        
+        Dump metadata to a CSV file per strain.
+
         Args:
-            metadata (dict): Metadata to be dumped.
+            metadata (dict): A dictionary in the following format:
+            {
+                <strain_id>: {
+                        <sRNA_id>: {
+                            <BP_id>: {                            
+                                'BP_id': bp,
+                                'BP_lbl': self.G.nodes[bp]['lbl'],
+                                'M': M,
+                                'n': n,
+                                'N': N,
+                                'k': k,
+                                'k_targets_associated_w_BP': targets,
+                                'p_value': p_value,
+                                'adj_p_value': adj_p_value
+                            },
+                            ...
+                        },
+                        ...
+                },
+                ...
+            }  
         """
         out_path = self.config['analysis_output_dir']
         self.logger.info(f"Dumping metadata to {out_path}")
-        for strain, srna_data in metadata.items():
-            file_nm = f"metadata_per_srna_{strain}.json"
-            df = pd.DataFrame.from_dict(srna_data, orient='index')
+        os.makedirs(out_path, exist_ok=True)
 
+        for strain, srna_data in metadata.items():
+            rows = []
+            for srna_id, bp_data in srna_data.items():
+                srna_name = self.G.nodes[srna_id].get('name', 'N/A')
+                for bp_id, meta in bp_data.items():
+                    rows.append({
+                        'strain': strain,
+                        'sRNA_id': srna_id,
+                        'sRNA_name': srna_name,
+                        'BP_id': meta['BP_id'],
+                        'BP_lbl': meta['BP_lbl'],
+                        'M': meta['M'],
+                        'n': meta['n'],
+                        'N': meta['N'],
+                        'k': meta['k'],
+                        'k_targets_associated_w_BP': ";".join(meta['k_targets_associated_w_BP']),
+                        'p_value': meta['p_value'],
+                        'adj_p_value': meta['adj_p_value']
+                    })
+
+            df = pd.DataFrame(rows)
+            file_path = os.path.join(out_path, f"metadata_per_srna_{strain}.csv")
+            df.to_csv(file_path, index=False)
+            self.logger.info(f"Metadata for strain {strain} dumped to {file_path}")
     
     def compare_bp_to_accociated_mrnas(self, bp_to_accociated_mrnas, bp_to_accociated_mrnas_g):
         # Check if keys are the same

@@ -42,7 +42,9 @@ class AnalysisRunner:
         # ontology
         for _dir in ['gene_ontology_dir', 'go_embeddings_dir']:
             configs['ontology'][_dir] = join(configs['runner']['input_data_path'], configs['ontology'][_dir])
-        
+        # analyzer
+        for _dir in ['analysis_output_dir']:
+            configs['analyzer'][_dir] = join(configs['runner']['output_data_path'], configs['analyzer'][_dir])
         self.configs = configs
 
     def run(self):
