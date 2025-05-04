@@ -1,11 +1,11 @@
-from typing import List
+from typing import Tuple
 import pandas as pd
 import numpy as np
 from pathlib import Path
 from utils.general import read_df, write_df
 import networkx as nx
 from pyvis.network import Network
-from scipy.stats import hypergeom
+from scipy.stats import hypergeom, false_discovery_control
 import json
 import sys
 import os
@@ -61,7 +61,7 @@ class Analyzer:
         # enrichment pv threshold
         self.enrichment_pv_threshold = 0.05
 
-    def run_analysis(self):
+    def run_analysis(self, dump_meta: bool = True):
         """
         GO node is represented as a dict item:
             <id_str> : {'type': <str>, 'lbl': <str>, 'meta': <dict>}
@@ -71,10 +71,15 @@ class Analyzer:
             (<id_str>, <id_str>) : {'type': <str>}
         """
         self.logger.info(f"running analysis")
+        # 1 - Generate a mapping of sRNA to biological processes (BPs)
         bp_mapping = self._generate_srna_bp_mapping()
         self._log_mapping(bp_mapping)
-        bp_mapping_post_en = self._apply_enrichment(bp_mapping)
+        # 2 - Enrichment (per strain): per sRNA, find and keep only significant biological processes (BPs) that its targets invovlved in.
+        bp_mapping_post_en, meta = self._apply_enrichment(bp_mapping)
         self._log_mapping(bp_mapping_post_en)
+        # 3 - dump metadata
+        if dump_meta:
+            self._dump_metadata(meta)
         
     def _generate_srna_bp_mapping(self) -> dict:
         """
@@ -130,6 +135,20 @@ class Analyzer:
                 f"  Number of unique BPs: {len(unique_bps)}"
             )
     
+    def _dump_metadata(self, metadata: dict):
+        """
+        Dump metadata to a JSON file.
+        
+        Args:
+            metadata (dict): Metadata to be dumped.
+        """
+        out_path = self.config['analysis_output_dir']
+        self.logger.info(f"Dumping metadata to {out_path}")
+        for strain, srna_data in metadata.items():
+            file_nm = f"metadata_per_srna_{strain}.json"
+            df = pd.DataFrame.from_dict(srna_data, orient='index')
+
+    
     def compare_bp_to_accociated_mrnas(self, bp_to_accociated_mrnas, bp_to_accociated_mrnas_g):
         # Check if keys are the same
         keys1 = set(bp_to_accociated_mrnas.keys())
@@ -151,7 +170,7 @@ class Analyzer:
                 self.logger.info(f"  In bp_to_accociated_mrnas: {value1 - value2}")
                 self.logger.info(f"  In bp_to_accociated_mrnas_g: {value2 - value1}")
 
-    def _apply_enrichment(self, mapping: dict) -> dict:
+    def _apply_enrichment(self, mapping: dict) -> Tuple[dict, dict]:
         """
         Enrichment (per strain): 
             per sRNA, find and keep only significant biological processes (BPs) that its targets invovlved in.
@@ -171,10 +190,31 @@ class Analyzer:
             }   
         
         Returns:
-            dict: A dictionary in the same format post filtering of insignificant BPs.
+            filtered_mapping (dict): A dictionary in the same format post filtering of insignificant BPs.
+            metadata (dict): A dictionary in the following format:
+            {
+                <strain_id>: {
+                        <sRNA_id>: {
+                            <BP_id>: {                            
+                                'BP_id': bp,
+                                'BP_lbl': self.G.nodes[bp]['lbl'],
+                                'M': M,
+                                'n': n,
+                                'N': N,
+                                'k': k,
+                                'k_targets_associated_w_BP': targets,
+                                'p_value': p_value,
+                                'adj_p_value': adj_p_value
+                            },
+                            ...
+                        },
+                        ...
+                },
+                ...
+            }  
         """
         self.logger.info(f"applying enrichment (finding significant BPs)")
-        filtered_mapping = {}
+        filtered_mapping, metadata = {}, {}
         for strain, d in mapping.items():
             ############  Population
             #   population (mrna_targets) = all mRNA targets (of all sRNAs) in the strain
@@ -191,8 +231,9 @@ class Analyzer:
                         bp_to_accociated_mrna_targets[bp].add(target)
 
             ############  Selection
+            # TODO: per sRNA, its BPS, BP name, M,N,n,k, pv before correction, pv after correction
             #   For each sRNA, keep only significant BPs
-            d_filtered = {}
+            d_filtered, d_meta = {}, {}
             for srna, target_to_bp_of_srna in d.items():
                 # 1 - Define selection
                 #   selection (mrna_targets_of_srna) = all mRNA targets of a specific sRNA in the strain
@@ -200,7 +241,7 @@ class Analyzer:
                 #   selection size (N)
                 N = len(mrna_targets_of_srna)
 
-                # 2 - for each BP in the selection, find the number of mRNA TARGETS associated to it (k per BP)
+                # 2 - for each BP in the selection, find the number of mRNA TARGETS associated to it (k per BP) + update metadata
                 srna_bps = sorted(set([bp for bp_lst in target_to_bp_of_srna.values() for bp in bp_lst]))
                 bp_to_accociated_mrna_targets_of_srna = {bp: set() for bp in srna_bps}
                 for target, bp_lst in target_to_bp_of_srna.items():
@@ -211,8 +252,8 @@ class Analyzer:
                 for bp, targets in bp_to_accociated_mrna_targets_of_srna.items():
                     assert targets.issubset(bp_to_accociated_mrna_targets[bp])
                 
-                # 4 - find significant BPs for the sRNA
-                significant_srna_bps = []
+                # 4 - compute p-value for each BP in the selection
+                bp_to_meta = {}
                 for bp, targets in bp_to_accociated_mrna_targets_of_srna.items():
                     # 4.1 - Define marked elements
                     #   number of marked elements in the population (n) = number of mRNA targets in the population associated to this BP
@@ -220,12 +261,42 @@ class Analyzer:
                     #   number of marked elements in the selection (k) = number of mRNA targets in the selection (sRNA) associated to this BP
                     k = len(targets)
 
-                    # 4.2 - Run hypergeometric test
-                    test_pv = self._run_hypergeometric_test(M=M, n=n, N=N, k=k)
-                    if test_pv <= self.enrichment_pv_threshold:
+                    # 4.2 - Run cumulative hypergeometric test
+                    p_value = self._run_cumulative_hypergeometric_test(M=M, n=n, N=N, k=k)
+                    
+                    # 4.3 - Update metadata
+                    bp_to_meta[bp] = {
+                        'BP_id': bp,
+                        'BP_lbl': self.G.nodes[bp]['lbl'],
+                        'M': M,
+                        'n': n,
+                        'N': N,
+                        'k': k,
+                        'k_targets_associated_w_BP': targets,
+                        'p_value': p_value
+                    }
+
+                # 5 - apply multiple testing correction (Benjamini-Hochberg)
+                bps = list(bp_to_meta.keys())
+                p_values = [bp_to_meta[bp]['p_value'] for bp in bps]
+                # 5.1 - adjusted p-values (FDR with Benjamini-Hochberg)
+                adj_p_values = false_discovery_control(p_values, method='bh')
+                # 5.2 - update metadata with adjusted p-values
+                for i, bp in enumerate(bps):
+                    bp_to_meta[bp]['adj_p_value'] = adj_p_values[i]
+
+                ################################################################
+                # TODO: decide how to filter the BPs (pre or post correction, which threshold, etc.)
+                ################################################################
+                # 6 - find significant BPs for the sRNA - use adjusted p-values
+                significant_srna_bps = []
+                for bp, meta in bp_to_meta.items():
+                    # bp_p_value = meta['p_value']
+                    bp_p_value = meta['adj_p_value']
+                    if bp_p_value <= self.enrichment_pv_threshold:
                         significant_srna_bps.append(bp)
                 
-                # 5 - Keep only significant BPs for each target of the sRNA
+                # 7 - Keep only significant BPs for each target of the sRNA
                 filtered_target_to_bp_of_srna = {}
                 for target, bp_lst in target_to_bp_of_srna.items():
                     # Keep only significant BPs for the target
@@ -233,15 +304,21 @@ class Analyzer:
                     if filtered_bps:
                         filtered_target_to_bp_of_srna[target] = filtered_bps
                 
-                # 6 - if the sRNA has at least one significant BP, keep it in the filtered mapping
+                # 8 - if the sRNA has at least one significant BP, keep it in the filtered mapping
                 if filtered_target_to_bp_of_srna:
                     d_filtered[srna] = filtered_target_to_bp_of_srna
                 
+                # 9 - update metadata for the sRNA
+                d_meta[srna] = bp_to_meta
+                ################################################################
+                ################################################################
+                
             filtered_mapping[strain] = d_filtered
+            metadata[strain] = d_meta
         
-        return filtered_mapping
+        return filtered_mapping, metadata
     
-    def _run_hypergeometric_test(self, M: int, n: int, N: int, k: int) -> float:
+    def _run_cumulative_hypergeometric_test(self, M: int, n: int, N: int, k: int) -> float:
         """
         Hypergeometric test to find the cumulative probability of observing k or more marked elements in a selection of N elements 
         from a population of M elements, where n is the number of marked elements in the population.
