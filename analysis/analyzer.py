@@ -253,11 +253,21 @@ class Analyzer:
                         ...
                 },
                 ...
-            }  
+            }
+
+            where:
+            parameters of the hypergeometric test are:
+                M (int): Total number of elements in the population (i.e., all targets).
+                n (int): Number of marked elements in the population (i.e. genes of the population associated to this biological process).
+                N (int): Size of the selection (i.e., selection = all targets of a specific sRNA).
+                k (int): Number of marked elements in the selection (i.e. genes of the selection that are associated to this biological process).
+            k_targets_associated_w_BP (list): the target genes of the selection that are associated to this biological process
+            p_value (float):  the p-value of the hypergeometric test
+            adj_p_value (float): the adjusted p-value of the hypergeometric test (after multiple testing correction)
         """
         self.logger.info(f"applying enrichment (finding significant BPs)")
         filtered_mapping, metadata = {}, {}
-        for strain, d in mapping.items():
+        for strain, d in mapping.items():   
             ############  Population
             #   population (mrna_targets) = all mRNA targets (of all sRNAs) in the strain
             mrna_targets = sorted(set([target for target_to_bp in d.values() for target in target_to_bp.keys()]))
@@ -368,10 +378,10 @@ class Analyzer:
                     P(X >= k) = sum_{i=k}^{min(n, N)} (n choose i) * (M-n choose N-i) / (M choose N)
 
         Args:
-            M (int): Total number of elements in the population.
-            n (int): Number of marked elements in the population (i.e. genes associated to this biological process).
-            N (int): Size of the selection.
-            k (int): Number of marked elements in the selection (i.e. genes of the group of interest that are associated to this biological process).
+            M (int): Total number of elements in the population (i.e., all targets).
+            n (int): Number of marked elements in the population (i.e. genes of the population associated to this biological process).
+            N (int): Size of the selection (i.e., selection = all targets of a specific sRNA).
+            k (int): Number of marked elements in the selection (i.e. genes of the selection that are associated to this biological process).
 
         Returns:
             float: P(X >= k)
