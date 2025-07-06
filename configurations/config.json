@@ -9,9 +9,16 @@
     "interactions_dir": "interactions",
     "rna_dir": "rna",
     "go_annotations_dir": "go_annotations",
+    "clustering_dir": "clustering",
+    
     "k12_dir": "Escherichia_coli_K12_MG1655",
     "epec_dir": "Mizrahi_2021_EPEC",
-    "salmonella_dir": "Matera_2022_salmonella"
+    "salmonella_dir": "Matera_2022_salmonella",
+
+    "clustering_config": {
+      "srna_dir": "sRNA",
+      "mrna_dir": "mRNA"
+    }
   },
   "ontology": {
     "gene_ontology_dir": "gene_ontology",

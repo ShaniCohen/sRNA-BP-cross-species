@@ -33,6 +33,7 @@ class DataLoader:
         self.logger = logger
         self.logger.info(f"initializing DataLoader")
         self.config = config
+        self.clustering_config = self.config['clustering_config']
         
         self.ecoli_k12_nm = 'ecoli_k12'    
         self.ecoli_epec_nm = 'ecoli_epec' 
@@ -50,6 +51,8 @@ class DataLoader:
         # 2 - GO annotations
         self._load_annotations()
         self._match_annotations_to_mrnas()
+        # 3 - clustering
+        self._load_clustering_data()
     
     def _load_rna_and_inter_data(self) -> Dict[str, Dict[str, pd.DataFrame]]:
         # ---------------------------   per dataset preprocessing   ---------------------------
@@ -222,7 +225,6 @@ class DataLoader:
         # 4 - Vibrio cholerae, NCBI Genomes:  NC_002505.1 and NC_002506.1  (Huber 2022)
 
         # 5 - Klebsiella pneumoniae str. SGH10; KL1, ST23  (Goh_2024)
-        
 
     def _match_annotations_to_mrnas(self):
         for strain, data in self.strains_data.items():
@@ -231,6 +233,117 @@ class DataLoader:
             if 'interproscan_annot' in data:
                 data['all_mrna_w_ips_annot'] = ap_annot.annotate_mrnas_w_interproscan_annt(strain, data)
 
+    def _load_clustering_data(self):
+        # 1 - load sRNA clustering
+        self._load_rna_clustering(rna_type='srna')
+        return
+    
+    def _load_n_parse_clstr_file(self, clstr_file_path: str) -> pd.DataFrame:
+        col_cluster_id = 'cluster_id'
+        col_counter = 'counter'
+        col_seq_length = 'seq_length'
+        col_strain_str = 'strain_str'
+        col_acc = 'rna_accession_id'
+        col_locus = 'rna_locus_tag'
+        col_name = 'rna_name'
+        col_is_rep = 'is_representative'
+        out_cols = [col_cluster_id, col_counter, col_strain_str, col_acc, col_locus, col_name, col_is_rep, col_seq_length]
+
+        # Load the clstr file
+        with open(clstr_file_path, "r", encoding="utf-8") as f:
+            clstr_content = f.read()
+        self.logger.info(f"Loaded clustering file: {clstr_file_path}")
+
+        # Parse .clstr file into a DataFrame
+        clusters = []
+        cluster_id = None
+        for line in clstr_content.splitlines():
+            line = line.strip()
+            if line.startswith(">Cluster"):
+                cluster_id = int(line.split()[1])
+            elif line:
+                clusters.append({col_cluster_id: cluster_id, "entry": line})
+        clstr_df = pd.DataFrame(clusters)
+
+        clstr_df[['counter_len', 'header', col_is_rep, 'temp']] = pd.DataFrame(list(map(lambda x: x.split(" "), clstr_df['entry'])))
+        clstr_df[[col_counter, col_seq_length]] = pd.DataFrame(list(map(lambda x: x.split('nt,')[0].split("\t"), clstr_df['counter_len'])))
+        clstr_df[[col_strain_str, col_acc, col_locus, col_name]] = pd.DataFrame(list(map(lambda x: x.split('...')[0].split('>')[1].split('|'), clstr_df['header'])))
+        clstr_df[col_is_rep] =  clstr_df[col_is_rep].apply(lambda x: True if x=='*' else False)
+        clstr_df = clstr_df[out_cols]
+
+        return clstr_df
+
+    def _load_rna_clustering(self, rna_type: str) -> pd.DataFrame:
+        dir_path = join(self.config['clustering_dir'], self.clustering_config[f'{rna_type}_dir'])
+        
+        # ---------------------------   PAIRS preprocessing   ---------------------------
+        all_bacteria = [self.ecoli_k12_nm, self.ecoli_epec_nm, self.salmonella_nm]
+
+        bacteria = [self.ecoli_k12_nm, self.ecoli_epec_nm]
+        file_nm = 'srna_ecoli_k12-ecoli_epec'
+        clstr_file_path = join(dir_path, f"{file_nm}.clstr")
+
+        # TODO: Load and parse the clustering file
+        clstr_df = self._load_n_parse_clstr_file(clstr_file_path=clstr_file_path)
+
+
+
+        # 1 - Escherichia coli K12 MG1655
+        k12_dir = self.config['k12_dir']
+        k12_annot_uniport = load_goa(file_path=join(self.config['go_annotations_dir'], k12_dir, 'e_coli_MG1655.goa'))
+        k12_annot_map_uniport_to_locus = read_df(file_path=join(self.config['go_annotations_dir'], k12_dir, 'ECOLI_83333_idmapping.dat'))
+        k12_annot_map_uniport_to_locus.columns = ['UniProt_ID', 'Database', 'Mapped_ID']
+        k12_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], k12_dir, 'InterProScan', 'Ecoli_k12_proteins.fasta.json'))
+        
+        interproscan_annot, i_header_col = ap_annot.preprocess_interproscan_annot(k12_annot_interproscan)
+        curated_annot, c_locus_col = ap_annot.preprocess_curated_annot(self.ecoli_k12_nm, k12_annot_uniport, k12_annot_map_uniport_to_locus)
+
+        # 1.1 - update info
+        if self.ecoli_k12_nm not in self.strains_data:
+            self.strains_data[self.ecoli_k12_nm] = {}
+        self.strains_data[self.ecoli_k12_nm].update({
+            "interproscan_annot": interproscan_annot,
+            "interproscan_header_col": i_header_col,
+            "curated_annot": curated_annot,
+            "curated_locus_col": c_locus_col
+        })
+  
+        # 2 - Escherichia coli EPEC E2348/69
+        epec_dir = self.config['epec_dir']
+        epec_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], epec_dir, 'InterProScan', 'EPEC_proteins.fasta.json'))
+        interproscan_annot, i_header_col = ap_annot.preprocess_interproscan_annot(epec_annot_interproscan)
+        
+		# 2.1 - update info
+        if self.ecoli_epec_nm not in self.strains_data:
+            self.strains_data[self.ecoli_epec_nm] = {}
+        self.strains_data[self.ecoli_epec_nm].update({
+            "interproscan_annot": interproscan_annot,
+            "interproscan_header_col": i_header_col
+        })
+    
+        # 3 - Salmonella enterica serovar Typhimurium strain SL1344,  Genome: NC_016810.1  (Matera_2022)
+        salmonella_dir = self.config['salmonella_dir']
+        salmonella_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], salmonella_dir, 'InterProScan', 'Salmonella_proteins.fasta.json'))
+        interproscan_annot, i_header_col = ap_annot.preprocess_interproscan_annot(salmonella_annot_interproscan)
+        # patch to adjust Salmonella headers
+        interproscan_annot[i_header_col] = interproscan_annot[i_header_col].apply(lambda x: "|".join([x.split("|")[0]] + [x.split("|")[2]] + x.split("|")[2:]))
+        
+		# 3.1 - update info
+        if self.salmonella_nm not in self.strains_data:
+            self.strains_data[self.salmonella_nm] = {}
+        self.strains_data[self.salmonella_nm].update({
+            "interproscan_annot": interproscan_annot,
+            "interproscan_header_col": i_header_col
+        })
+    
+        # 4 - Vibrio cholerae, NCBI Genomes:  NC_002505.1 and NC_002506.1  (Huber 2022)
+
+        # 5 - Klebsiella pneumoniae str. SGH10; KL1, ST23  (Goh_2024)
+        
+
+
+        return read_df(file_path=file_path)
+    
     # def compute_unique_mrna_names(self) -> pd.DataFrame:
     #     """Compute the number of unique mRNA_name for each value of signature_library in interproscan_annot."""
     #     results = []

@@ -37,7 +37,7 @@ class AnalysisRunner:
         configs['runner']['input_data_path'] = configs['runner']['remote_data_path'] if 'shanisa' in ROOT_PATH else configs['runner']['local_data_path']
         configs['runner']['output_data_path'] = join(configs['runner']['input_data_path'], 'outputs')
         # data loader
-        for _dir in ['interactions_dir', 'rna_dir', 'go_annotations_dir']:
+        for _dir in ['interactions_dir', 'rna_dir', 'go_annotations_dir', 'clustering_dir']:
             configs['data_loader'][_dir] = join(configs['runner']['input_data_path'], configs['data_loader'][_dir])
         # ontology
         for _dir in ['gene_ontology_dir', 'go_embeddings_dir']:
