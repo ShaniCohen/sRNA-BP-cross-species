@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Set
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -34,6 +34,7 @@ class Analyzer:
 
         # TODO: remove after testing
         self.strains_data = graph_builder.strains_data
+        self.ips_go_annotations = graph_builder.get_ips_go_annotations()
 
         # node types
         # GO
@@ -80,7 +81,16 @@ class Analyzer:
         # 3 - dump metadata
         if dump_meta:
             self._dump_metadata(meta)
-        
+    
+    def _log_mrna_with_bp(self, strain: str, unq_targets_without_bp: Set[str]):
+            ips_annot = self.ips_go_annotations.get(strain, None)
+            if ips_annot is not None:
+                mrna_w_mf = set(ips_annot[pd.notnull(ips_annot['MF_go_xrefs'])]['mRNA_accession_id'])
+                mrna_w_cc = set(ips_annot[pd.notnull(ips_annot['CC_go_xrefs'])]['mRNA_accession_id'])
+                mf_count = np.intersect1d(unq_targets_without_bp, mrna_w_mf).size
+                cc_count = np.intersect1d(unq_targets_without_bp, mrna_w_cc).size
+            self.logger.info(f"Strain: {strain}, Number of unique mRNAs targets without BPs: {len(unq_targets_without_bp)} (where {mf_count} have ips MF annotation, {cc_count} have ips CC annotation)")    
+
     def _generate_srna_bp_mapping(self) -> dict:
         """
         Generate a mapping of sRNA to biological processes (BPs) based on the edges in the graph.
@@ -98,8 +108,9 @@ class Analyzer:
                 ...
             }               
         """
-        bp_mapping = {}
+        bp_mapping = {}  
         for strain in self.strains:
+            unq_targets_without_bp = set()
             # Filter sRNA nodes for the current strain
             # d = self.strains_data[strain]['unq_inter'][self.strains_data[strain]['unq_inter']['sRNA_accession_id'] == 'G0-16636']
             srna_bp_mapping = {}
@@ -112,25 +123,29 @@ class Analyzer:
                     bp_nodes = [n for n in self.G.neighbors(target) if self.G.nodes[n]['type'] == self._bp and self.G[target][n]['type'] == self._annotated]
                     if bp_nodes:
                         targets_to_bp[target] = bp_nodes
+                    else:
+                        unq_targets_without_bp.add(target)
                 if targets_to_bp:
                     srna_bp_mapping[srna] = targets_to_bp
+            
             bp_mapping[strain] = srna_bp_mapping
+            self._log_mrna_with_bp(strain, unq_targets_without_bp)
 
         return bp_mapping
 
     def _log_mapping(self, mapping: dict):
-        for strain, srna_data in mapping.items():
-            srna_count = len(srna_data)
-            mrna_targets = [mrna for srna_targets in srna_data.values() for mrna in srna_targets.keys()]
+        for strain, srna_bp_mapping in mapping.items():
+            srna_count = len(srna_bp_mapping)
+            mrna_targets = [mrna for srna_targets in srna_bp_mapping.values() for mrna in srna_targets.keys()]
             unique_mrna_targets = set(mrna_targets)
-            bp_list = [bp for srna_targets in srna_data.values() for bps in srna_targets.values() for bp in bps]
+            bp_list = [bp for srna_targets in srna_bp_mapping.values() for bps in srna_targets.values() for bp in bps]
             unique_bps = set(bp_list)
 
             self.logger.info(
                 f"Strain: {strain} \n"
                 f"  Number of sRNA keys: {srna_count} \n"
-                f"  Number of mRNA targets: {len(mrna_targets)} \n"
-                f"  Number of unique mRNA targets: {len(unique_mrna_targets)} \n"
+                f"  Number of mRNA targets (with BP): {len(mrna_targets)} \n"
+                f"  Number of unique mRNA targets (with BP): {len(unique_mrna_targets)} \n"
                 f"  Number of BPs: {len(bp_list)} \n"
                 f"  Number of unique BPs: {len(unique_bps)}"
             )
@@ -211,7 +226,7 @@ class Analyzer:
                 self.logger.info(f"Difference for key {key}:")
                 self.logger.info(f"  In bp_to_accociated_mrnas: {value1 - value2}")
                 self.logger.info(f"  In bp_to_accociated_mrnas_g: {value2 - value1}")
-
+    
     def _apply_enrichment(self, mapping: dict) -> Tuple[dict, dict]:
         """
         Enrichment (per strain): 
@@ -283,8 +298,8 @@ class Analyzer:
                         bp_to_accociated_mrna_targets[bp].add(target)
 
             ############  Selection
-            # TODO: per sRNA, its BPS, BP name, M,N,n,k, pv before correction, pv after correction
-            #   For each sRNA, keep only significant BPs
+            #  metadata:  per sRNA, its BPS, BP name, M,N,n,k, pv before correction, pv after correction
+            #  filtered_mapping:  for each sRNA, keep only significant BPs
             d_filtered, d_meta = {}, {}
             for srna, target_to_bp_of_srna in d.items():
                 # 1 - Define selection
@@ -389,3 +404,33 @@ class Analyzer:
         test_pv = hypergeom(M=M, n=n, N=N).sf(k-1)
 
         return test_pv
+    
+############################################
+#######   Functions for assistance  ########
+############################################
+
+    def _get_node_neighbors_and_edges(self, node_id: str) -> dict:
+        """
+        Get all neighbors of a node and the edge types to those neighbors.
+
+        Args:
+            node_id (str): The ID of the node.
+
+        Returns:
+            dict: A dictionary in the following format:
+            {
+                <neighbor_id>: <edge_type>,
+                ...
+            }
+        """
+        if node_id not in self.G:
+            self.logger.error(f"Node {node_id} does not exist in the graph.")
+            return {}
+
+        neighbors_and_edges = {}
+        for neighbor in self.G.neighbors(node_id):
+            edge_data = self.G[node_id][neighbor]
+            edge_type = edge_data.get('type', 'unknown')
+            neighbors_and_edges[neighbor] = edge_type
+
+        return neighbors_and_edges

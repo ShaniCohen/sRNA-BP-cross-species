@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Dict
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -27,8 +27,18 @@ class GraphBuilder:
         self.curated_go_ids_missing_in_ontology = set()
         
         self.G = nx.DiGraph()
+        # add BP nodes and edges
         self.G.add_nodes_from(ontology.BP.nodes(data=True))
         self.G.add_edges_from(ontology.BP.edges(data=True))
+        """
+        # add MF nodes and edges
+        self.G.add_nodes_from(ontology.MF.nodes(data=True))
+        self.G.add_edges_from(ontology.MF.edges(data=True))
+        
+        # add CC nodes and edges
+        self.G.add_nodes_from(ontology.CC.nodes(data=True))
+        self.G.add_edges_from(ontology.CC.edges(data=True))
+        """
         self.graph_is_built = False
 
         # node types
@@ -61,6 +71,13 @@ class GraphBuilder:
         if not self.graph_is_built:
             raise Exception("Graph is not built yet. Please call build_graph() first.")
         return self.G
+    
+    def get_ips_go_annotations(self) -> Dict[str, pd.DataFrame]:
+        out = {}
+        for strain, data in self.strains_data.items():
+            if 'all_mrna_w_ips_annot' in data.keys():
+                out[strain] = data['all_mrna_w_ips_annot']
+        return out
 
     def build_graph(self):
         """
