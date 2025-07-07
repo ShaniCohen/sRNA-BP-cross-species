@@ -3,6 +3,7 @@ import numpy as np
 import re
 from typing import Dict, List, Tuple, Set
 import logging
+from io import StringIO
 logger = logging.getLogger(__name__)
 
 
@@ -188,6 +189,31 @@ def _group_interproscan_annot_per_protein(df: pd.DataFrame, header_col: str, pro
     }).reset_index()
     
     return grouped_df
+
+
+def load_and_preprocess_eggnog_annot(annot_file_path):
+    eggnog_annot, header_col = _load_eggnog_annot_file(annot_file_path)
+    # TODO: consider filtering out certain GOs
+
+    # interproscan_annot, header_col, protein_seq_col, lib_col = _preprocess_raw_interproscan_annot(raw_interproscan_annot)
+    # interproscan_annot = _filter_interproscan_annot(interproscan_annot, lib_col)
+    # interproscan_annot = _group_interproscan_annot_per_protein(interproscan_annot, header_col, protein_seq_col)
+    # return interproscan_annot, header_col
+    return eggnog_annot, header_col
+
+def _load_eggnog_annot_file(annot_file_path) -> Tuple[pd.DataFrame, str]:
+    out_col_header = 'input_header'
+
+    data_lines = []
+    with open(annot_file_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            if not line.startswith('##'):
+                data_lines.append(line)
+    annot_df = pd.read_csv(StringIO(''.join(data_lines)), sep='\t')
+    annot_df.columns = [col.replace('#', '') for col in annot_df.columns]
+    annot_df = annot_df.rename(columns={'query': out_col_header})
+
+    return annot_df, out_col_header
 
 
 def preprocess_curated_annot(strain_nm: str, annot_uniport: Dict[str, Set[str]], annot_map_uniport_to_locus: pd.DataFrame):
