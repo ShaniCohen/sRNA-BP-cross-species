@@ -246,10 +246,12 @@ class DataLoader:
                 data['all_mrna_w_curated_annot'] = ap_annot.annotate_mrnas_w_curated_annt(strain, data)
             if 'interproscan_annot' in data:
                 data['all_mrna_w_ips_annot'] = ap_annot.annotate_mrnas_w_interproscan_annt(strain, data)
+            if 'eggnog_annot' in data:
+                data['all_mrna_w_eggnog_annot'] = ap_annot.annotate_mrnas_w_eggnog_annt(strain, data)
 
     def _load_clustering_data(self):
         # 1 - load sRNA clustering
-        self._load_rna_clustering(rna_type='srna')
+        # self._load_rna_clustering(rna_type='srna')
         return
     
     def _load_n_parse_clstr_file(self, clstr_file_path: str) -> pd.DataFrame:

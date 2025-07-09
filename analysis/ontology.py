@@ -150,7 +150,7 @@ class Ontology:
             "http://www.geneontology.org/formats/oboInOwl#hasOBONamespace"  -->   meta['basicPropertyValues']['val'] is BP, MF, CC 
             "http://www.geneontology.org/formats/oboInOwl#hasAlternativeId"
         """
-        G = nx.DiGraph()
+        G = nx.MultiDiGraph()
         # add nodes
         for n in self.class_nodes:
             go_number = self._go_number_from_id(n['id'])

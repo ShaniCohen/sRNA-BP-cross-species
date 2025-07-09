@@ -91,6 +91,31 @@ class Analyzer:
                 cc_count = np.intersect1d(unq_targets_without_bp, mrna_w_cc).size
             self.logger.info(f"Strain: {strain}, Number of unique mRNAs targets without BPs: {len(unq_targets_without_bp)} (where {mf_count} have ips MF annotation, {cc_count} have ips CC annotation)")    
 
+    def _is_target(self, srna_node_id, mrna_node_id, strain):
+        """ Check if there is an interaction edge between sRNA and mRNA nodes """
+        assert self.G.nodes[srna_node_id]['strain'] == strain
+        assert self.G.nodes[mrna_node_id]['strain'] == strain
+
+        is_srna = self.G.nodes[srna_node_id]['type'] == self._srna
+        is_mrna = self.G.nodes[mrna_node_id]['type'] == self._mrna
+        is_interaction = False
+        for d in self.G[srna_node_id][mrna_node_id].values():
+            if d['type'] == self._targets:
+                is_interaction = True
+                break 
+        return is_srna and is_mrna and is_interaction
+    
+    def _is_annotated(self, mrna_node_id, go_node_id, go_node_type, annot_type=None):
+        """ Check if there is an annotation edge from mRNA to GO node."""
+        is_mrna = self.G.nodes[mrna_node_id]['type'] == self._mrna
+        is_go_type = self.G.nodes[go_node_id]['type'] == go_node_type
+        is_annotated = False
+        for d in self.G[mrna_node_id][go_node_id].values():
+            if d['type'] == self._annotated and (annot_type is None or d['annot_type'] == annot_type):
+                is_annotated = True
+                break
+        return is_mrna and is_go_type and is_annotated
+
     def _generate_srna_bp_mapping(self) -> dict:
         """
         Generate a mapping of sRNA to biological processes (BPs) based on the edges in the graph.
@@ -117,10 +142,10 @@ class Analyzer:
             srna_nodes = [n for n, d in self.G.nodes(data=True) if d['type'] == self._srna and d['strain'] == strain]
             for srna in srna_nodes:
                 targets_to_bp = {}
-                srna_targets = [n for n in self.G.neighbors(srna) if self.G.nodes[n]['type'] == self._mrna and self.G[srna][n]['type'] == self._targets]
+                srna_targets = [n for n in self.G.neighbors(srna) if self._is_target(srna, n, strain)]
                 for target in srna_targets:
                     # Find the biological processes associated with the target
-                    bp_nodes = [n for n in self.G.neighbors(target) if self.G.nodes[n]['type'] == self._bp and self.G[target][n]['type'] == self._annotated]
+                    bp_nodes = [n for n in self.G.neighbors(target) if self._is_annotated(target, n, self._bp)]
                     if bp_nodes:
                         targets_to_bp[target] = bp_nodes
                     else:

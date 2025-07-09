@@ -26,7 +26,7 @@ class GraphBuilder:
         self.ontology = ontology
         self.curated_go_ids_missing_in_ontology = set()
         
-        self.G = nx.DiGraph()
+        self.G = nx.MultiDiGraph()
         # add BP nodes and edges
         self.G.add_nodes_from(ontology.BP.nodes(data=True))
         self.G.add_edges_from(ontology.BP.edges(data=True))
@@ -63,6 +63,15 @@ class GraphBuilder:
         self._annotated = "annotated"
         # sRNA --> mRNA     
         self._targets = "targets"
+
+        # edge annot types (annot_type)
+        self._curated = "curated"
+        self._ips = "interproscan"
+        self._eggnog = "eggnog"
+
+        # define annotation types to add (curated are always added)
+        self.add_ips_annot = True
+        self.add_eggnog_annot = True
     
     def get_strains(self) -> List[str]:
         return list(self.strains_data.keys())
@@ -93,7 +102,7 @@ class GraphBuilder:
         self._process_curated_annot()
         self._add_mrna_nodes_and_annotation_edges()
         self._add_srna_nodes_and_interaction_edges()
-        self._log_graph_info()
+        self._log_graph_info(dump=True)
         self.graph_is_built = True
         self.logger.info(f"graph is built")
     
@@ -119,12 +128,14 @@ class GraphBuilder:
             if 'all_mrna_w_curated_annot' in data.keys():
                 self._add_all_mrna_and_curated_bp_annot(strain, data['all_mrna_w_curated_annot'])
                 # Example mRNA = 'EG10001', GO BP = ['0006522', '0030632', '0071555', '0009252', '0008360']
-            elif 'all_mrna_w_ips_annot' in data.keys():
-                self._add_all_mrna_and_ips_bp_annot(strain, data['all_mrna_w_ips_annot'])
+            else:
+                if self.add_ips_annot and 'all_mrna_w_ips_annot' in data.keys():
+                    self._add_all_mrna_and_ips_bp_annot(strain, data['all_mrna_w_ips_annot'])
+                if self.add_eggnog_annot and 'all_mrna_w_eggnog_annot' in data.keys():
+                    self._add_all_mrna_and_eggnog_annot(strain, data['all_mrna_w_eggnog_annot'])
             # describe proprocessing in the latex paper
-            
-            self._assert_mrna_nodes_addition(strain)
 
+            self._assert_mrna_nodes_addition(strain)
             
     def _add_srna_nodes_and_interaction_edges(self):
         for strain, data in self.strains_data.items():
@@ -147,7 +158,32 @@ class GraphBuilder:
             self._assert_srna_nodes_addition(strain)
             self._assert_srna_mrna_inter_addition(strain)
     
-    def _log_graph_info(self):
+    def _is_target(self, srna_node_id, mrna_node_id, strain):
+        """ Check if there is an interaction edge between sRNA and mRNA nodes """
+        assert self.G.nodes[srna_node_id]['strain'] == strain
+        assert self.G.nodes[mrna_node_id]['strain'] == strain
+
+        is_srna = self.G.nodes[srna_node_id]['type'] == self._srna
+        is_mrna = self.G.nodes[mrna_node_id]['type'] == self._mrna
+        is_interaction = False
+        for d in self.G[srna_node_id][mrna_node_id].values():
+            if d['type'] == self._targets:
+                is_interaction = True
+                break 
+        return is_srna and is_mrna and is_interaction
+    
+    def _is_annotated(self, mrna_node_id, go_node_id, go_node_type, annot_type=None):
+        """ Check if there is an annotation edge from mRNA to GO node."""
+        is_mrna = self.G.nodes[mrna_node_id]['type'] == self._mrna
+        is_go_type = self.G.nodes[go_node_id]['type'] == go_node_type
+        is_annotated = False
+        for d in self.G[mrna_node_id][go_node_id].values():
+            if d['type'] == self._annotated and (annot_type is None or d['annot_type'] == annot_type):
+                is_annotated = True
+                break
+        return is_mrna and is_go_type and is_annotated
+
+    def _log_graph_info(self, dump=False):
         self.logger.info("Logging graph information...")
         strains = self.get_strains()
         
@@ -164,20 +200,13 @@ class GraphBuilder:
             # sorted([(u, v) for u, v, d in self.G.edges(data=True) if u == 'EG10001' or v == 'EG10001'])
             # d = self.strains_data[strain]['unq_inter'][self.strains_data[strain]['unq_inter'][self.mrna_acc_col] == 'EG10001']
             mrna_with_interactions = [
-                n for n in mrna_nodes if any(
-                    self.G.nodes[p]['type'] == self._srna and self.G.edges[p, n]['type'] == self._targets
-                    for p in self.G.predecessors(n)
-                )
+                n for n in mrna_nodes if any(self._is_target(p, n, strain) for p in self.G.predecessors(n))
             ]
             mrna_with_interactions_count = len(mrna_with_interactions)
 
             # mRNA nodes with interactions (sRNA --targets--> mRNA) and BP GO annotations (mRNA --annotation--> BP)
             mrna_bp_annotations = {
-                n: [
-                    neighbor for neighbor in self.G.neighbors(n)
-                    if self.G.edges[n, neighbor]['type'] == self._annotated and 
-                    self.G.nodes[neighbor]['type'] == self._bp  # node_types = [self._bp, self._mf, self._cc]
-                ]
+                n: [neighbor for neighbor in self.G.neighbors(n) if self._is_annotated(n, neighbor, self._bp)]
                 for n in mrna_with_interactions
             }
 
@@ -190,10 +219,10 @@ class GraphBuilder:
                     # Check if any of the BP nodes have embeddings
                     if any(emb_type in self.G.nodes[go_id] for go_id in bp_nodes):
                         mrna_w_bp_annot_and_at_least_1_emb.append(n)
-            
             mrna_w_bp_annot_count = len(mrna_w_bp_annot)
             mrna_w_bp_annot_and_at_least_1_emb_count = len(mrna_w_bp_annot_and_at_least_1_emb)
             
+            annotation_types = [self._curated] + ([self._ips] if self.add_ips_annot else []) + ([self._eggnog] if self.add_eggnog_annot else [])
             # --------------------------------
             #              sRNA
             # --------------------------------
@@ -206,11 +235,7 @@ class GraphBuilder:
 
             # Count sRNA nodes with interactions (sRNA-mRNA)
             srna_with_interactions = [
-                n for n in srna_nodes if any(
-                    self.G.edges[n, neighbor]['type'] == self._targets and
-                    self.G.nodes[neighbor]['type'] == self._mrna
-                    for neighbor in self.G.neighbors(n)
-                )
+                n for n in srna_nodes if any(self._is_target(n, neighbor, strain) for neighbor in self.G.neighbors(n))
             ]
             srna_with_interactions_count = len(srna_with_interactions)
 
@@ -230,12 +255,46 @@ class GraphBuilder:
                 f"\n   _______________________________ "
                 f"\n   mRNA count: {mrna_count} "
                 f"\n   mRNA with interactions: {mrna_with_interactions_count} "
-                f"\n   mRNA with interactions and BP annotations: {mrna_w_bp_annot_count} "
+                f"\n   mRNA with interactions and BP annotations {annotation_types}: {mrna_w_bp_annot_count} "
                 f"\n   mRNA with interactions and BP annotations and at least 1 embedding: {mrna_w_bp_annot_and_at_least_1_emb_count} "
                 f"\n   sRNA count: {srna_count} "
                 f"\n   sRNA with interactions: {srna_with_interactions_count} "
                 f"\n   sRNA with interactions and BP annotations: {srna_w_bp_annot_count} "
             )
+            if dump:
+                self._dump_mrna_bp_annotations(mrna_with_interactions, strain)
+    
+    def _dump_mrna_bp_annotations(self, mrna_with_interactions, strain):
+        """ Dump mRNA with interactions and their BP annotations to a CSV file """
+        self.logger.info(f"Dumping mRNA with interactions and their BP annotations for {strain}")
+        data = []
+        for mrna in mrna_with_interactions:
+            bp_nodes = sorted([n for n in self.G.neighbors(mrna) if self._is_annotated(mrna, n, self._bp)])
+            bp_nodes_ips = sorted([n for n in self.G.neighbors(mrna) if self._is_annotated(mrna, n, self._bp, self._ips)])
+            bp_nodes_eggnog = sorted([n for n in self.G.neighbors(mrna) if self._is_annotated(mrna, n, self._bp, self._eggnog)])
+
+            BP_ips_only = set(bp_nodes_ips) - set(bp_nodes_eggnog)
+            BP_eggnog_only = set(bp_nodes_eggnog) - set(bp_nodes_ips)
+            BP_ips_and_ennog = set(bp_nodes) - set(BP_ips_only) - set(BP_eggnog_only)
+            
+            if len(bp_nodes) > 0:
+                data.append({
+                    'mRNA_accession_id': mrna,
+                    'mrna_name': self.G.nodes[mrna]['name'],
+                    "BP_count": len(set(bp_nodes)),
+                    "BP_ips_and_eggnog_count": len(BP_ips_and_ennog),
+                    'BP_ips_only_count': len(BP_ips_only),
+                    'BP_eggnog_only_count': len(BP_eggnog_only),
+                    "BP_ips_and_eggnog_ratio": round(len(BP_ips_and_ennog)/len(set(bp_nodes)), 2),
+                    'BP_ips_only_ratio': round(len(BP_ips_only)/len(set(bp_nodes)), 2),
+                    'BP_eggnog_only_ratio': round(len(BP_eggnog_only)/len(set(bp_nodes)), 2),
+                    'BP_ips_and_eggnog': ', '.join(BP_ips_and_ennog) if len(BP_ips_and_ennog) > 0 else np.nan,
+                    'BP_ips_only': ', '.join(BP_ips_only) if len(BP_ips_only) > 0 else np.nan,
+                    'BP_eggnog_only': ', '.join(BP_eggnog_only) if len(BP_eggnog_only) > 0 else np.nan
+                })
+        df = pd.DataFrame(data)
+        output_path = os.path.join(self.config['builder_output_dir'], f"{strain}_mrna_bp_annotations.csv")
+        write_df(df, output_path)
     
     def _add_all_mrna_and_curated_bp_annot(self, strain, all_mrna_w_curated_annot):
         self.logger.info(f"adding mRNA nodes and curated mRNA-GO annotations for {strain}")
@@ -252,7 +311,7 @@ class GraphBuilder:
             go_bp_ids = r['GO_BP']
             if isinstance(go_bp_ids, list) and len(go_bp_ids) > 0:
                 for bp_id in go_bp_ids:
-                    bp_id_is_missing = self._add_edge_mrna_go_annot(mrna_node_id, bp_id)
+                    bp_id_is_missing = self._add_edge_mrna_go_annot(mrna_node_id, bp_id, annot_type=self._curated)
                     if bp_id_is_missing:
                         missing_bp_ids.append(bp_id)
                     bp_count += 1
@@ -275,7 +334,7 @@ class GraphBuilder:
             if isinstance(bp_go_xrefs, list) and len(bp_go_xrefs) > 0:
                 for bp_dict in bp_go_xrefs:
                     bp_id = bp_dict['id'].split(":")[1]
-                    bp_id_is_missing = self._add_edge_mrna_go_annot(mrna_node_id, bp_id)
+                    bp_id_is_missing = self._add_edge_mrna_go_annot(mrna_node_id, bp_id, annot_type=self._ips)
                     if bp_id_is_missing:
                         missing_bp_dicts.append(bp_dict)
                     bp_count += 1
@@ -284,6 +343,30 @@ class GraphBuilder:
         dep = [m for m in unq_missing if m in self.ontology.deprecated_nodes]
         self.logger.info(f"{strain}: out of {bp_count} InterProScan BP annotations, missing: {len(missing_bp_dicts)} ({len(unq_missing)} unique), deprecated: {len(dep)}")
     
+    def _add_all_mrna_and_eggnog_annot(self, strain, all_mrna_w_eggnog_annot):
+        self.logger.info(f"adding mRNA nodes and EggNog mRNA-GO annotations for {strain}")
+        assert sum(pd.isnull(all_mrna_w_eggnog_annot['mRNA_accession_id'])) == 0
+        go_count, missing_go_ids = 0, []
+
+        for _, r in all_mrna_w_eggnog_annot.iterrows():
+            # 1 - add the mRNA node to graph
+            mrna_node_id = r[self.mrna_acc_col]
+            self._add_node_rna(id=mrna_node_id, type=self._mrna, strain=strain, locus_tag=r['mRNA_locus_tag'], 
+                               name=r['mRNA_name'], synonyms=r['mRNA_name_synonyms'], start=r['mRNA_start'], end=r['mRNA_end'],
+                               strand=r['mRNA_strand'], sequence=r['mRNA_sequence'], log_warning=False)
+            # 2 - add annotation edges between the mRNA node and GO nodes (BO, MF, CC if exist in the ontology)
+            if pd.notnull(r['GOs']) and r['GOs'] != '-':
+                go_ids = [g.replace("GO:", "") for g in r['GOs'].split(',')]
+                for go_id in go_ids:
+                    go_id_is_missing = self._add_edge_mrna_go_annot(mrna_node_id, go_id, annot_type=self._eggnog)
+                    if go_id_is_missing:
+                        missing_go_ids.append(go_id)
+                    go_count += 1
+        # log
+        unq_missing = set(missing_go_ids)
+        dep = [m for m in unq_missing if m in self.ontology.deprecated_nodes]
+        self.logger.info(f"{strain}: out of {go_count} EggNog GO annotations, missing: {len(missing_go_ids)} ({len(unq_missing)} unique), deprecated: {len(dep)}")
+
     def _assert_mrna_nodes_addition(self, strain):
         raw_mrna = sorted(self.strains_data[strain]['all_mrna'][self.mrna_acc_col])
         graph_mrna = sorted([n for n, d in self.G.nodes(data=True) if d['type'] == self._mrna and d['strain'] == strain])
@@ -301,14 +384,14 @@ class GraphBuilder:
                              and self.G.nodes[v]['strain'] == strain])
         assert raw_intr == graph_intr, f"sRNA-mRNA interactions in the graph do not match the raw data for strain {strain}"
     
-    def _add_node_rna(self, id, type, strain, locus_tag, name, synonyms, start, end, strand, sequence):
+    def _add_node_rna(self, id, type, strain, locus_tag, name, synonyms, start, end, strand, sequence, log_warning=True):
         if not self.G.has_node(id):
             self.G.add_node(id, type=type, 
 							strain=strain, locus_tag=locus_tag, name=name, synonyms=synonyms, start=start, end=end, strand=strand, sequence=sequence)
-        else:
+        elif log_warning:
             self.logger.warning(f"{type} node {id} already in graph")
     
-    def _add_edge_mrna_go_annot(self, mrna_node_id, go_id) -> bool:
+    def _add_edge_mrna_go_annot(self, mrna_node_id, go_id, annot_type) -> bool:
         """ Add "annotated" edge from the mRNA node to the GO node.
         Args:
             mrna_node_id (str): the mRNA node id (accession id)
@@ -319,7 +402,7 @@ class GraphBuilder:
         """
         assert self.G.has_node(mrna_node_id), f"mRNA id {mrna_node_id} is missing in the graph"
         if self.G.has_node(go_id):
-            self.G.add_edge(mrna_node_id, go_id, type=self._annotated)
+            self.G.add_edge(mrna_node_id, go_id, type=self._annotated, annot_type=annot_type)
             return False
         return True
     
