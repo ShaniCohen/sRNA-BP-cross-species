@@ -277,6 +277,9 @@ class GraphBuilder:
             BP_eggnog_only = set(bp_nodes_eggnog) - set(bp_nodes_ips)
             BP_ips_and_ennog = set(bp_nodes) - set(BP_ips_only) - set(BP_eggnog_only)
             
+            # --- new: get BP_eggnog_only_name ---
+            BP_eggnog_only_name = ', '.join([self.G.nodes[bp]['lbl'] for bp in BP_eggnog_only]) if len(BP_eggnog_only) > 0 else np.nan
+
             if len(bp_nodes) > 0:
                 data.append({
                     'mRNA_accession_id': mrna,
@@ -290,7 +293,8 @@ class GraphBuilder:
                     'BP_eggnog_only_ratio': round(len(BP_eggnog_only)/len(set(bp_nodes)), 2),
                     'BP_ips_and_eggnog': ', '.join(BP_ips_and_ennog) if len(BP_ips_and_ennog) > 0 else np.nan,
                     'BP_ips_only': ', '.join(BP_ips_only) if len(BP_ips_only) > 0 else np.nan,
-                    'BP_eggnog_only': ', '.join(BP_eggnog_only) if len(BP_eggnog_only) > 0 else np.nan
+                    'BP_eggnog_only': ', '.join(BP_eggnog_only) if len(BP_eggnog_only) > 0 else np.nan,
+                    'BP_eggnog_only_name': BP_eggnog_only_name
                 })
         df = pd.DataFrame(data)
         output_path = os.path.join(self.config['builder_output_dir'], f"{strain}_mrna_bp_annotations.csv")
