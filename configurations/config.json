@@ -16,8 +16,8 @@
     "salmonella_dir": "Matera_2022_salmonella",
 
     "clustering_config": {
-      "srna_dir": "sRNA",
-      "mrna_dir": "mRNA"
+      "srna_dir": "CD-HIT-EST-2D-sRNAs",
+      "protein_dir": "CDHIT-2D-protein-50"
     }
   },
   "ontology": {

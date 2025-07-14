@@ -102,7 +102,8 @@ class GraphBuilder:
         self._process_curated_annot()
         self._add_mrna_nodes_and_annotation_edges()
         self._add_srna_nodes_and_interaction_edges()
-        self._log_graph_info(dump=True)
+        self._log_graph_info()
+        # self._log_graph_info(dump=True)
         self.graph_is_built = True
         self.logger.info(f"graph is built")
     

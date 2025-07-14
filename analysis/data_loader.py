@@ -40,9 +40,11 @@ class DataLoader:
         self.ecoli_k12_nm = 'ecoli_k12'    
         self.ecoli_epec_nm = 'ecoli_epec' 
         self.salmonella_nm = 'salmonella'
+        self.strains = [self.ecoli_k12_nm, self.ecoli_epec_nm, self.salmonella_nm]
         self.strains_data = {}
         self.srna_acc_col = 'sRNA_accession_id'
         self.mrna_acc_col = 'mRNA_accession_id'
+        self.clustering_data = {}
 
     def load_and_process_data(self) -> Dict[str, Dict[str, pd.DataFrame]]:
         """store all data in a self.strains_data dictionary
@@ -250,10 +252,36 @@ class DataLoader:
                 data['all_mrna_w_eggnog_annot'] = ap_annot.annotate_mrnas_w_eggnog_annt(strain, data)
 
     def _load_clustering_data(self):
-        # 1 - load sRNA clustering
-        # self._load_rna_clustering(rna_type='srna')
-        return
-    
+        # 1 - load sRNA and mRNA clustering
+        srna_clstr_dict = self._load_bacteria_pairs_clustering(seq_type='sRNA')
+        mrna_clstr_dict = self._load_bacteria_pairs_clustering(seq_type='protein')
+
+        # 2 - save clustering
+        self.clustering_data['sRNA'] = srna_clstr_dict
+        self.clustering_data['mRNA'] = mrna_clstr_dict
+
+    def _load_bacteria_pairs_clustering(self, seq_type: str) -> pd.DataFrame:
+        _dir = self.clustering_config[f'{seq_type.lower()}_dir']
+        dir_path = join(self.config['clustering_dir'], seq_type, _dir)
+        
+        # ---------------------------   PAIRS preprocessing   ---------------------------
+        self.logger.info(f"PAIRS preprocessing --> loading {seq_type} clustering data from {_dir}")
+        pairs_clustering = {}
+        for b1, b2 in itertools.combinations(self.strains, 2):
+            # 1 - identify clustering files
+            file_1_to_2 = [f for f in os.listdir(dir_path) if re.match(f"(.*?){b1}-{b2}.clstr$", f)][0]
+            file_2_to_1 = [f for f in os.listdir(dir_path) if re.match(f"(.*?){b2}-{b1}.clstr$", f)][0]
+
+            # 2 - load and parse the clustering files
+            clstr_df_1_to_2 = self._load_n_parse_clstr_file(clstr_file_path=join(dir_path, file_1_to_2))
+            clstr_df_2_to_1 = self._load_n_parse_clstr_file(clstr_file_path=join(dir_path, file_2_to_1))
+
+            # 3 - add to the pairs_clustering dictionary
+            pairs_clustering[(b1, b2)] = clstr_df_1_to_2
+            pairs_clustering[(b2, b1)] = clstr_df_2_to_1
+
+        return pairs_clustering
+
     def _load_n_parse_clstr_file(self, clstr_file_path: str) -> pd.DataFrame:
         col_cluster_id = 'cluster_id'
         col_counter = 'counter'
@@ -263,7 +291,11 @@ class DataLoader:
         col_locus = 'rna_locus_tag'
         col_name = 'rna_name'
         col_is_rep = 'is_representative'
-        out_cols = [col_cluster_id, col_counter, col_strain_str, col_name, col_is_rep, col_seq_length, col_acc, col_locus]
+        col_seq_location = 'seq_location'
+        col_rep_location = 'rep_location'
+        col_strand = 'strand'
+        col_match_score = 'match_score'
+        out_cols = [col_cluster_id, col_counter, col_strain_str, col_name, col_is_rep, col_seq_length, col_acc, col_locus, col_seq_location, col_rep_location, col_strand, col_match_score]
 
         # 1 - bacterial names mapping
         _map = {
@@ -275,7 +307,6 @@ class DataLoader:
         # 2 - load the clstr file
         with open(clstr_file_path, "r", encoding="utf-8") as f:
             clstr_content = f.read()
-        self.logger.info(f"Loaded clustering file: {clstr_file_path}")
 
         # 3 - parse .clstr file into a DataFrame
         clusters = []
@@ -289,93 +320,19 @@ class DataLoader:
         clstr_df = pd.DataFrame(clusters)
 
         # 4 - split the entries into columns and preprocess
-        clstr_df[['counter_len', 'header', col_is_rep, 'temp']] = pd.DataFrame(list(map(lambda x: x.split(" "), clstr_df['entry'])))
-        clstr_df[[col_counter, col_seq_length]] = pd.DataFrame(list(map(lambda x: x.split('nt,')[0].split("\t"), clstr_df['counter_len'])))
+        clstr_df[['counter_len', 'header', col_is_rep, 'footer']] = pd.DataFrame(list(map(lambda x: x.split(" "), clstr_df['entry'])))
+        clstr_df[[col_counter, col_seq_length]] = pd.DataFrame(list(map(lambda x: x.split('nt,')[0].split('aa,')[0].split("\t"), clstr_df['counter_len'])))
         clstr_df[[col_strain_str, col_acc, col_locus, col_name]] = pd.DataFrame(list(map(lambda x: x.split('...')[0].split('>')[1].split('|'), clstr_df['header'])))
         clstr_df[col_strain_str] =  clstr_df[col_strain_str].apply(lambda x: _map[x])
         clstr_df[col_is_rep] =  clstr_df[col_is_rep].apply(lambda x: True if x=='*' else False)
+        clstr_df[['location', col_strand, 'match_score_str']] =  pd.DataFrame(list(map(lambda x: x.split('/') if pd.notnull(x) else [None, None, None], clstr_df['footer'])))
+        clstr_df['location'] =  pd.DataFrame(list(map(lambda x: re.findall(f"(.*?):(.*?):(.*?):(.*?)$", x)[0] if pd.notnull(x) else x, clstr_df['location'])))
+        clstr_df[col_seq_location] =  pd.DataFrame(list(map(lambda x: (int(x[0]), int(x[1])) if pd.notnull(x) else x, clstr_df['location'])))
+        clstr_df[col_rep_location] =  pd.DataFrame(list(map(lambda x: (int(x[2]), int(x[3])) if pd.notnull(x) else x, clstr_df['location'])))
+        clstr_df[col_match_score] =  pd.DataFrame(list(map(lambda x: float(re.findall(f"(.*?)%$", x)[0]) if pd.notnull(x) else x, clstr_df['match_score_str'])))
         clstr_df = clstr_df[out_cols]
 
         return clstr_df
-
-    def _load_rna_clustering(self, rna_type: str) -> pd.DataFrame:
-        dir_path = join(self.config['clustering_dir'], self.clustering_config[f'{rna_type}_dir'])
-        
-        # ---------------------------   PAIRS preprocessing   ---------------------------
-        #TODO: add epec_slmo, save output in self
-        pairs_clustering = {}
-        bacteria = [self.ecoli_k12_nm, self.ecoli_epec_nm, self.salmonella_nm]
-        for b1, b2 in itertools.combinations(bacteria, 2):
-            # 1 - define the clustering file path
-            or_pattern = f"((.*?){b1}-{b2}|(.*?){b2}-{b1}).clstr$"
-            files = [f for f in os.listdir(dir_path) if re.match(or_pattern, f)]
-            # assert len(files) == 1, f"Expected exactly one clustering file for {rna_type} {b1} {b2} in {dir_path}, found: {files}"
-            if len(files) > 0:
-                clstr_file_path = join(dir_path, files[0])
-
-                # 2 - load and parse the clustering file
-                clstr_df = self._load_n_parse_clstr_file(clstr_file_path=clstr_file_path)
-
-                # 3 - add to the pairs_clustering dictionary
-                pairs_clustering[(b1, b2)] = clstr_df
-
-        print()
-
-        # # 1 - Escherichia coli K12 MG1655
-        # k12_dir = self.config['k12_dir']
-        # k12_annot_uniport = load_goa(file_path=join(self.config['go_annotations_dir'], k12_dir, 'e_coli_MG1655.goa'))
-        # k12_annot_map_uniport_to_locus = read_df(file_path=join(self.config['go_annotations_dir'], k12_dir, 'ECOLI_83333_idmapping.dat'))
-        # k12_annot_map_uniport_to_locus.columns = ['UniProt_ID', 'Database', 'Mapped_ID']
-        # k12_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], k12_dir, 'InterProScan', 'Ecoli_k12_proteins.fasta.json'))
-        
-        # interproscan_annot, i_header_col = ap_annot.preprocess_interproscan_annot(k12_annot_interproscan)
-        # curated_annot, c_locus_col = ap_annot.preprocess_curated_annot(self.ecoli_k12_nm, k12_annot_uniport, k12_annot_map_uniport_to_locus)
-
-        # # 1.1 - update info
-        # if self.ecoli_k12_nm not in self.strains_data:
-        #     self.strains_data[self.ecoli_k12_nm] = {}
-        # self.strains_data[self.ecoli_k12_nm].update({
-        #     "interproscan_annot": interproscan_annot,
-        #     "interproscan_header_col": i_header_col,
-        #     "curated_annot": curated_annot,
-        #     "curated_locus_col": c_locus_col
-        # })
-  
-        # # 2 - Escherichia coli EPEC E2348/69
-        # epec_dir = self.config['epec_dir']
-        # epec_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], epec_dir, 'InterProScan', 'EPEC_proteins.fasta.json'))
-        # interproscan_annot, i_header_col = ap_annot.preprocess_interproscan_annot(epec_annot_interproscan)
-        
-		# # 2.1 - update info
-        # if self.ecoli_epec_nm not in self.strains_data:
-        #     self.strains_data[self.ecoli_epec_nm] = {}
-        # self.strains_data[self.ecoli_epec_nm].update({
-        #     "interproscan_annot": interproscan_annot,
-        #     "interproscan_header_col": i_header_col
-        # })
-    
-        # # 3 - Salmonella enterica serovar Typhimurium strain SL1344,  Genome: NC_016810.1  (Matera_2022)
-        # salmonella_dir = self.config['salmonella_dir']
-        # salmonella_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], salmonella_dir, 'InterProScan', 'Salmonella_proteins.fasta.json'))
-        # interproscan_annot, i_header_col = ap_annot.preprocess_interproscan_annot(salmonella_annot_interproscan)
-        # # patch to adjust Salmonella headers
-        # interproscan_annot[i_header_col] = interproscan_annot[i_header_col].apply(lambda x: "|".join([x.split("|")[0]] + [x.split("|")[2]] + x.split("|")[2:]))
-        
-		# # 3.1 - update info
-        # if self.salmonella_nm not in self.strains_data:
-        #     self.strains_data[self.salmonella_nm] = {}
-        # self.strains_data[self.salmonella_nm].update({
-        #     "interproscan_annot": interproscan_annot,
-        #     "interproscan_header_col": i_header_col
-        # })
-    
-        # # 4 - Vibrio cholerae, NCBI Genomes:  NC_002505.1 and NC_002506.1  (Huber 2022)
-
-        # # 5 - Klebsiella pneumoniae str. SGH10; KL1, ST23  (Goh_2024)
-        
-
-
-        return 
     
     # def compute_unique_mrna_names(self) -> pd.DataFrame:
     #     """Compute the number of unique mRNA_name for each value of signature_library in interproscan_annot."""
