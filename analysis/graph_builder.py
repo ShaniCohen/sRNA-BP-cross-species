@@ -2,6 +2,7 @@ from typing import List, Dict
 import pandas as pd
 import numpy as np
 from pathlib import Path
+import itertools
 from utils.general import read_df, write_df
 import networkx as nx
 from pyvis.network import Network
@@ -22,6 +23,7 @@ class GraphBuilder:
         self.strains_data = data_loader.strains_data
         self.srna_acc_col = data_loader.srna_acc_col
         self.mrna_acc_col = data_loader.mrna_acc_col
+        self.clustering_data = data_loader.clustering_data
         
         self.ontology = ontology
         self.curated_go_ids_missing_in_ontology = set()
@@ -102,6 +104,7 @@ class GraphBuilder:
         self._process_curated_annot()
         self._add_mrna_nodes_and_annotation_edges()
         self._add_srna_nodes_and_interaction_edges()
+        self._add_homology_edges()
         self._log_graph_info()
         # self._log_graph_info(dump=True)
         self.graph_is_built = True
@@ -159,30 +162,33 @@ class GraphBuilder:
             self._assert_srna_nodes_addition(strain)
             self._assert_srna_mrna_inter_addition(strain)
     
-    def _is_target(self, srna_node_id, mrna_node_id, strain):
-        """ Check if there is an interaction edge between sRNA and mRNA nodes """
-        assert self.G.nodes[srna_node_id]['strain'] == strain
-        assert self.G.nodes[mrna_node_id]['strain'] == strain
+    def _add_homology_edges(self):
+        self._add_srna_homology_edges()
+        self._add_mrna_homology_edges()
 
-        is_srna = self.G.nodes[srna_node_id]['type'] == self._srna
-        is_mrna = self.G.nodes[mrna_node_id]['type'] == self._mrna
-        is_interaction = False
-        for d in self.G[srna_node_id][mrna_node_id].values():
-            if d['type'] == self._targets:
-                is_interaction = True
-                break 
-        return is_srna and is_mrna and is_interaction
+    def _add_srna_homology_edges(self):
+        """Add homology edges between sRNA nodes based on clustering data (bacteria pairs)."""
+        self.logger.info("adding homology edges betwwen sRNA nodes")
+        for (b1, b2), clstr_data in self.clustering_data[self._srna].items():
+            assert set(clstr_data['strain_str']) <= set(self.strains_data.keys()), f"strain strings mismatch"
+            for cluster_id, group in clstr_data.groupby('cluster_id'):
+                if len(group) > 1:
+                    nodes = list(zip(group['rna_accession_id'], group['strain_str']))
+                    for n1, n2 in itertools.combinations(nodes, 2):
+                        strain_1, strain_2 = n1[1], n2[1]
+                        # TODO: (1) make sure edges do not exist already, (2) add edges correctly 
+                        if strain_1 == strain_2:
+                            # paralogs: same strain
+                            self.G.add_edge(n1, n2, type="paralogs")
+                            self.G.add_edge(n2, n1, type="paralogs")
+                        else:
+                            # orthologs: different strains
+                            self.G.add_edge(n1, n2, type="orthologs")
+                            self.G.add_edge(n2, n1, type="orthologs")
     
-    def _is_annotated(self, mrna_node_id, go_node_id, go_node_type, annot_type=None):
-        """ Check if there is an annotation edge from mRNA to GO node."""
-        is_mrna = self.G.nodes[mrna_node_id]['type'] == self._mrna
-        is_go_type = self.G.nodes[go_node_id]['type'] == go_node_type
-        is_annotated = False
-        for d in self.G[mrna_node_id][go_node_id].values():
-            if d['type'] == self._annotated and (annot_type is None or d['annot_type'] == annot_type):
-                is_annotated = True
-                break
-        return is_mrna and is_go_type and is_annotated
+    def _add_mrna_homology_edges(self):
+        """Add homology edges between mRNA nodes based on clustering data (bacteria pairs)."""
+        self.logger.info("adding homology edges betwwen mRNA nodes")
 
     def _log_graph_info(self, dump=False):
         self.logger.info("Logging graph information...")
@@ -265,6 +271,31 @@ class GraphBuilder:
             if dump:
                 self._dump_mrna_bp_annotations(mrna_with_interactions, strain)
     
+    def _is_target(self, srna_node_id, mrna_node_id, strain):
+        """ Check if there is an interaction edge between sRNA and mRNA nodes """
+        assert self.G.nodes[srna_node_id]['strain'] == strain
+        assert self.G.nodes[mrna_node_id]['strain'] == strain
+
+        is_srna = self.G.nodes[srna_node_id]['type'] == self._srna
+        is_mrna = self.G.nodes[mrna_node_id]['type'] == self._mrna
+        is_interaction = False
+        for d in self.G[srna_node_id][mrna_node_id].values():
+            if d['type'] == self._targets:
+                is_interaction = True
+                break 
+        return is_srna and is_mrna and is_interaction
+    
+    def _is_annotated(self, mrna_node_id, go_node_id, go_node_type, annot_type=None):
+        """ Check if there is an annotation edge from mRNA to GO node."""
+        is_mrna = self.G.nodes[mrna_node_id]['type'] == self._mrna
+        is_go_type = self.G.nodes[go_node_id]['type'] == go_node_type
+        is_annotated = False
+        for d in self.G[mrna_node_id][go_node_id].values():
+            if d['type'] == self._annotated and (annot_type is None or d['annot_type'] == annot_type):
+                is_annotated = True
+                break
+        return is_mrna and is_go_type and is_annotated
+
     def _dump_mrna_bp_annotations(self, mrna_with_interactions, strain):
         """ Dump mRNA with interactions and their BP annotations to a CSV file """
         self.logger.info(f"Dumping mRNA with interactions and their BP annotations for {strain}")

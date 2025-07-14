@@ -257,8 +257,8 @@ class DataLoader:
         mrna_clstr_dict = self._load_bacteria_pairs_clustering(seq_type='protein')
 
         # 2 - save clustering
-        self.clustering_data['sRNA'] = srna_clstr_dict
-        self.clustering_data['mRNA'] = mrna_clstr_dict
+        self.clustering_data['srna'] = srna_clstr_dict
+        self.clustering_data['mrna'] = mrna_clstr_dict
 
     def _load_bacteria_pairs_clustering(self, seq_type: str) -> pd.DataFrame:
         _dir = self.clustering_config[f'{seq_type.lower()}_dir']
