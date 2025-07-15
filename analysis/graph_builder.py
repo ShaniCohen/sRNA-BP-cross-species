@@ -48,6 +48,7 @@ class GraphBuilder:
         self._bp = ontology.type_bp
         self._mf = ontology.type_mf
         self._cc = ontology.type_cc
+        self._go_types = [self._bp, self._mf, self._cc]
         # mRNA
         self._mrna = "mrna"
         # sRNA
@@ -65,11 +66,15 @@ class GraphBuilder:
         self._annotated = "annotated"
         # sRNA --> mRNA     
         self._targets = "targets"
+        # RNA <--> RNA
+        self._paralog = "paralog"    # paralogs: same strain
+        self._ortholog = "ortholog"  # orthologs: different strains
 
         # edge annot types (annot_type)
         self._curated = "curated"
         self._ips = "interproscan"
         self._eggnog = "eggnog"
+        self._annot_types = [self._curated, self._ips, self._eggnog]
 
         # define annotation types to add (curated are always added)
         self.add_ips_annot = True
@@ -163,32 +168,29 @@ class GraphBuilder:
             self._assert_srna_mrna_inter_addition(strain)
     
     def _add_homology_edges(self):
-        self._add_srna_homology_edges()
-        self._add_mrna_homology_edges()
+        self._add_rna_homology_edges(rna_type=self._srna)
+        self._add_rna_homology_edges(rna_type=self._mrna)
 
-    def _add_srna_homology_edges(self):
-        """Add homology edges between sRNA nodes based on clustering data (bacteria pairs)."""
-        self.logger.info("adding homology edges betwwen sRNA nodes")
-        for (b1, b2), clstr_data in self.clustering_data[self._srna].items():
+    def _add_rna_homology_edges(self, rna_type: str):
+        """Add homology edges between RNA nodes based on clustering data (bacteria pairs)."""
+        self.logger.info(f"adding {rna_type} homology edges")
+        for (b1, b2), clstr_data in self.clustering_data[rna_type].items():
+            # self.logger.info(f"adding {rna_type} homology edges for {b1} - {b2}")
             assert set(clstr_data['strain_str']) <= set(self.strains_data.keys()), f"strain strings mismatch"
             for cluster_id, group in clstr_data.groupby('cluster_id'):
                 if len(group) > 1:
                     nodes = list(zip(group['rna_accession_id'], group['strain_str']))
                     for n1, n2 in itertools.combinations(nodes, 2):
+                        node_id_1, node_id_2 = n1[0], n2[0]
                         strain_1, strain_2 = n1[1], n2[1]
-                        # TODO: (1) make sure edges do not exist already, (2) add edges correctly 
                         if strain_1 == strain_2:
                             # paralogs: same strain
-                            self.G.add_edge(n1, n2, type="paralogs")
-                            self.G.add_edge(n2, n1, type="paralogs")
+                            if not self._are_paralogs(node_id_1, node_id_2, strain_1):
+                                self._add_edges_rna_rna_paralogs(node_id_1, node_id_2)
                         else:
                             # orthologs: different strains
-                            self.G.add_edge(n1, n2, type="orthologs")
-                            self.G.add_edge(n2, n1, type="orthologs")
-    
-    def _add_mrna_homology_edges(self):
-        """Add homology edges between mRNA nodes based on clustering data (bacteria pairs)."""
-        self.logger.info("adding homology edges betwwen mRNA nodes")
+                            if not self._are_orthologs(node_id_1, node_id_2, strain_1, strain_2):
+                                self._add_edges_rna_rna_orthologs(node_id_1, node_id_2)
 
     def _log_graph_info(self, dump=False):
         self.logger.info("Logging graph information...")
@@ -206,6 +208,8 @@ class GraphBuilder:
             # mRNA = 'EG10001'
             # sorted([(u, v) for u, v, d in self.G.edges(data=True) if u == 'EG10001' or v == 'EG10001'])
             # d = self.strains_data[strain]['unq_inter'][self.strains_data[strain]['unq_inter'][self.mrna_acc_col] == 'EG10001']
+            
+            # TODO: fix that (fix is target?). currently self.G.predecessors(n) includes also other mRNA nodes that are orthologs to n
             mrna_with_interactions = [
                 n for n in mrna_nodes if any(self._is_target(p, n, strain) for p in self.G.predecessors(n))
             ]
@@ -271,31 +275,23 @@ class GraphBuilder:
             if dump:
                 self._dump_mrna_bp_annotations(mrna_with_interactions, strain)
     
-    def _is_target(self, srna_node_id, mrna_node_id, strain):
-        """ Check if there is an interaction edge between sRNA and mRNA nodes """
-        assert self.G.nodes[srna_node_id]['strain'] == strain
-        assert self.G.nodes[mrna_node_id]['strain'] == strain
-
-        is_srna = self.G.nodes[srna_node_id]['type'] == self._srna
-        is_mrna = self.G.nodes[mrna_node_id]['type'] == self._mrna
-        is_interaction = False
-        for d in self.G[srna_node_id][mrna_node_id].values():
-            if d['type'] == self._targets:
-                is_interaction = True
-                break 
-        return is_srna and is_mrna and is_interaction
+    def _split(self, go_terms: set):
+        BP_go_ids, MF_go_ids, CC_go_ids = [], [], []
+        
+        if pd.notnull(go_terms):   
+            for t in go_terms:
+                go_id = t.split(':')[1]
+                if go_id in self.ontology.BP.nodes:
+                    BP_go_ids.append(go_id)
+                elif go_id in self.ontology.MF.nodes:
+                    MF_go_ids.append(go_id)
+                elif go_id in self.ontology.CC.nodes:
+                    CC_go_ids.append(go_id)
+                else:
+                    self.curated_go_ids_missing_in_ontology.add(go_id)
+            
+        return BP_go_ids, MF_go_ids, CC_go_ids
     
-    def _is_annotated(self, mrna_node_id, go_node_id, go_node_type, annot_type=None):
-        """ Check if there is an annotation edge from mRNA to GO node."""
-        is_mrna = self.G.nodes[mrna_node_id]['type'] == self._mrna
-        is_go_type = self.G.nodes[go_node_id]['type'] == go_node_type
-        is_annotated = False
-        for d in self.G[mrna_node_id][go_node_id].values():
-            if d['type'] == self._annotated and (annot_type is None or d['annot_type'] == annot_type):
-                is_annotated = True
-                break
-        return is_mrna and is_go_type and is_annotated
-
     def _dump_mrna_bp_annotations(self, mrna_with_interactions, strain):
         """ Dump mRNA with interactions and their BP annotations to a CSV file """
         self.logger.info(f"Dumping mRNA with interactions and their BP annotations for {strain}")
@@ -426,7 +422,20 @@ class GraphBuilder:
 							strain=strain, locus_tag=locus_tag, name=name, synonyms=synonyms, start=start, end=end, strand=strand, sequence=sequence)
         elif log_warning:
             self.logger.warning(f"{type} node {id} already in graph")
-    
+
+    def _add_edge_srna_mrna_inter(self, srna_node_id, mrna_node_id):
+        """ Add "targets" edge from the sRNA node to the mRNA node
+
+        Args:
+            srna_node_id (str): the sRNA node id (accession id)
+            mrna_node_id (str): the mRNA node id (accession id)
+        """
+        assert self.G.has_node(srna_node_id) and self.G.has_node(mrna_node_id)
+        assert self.G.nodes[srna_node_id]['strain'] == self.G.nodes[mrna_node_id]['strain']
+        assert self.G.nodes[srna_node_id]['type'] == self._srna
+        assert self.G.nodes[mrna_node_id]['type'] == self._mrna
+        self.G.add_edge(srna_node_id, mrna_node_id, type=self._targets)
+        
     def _add_edge_mrna_go_annot(self, mrna_node_id, go_id, annot_type) -> bool:
         """ Add "annotated" edge from the mRNA node to the GO node.
         Args:
@@ -438,38 +447,115 @@ class GraphBuilder:
         """
         assert self.G.has_node(mrna_node_id), f"mRNA id {mrna_node_id} is missing in the graph"
         if self.G.has_node(go_id):
+            assert self.G.nodes[mrna_node_id]['type'] == self._mrna
+            assert self.G.nodes[go_id]['type'] in self._go_types
+            assert annot_type in self._annot_types
             self.G.add_edge(mrna_node_id, go_id, type=self._annotated, annot_type=annot_type)
             return False
         return True
     
-    def _add_edge_srna_mrna_inter(self, srna_node_id, mrna_node_id):
+    def _add_edges_rna_rna_paralogs(self, rna_node_id_1, rna_node_id_2):
         """ Add "targets" edge from the sRNA node to the mRNA node
 
         Args:
             srna_node_id (str): the sRNA node id (accession id)
             mrna_node_id (str): the mRNA node id (accession id)
         """
-        if self.G.has_node(srna_node_id) and self.G.has_node(mrna_node_id):
-            self.G.add_edge(srna_node_id, mrna_node_id, type=self._targets)
-        else:
-            self.logger.warning("mRNA and/or sRNA nodes are missing in the graph")
+        assert self.G.has_node(rna_node_id_1) and self.G.has_node(rna_node_id_2)
+        assert self.G.nodes[rna_node_id_1]['strain'] == self.G.nodes[rna_node_id_2]['strain']
+        both_srna = (self.G.nodes[rna_node_id_1]['type'] == self._srna) & (self.G.nodes[rna_node_id_2]['type'] == self._srna)
+        both_mrna = (self.G.nodes[rna_node_id_2]['type'] == self._mrna) & (self.G.nodes[rna_node_id_2]['type'] == self._mrna)
+        assert both_srna or both_mrna
+        self.G.add_edge(rna_node_id_1, rna_node_id_2, type=self._paralog)
+        self.G.add_edge(rna_node_id_2, rna_node_id_1, type=self._paralog)
 
-    def _split(self, go_terms: set):
-        BP_go_ids, MF_go_ids, CC_go_ids = [], [], []
+    def _add_edges_rna_rna_orthologs(self, rna_node_id_1, rna_node_id_2):
+        """ Add "ortholog" edge between two RNA nodes of different strains
+
+        Args:
+            rna_node_id_1 (str): the first RNA node id (accession id)
+            rna_node_id_2 (str): the second RNA node id (accession id)
+        """
+        assert self.G.has_node(rna_node_id_1) and self.G.has_node(rna_node_id_2)
+        assert self.G.nodes[rna_node_id_1]['strain'] != self.G.nodes[rna_node_id_2]['strain']
+        both_srna = (self.G.nodes[rna_node_id_1]['type'] == self._srna) & (self.G.nodes[rna_node_id_2]['type'] == self._srna)
+        both_mrna = (self.G.nodes[rna_node_id_2]['type'] == self._mrna) & (self.G.nodes[rna_node_id_2]['type'] == self._mrna)
+        assert both_srna or both_mrna
+        self.G.add_edge(rna_node_id_1, rna_node_id_2, type=self._ortholog)
+        self.G.add_edge(rna_node_id_2, rna_node_id_1, type=self._ortholog)
+    
+    def _is_target(self, srna_node_id, mrna_node_id, strain):
+        """ Check if there is an interaction edge between sRNA and mRNA nodes """
+        if not self.G.nodes[srna_node_id]['strain'] == self.G.nodes[mrna_node_id]['strain'] == strain:
+            print()
+        assert self.G.nodes[srna_node_id]['strain'] == self.G.nodes[mrna_node_id]['strain'] == strain
+        assert self.G.nodes[srna_node_id]['type'] == self._srna
+        assert self.G.nodes[mrna_node_id]['type'] == self._mrna
         
-        if pd.notnull(go_terms):   
-            for t in go_terms:
-                go_id = t.split(':')[1]
-                if go_id in self.ontology.BP.nodes:
-                    BP_go_ids.append(go_id)
-                elif go_id in self.ontology.MF.nodes:
-                    MF_go_ids.append(go_id)
-                elif go_id in self.ontology.CC.nodes:
-                    CC_go_ids.append(go_id)
-                else:
-                    self.curated_go_ids_missing_in_ontology.add(go_id)
-            
-        return BP_go_ids, MF_go_ids, CC_go_ids
+        is_interaction = False
+        for d in self.G[srna_node_id][mrna_node_id].values():
+            if d['type'] == self._targets:
+                is_interaction = True
+                break 
+        return is_interaction
+    
+    def _is_annotated(self, mrna_node_id, go_node_id, go_node_type, annot_type=None):
+        """ Check if there is an annotation edge from mRNA to GO node."""
+        assert self.G.nodes[mrna_node_id]['type'] == self._mrna
+        assert self.G.nodes[go_node_id]['type'] == go_node_type
+        
+        is_annotated = False
+        for d in self.G[mrna_node_id][go_node_id].values():
+            if d['type'] == self._annotated and (annot_type is None or d['annot_type'] == annot_type):
+                is_annotated = True
+                break
+        return is_annotated
+    
+    def _are_paralogs(self, rna_node_id_1, rna_node_id_2, strain):
+        """ Check if there are paralog edges between two RNA nodes of the same strain """
+        assert self.G.nodes[rna_node_id_1]['strain'] == self.G.nodes[rna_node_id_2]['strain'] == strain
+        both_srna = (self.G.nodes[rna_node_id_1]['type'] == self._srna) & (self.G.nodes[rna_node_id_2]['type'] == self._srna)
+        both_mrna = (self.G.nodes[rna_node_id_2]['type'] == self._mrna) & (self.G.nodes[rna_node_id_2]['type'] == self._mrna)
+        assert both_srna or both_mrna
+        
+        is_paralog_1_2 = False
+        if self.G.has_edge(rna_node_id_1, rna_node_id_2):
+            for d in self.G[rna_node_id_1][rna_node_id_2].values():
+                if d['type'] == self._paralog:
+                    is_paralog_1_2 = True
+                    break
+        is_paralog_2_1 = False
+        if self.G.has_edge(rna_node_id_2, rna_node_id_1):
+            for d in self.G[rna_node_id_2][rna_node_id_1].values():
+                if d['type'] == self._paralog:
+                    is_paralog_2_1 = True
+                    break
+        assert is_paralog_1_2 == is_paralog_2_1, "Paralog edge should be symmetric"
+        return is_paralog_1_2 and is_paralog_2_1
+    
+    def _are_orthologs(self, rna_node_id_1, rna_node_id_2, strain_1, strain_2):
+        """ Check if there are ortholog edges between two RNA nodes of different strains """
+        assert self.G.nodes[rna_node_id_1]['strain'] == strain_1
+        assert self.G.nodes[rna_node_id_2]['strain'] == strain_2
+        assert strain_1 != strain_2, "Strains should be different for orthologs"
+        both_srna = (self.G.nodes[rna_node_id_1]['type'] == self._srna) & (self.G.nodes[rna_node_id_2]['type'] == self._srna)
+        both_mrna = (self.G.nodes[rna_node_id_2]['type'] == self._mrna) & (self.G.nodes[rna_node_id_2]['type'] == self._mrna)
+        assert both_srna or both_mrna
+        
+        is_ortholog_1_2 = False
+        if self.G.has_edge(rna_node_id_1, rna_node_id_2):
+            for d in self.G[rna_node_id_1][rna_node_id_2].values():
+                if d['type'] == self._ortholog:
+                    is_ortholog_1_2 = True
+                    break
+        is_ortholog_2_1 = False
+        if self.G.has_edge(rna_node_id_2, rna_node_id_1):
+            for d in self.G[rna_node_id_2][rna_node_id_1].values():
+                if d['type'] == self._ortholog:
+                    is_ortholog_2_1 = True
+                    break
+        assert is_ortholog_1_2 == is_ortholog_2_1, "Ortholog edge should be symmetric"
+        return is_ortholog_1_2 and is_ortholog_2_1
         
     def _create_3D_visualization(self, nx_graph):
         # nx_graph = nx.Graph()

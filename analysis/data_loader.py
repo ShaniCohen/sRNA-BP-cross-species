@@ -332,6 +332,9 @@ class DataLoader:
         clstr_df[col_match_score] =  pd.DataFrame(list(map(lambda x: float(re.findall(f"(.*?)%$", x)[0]) if pd.notnull(x) else x, clstr_df['match_score_str'])))
         clstr_df = clstr_df[out_cols]
 
+        # patch to adjust salmonella's accession id
+        clstr_df[col_acc] = list(map(lambda strain, acc, locus: locus if strain==self.salmonella_nm else acc, clstr_df[col_strain_str], clstr_df[col_acc], clstr_df[col_locus]))
+        
         return clstr_df
     
     # def compute_unique_mrna_names(self) -> pd.DataFrame:
