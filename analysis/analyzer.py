@@ -15,7 +15,7 @@ if ROOT_PATH not in sys.path:
     sys.path.append(ROOT_PATH)
 
 class Analyzer:
-    def __init__(self, config, logger, graph_builder):
+    def __init__(self, config, logger, graph_builder, graph_utils):
         """
         GO node is represented as a dict item:
             <id_str> : {'type': <str>, 'lbl': <str>, 'meta': <dict>}
@@ -41,6 +41,7 @@ class Analyzer:
         self._bp = graph_builder._bp
         self._mf = graph_builder._mf
         self._cc = graph_builder._cc
+        self._go_types = graph_builder._go_types
         # mRNA
         self._mrna = graph_builder._mrna
         # sRNA
@@ -56,11 +57,17 @@ class Analyzer:
         self._sub_property_of = graph_builder._sub_property_of
         # mRNA --> GO
         self._annotated = graph_builder._annotated
-        # sRNA --> mRNA     
+        # sRNA --> mRNA
         self._targets = graph_builder._targets
+        # RNA <--> RNA
+        self._paralog = graph_builder._paralog    # paralogs: same strain
+        self._ortholog = graph_builder._ortholog  # orthologs: different strains
 
-        # enrichment pv threshold
-        self.enrichment_pv_threshold = 0.05
+        # edge annot types (annot_type)
+        self._curated = graph_builder._curated
+        self._ips = graph_builder._ips
+        self._eggnog = graph_builder._eggnog
+        self._annot_types = graph_builder._annot_types
 
     def run_analysis(self, dump_meta: bool = True):
         """
@@ -72,6 +79,9 @@ class Analyzer:
             (<id_str>, <id_str>) : {'type': <str>}
         """
         self.logger.info(f"running analysis")
+
+        self._analyze_rna_clustering()
+        # --------------   run analysis   --------------        
         # 1 - Generate a mapping of sRNA to biological processes (BPs)
         bp_mapping = self._generate_srna_bp_mapping()
         self._log_mapping(bp_mapping)
@@ -91,30 +101,30 @@ class Analyzer:
                 cc_count = np.intersect1d(unq_targets_without_bp, mrna_w_cc).size
             self.logger.info(f"Strain: {strain}, Number of unique mRNAs targets without BPs: {len(unq_targets_without_bp)} (where {mf_count} have ips MF annotation, {cc_count} have ips CC annotation)")    
 
-    def _is_target(self, srna_node_id, mrna_node_id, strain):
-        """ Check if there is an interaction edge between sRNA and mRNA nodes """
-        assert self.G.nodes[srna_node_id]['strain'] == strain
-        assert self.G.nodes[mrna_node_id]['strain'] == strain
+    # def _is_target(self, srna_node_id, mrna_node_id, strain):
+    #     """ Check if there is an interaction edge between sRNA and mRNA nodes """
+    #     assert self.G.nodes[srna_node_id]['strain'] == strain
+    #     assert self.G.nodes[mrna_node_id]['strain'] == strain
 
-        is_srna = self.G.nodes[srna_node_id]['type'] == self._srna
-        is_mrna = self.G.nodes[mrna_node_id]['type'] == self._mrna
-        is_interaction = False
-        for d in self.G[srna_node_id][mrna_node_id].values():
-            if d['type'] == self._targets:
-                is_interaction = True
-                break 
-        return is_srna and is_mrna and is_interaction
+    #     is_srna = self.G.nodes[srna_node_id]['type'] == self._srna
+    #     is_mrna = self.G.nodes[mrna_node_id]['type'] == self._mrna
+    #     is_interaction = False
+    #     for d in self.G[srna_node_id][mrna_node_id].values():
+    #         if d['type'] == self._targets:
+    #             is_interaction = True
+    #             break 
+    #     return is_srna and is_mrna and is_interaction
     
-    def _is_annotated(self, mrna_node_id, go_node_id, go_node_type, annot_type=None):
-        """ Check if there is an annotation edge from mRNA to GO node."""
-        is_mrna = self.G.nodes[mrna_node_id]['type'] == self._mrna
-        is_go_type = self.G.nodes[go_node_id]['type'] == go_node_type
-        is_annotated = False
-        for d in self.G[mrna_node_id][go_node_id].values():
-            if d['type'] == self._annotated and (annot_type is None or d['annot_type'] == annot_type):
-                is_annotated = True
-                break
-        return is_mrna and is_go_type and is_annotated
+    # def _is_annotated(self, mrna_node_id, go_node_id, go_node_type, annot_type=None):
+    #     """ Check if there is an annotation edge from mRNA to GO node."""
+    #     is_mrna = self.G.nodes[mrna_node_id]['type'] == self._mrna
+    #     is_go_type = self.G.nodes[go_node_id]['type'] == go_node_type
+    #     is_annotated = False
+    #     for d in self.G[mrna_node_id][go_node_id].values():
+    #         if d['type'] == self._annotated and (annot_type is None or d['annot_type'] == annot_type):
+    #             is_annotated = True
+    #             break
+    #     return is_mrna and is_go_type and is_annotated
 
     def _generate_srna_bp_mapping(self) -> dict:
         """

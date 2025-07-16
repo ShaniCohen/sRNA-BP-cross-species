@@ -8,6 +8,7 @@ import sys
 import os
 from analysis.data_loader import DataLoader
 from analysis.ontology import Ontology
+from analysis.graph_utils import GraphUtils
 from analysis.graph_builder import GraphBuilder
 from analysis.analyzer import Analyzer
 import logging
@@ -42,6 +43,7 @@ class AnalysisRunner:
         # ontology
         for _dir in ['gene_ontology_dir', 'go_embeddings_dir']:
             configs['ontology'][_dir] = join(configs['runner']['input_data_path'], configs['ontology'][_dir])
+        # graph utils
         # graph builder
         for _dir in ['builder_output_dir']:
             configs['graph_builder'][_dir] = join(configs['runner']['output_data_path'], configs['graph_builder'][_dir])
@@ -61,10 +63,12 @@ class AnalysisRunner:
         ontology.create_ontology_nx_graphs()
         ontology.load_go_embeddings()
 
-        graph_builder = GraphBuilder(self.configs['graph_builder'], self.logger, data_loader, ontology)
+        graph_utils = GraphUtils(self.configs['graph_utils'], self.logger, data_loader, ontology)
+
+        graph_builder = GraphBuilder(self.configs['graph_builder'], self.logger, data_loader, ontology, graph_utils)
         graph_builder.build_graph()
 
-        analyzer = Analyzer(self.configs['analyzer'], self.logger, graph_builder)
+        analyzer = Analyzer(self.configs['analyzer'], self.logger, graph_builder, graph_utils)
         analyzer.run_analysis()
         
         self.logger.info(f"--------------   run completed   --------------")

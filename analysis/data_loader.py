@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, List
 import pandas as pd
 import itertools
 import numpy as np
@@ -41,10 +41,14 @@ class DataLoader:
         self.ecoli_epec_nm = 'ecoli_epec' 
         self.salmonella_nm = 'salmonella'
         self.strains = [self.ecoli_k12_nm, self.ecoli_epec_nm, self.salmonella_nm]
+        
         self.strains_data = {}
         self.srna_acc_col = 'sRNA_accession_id'
         self.mrna_acc_col = 'mRNA_accession_id'
         self.clustering_data = {}
+    
+    def get_strains(self) -> List[str]:
+        return self.strains
 
     def load_and_process_data(self) -> Dict[str, Dict[str, pd.DataFrame]]:
         """store all data in a self.strains_data dictionary
