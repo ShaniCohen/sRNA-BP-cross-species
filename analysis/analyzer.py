@@ -142,7 +142,7 @@ class Analyzer:
             srna_nodes = [n for n, d in self.G.nodes(data=True) if d['type'] == self._srna and d['strain'] == strain]
             for srna in srna_nodes:
                 targets_to_bp = {}
-                srna_targets = [n for n in self.G.neighbors(srna) if self._is_target(srna, n, strain)]
+                srna_targets = [n for n in self.G.neighbors(srna) if self.G.nodes[n]['type'] == self._mrna and self._is_target(srna, n, strain)]
                 for target in srna_targets:
                     # Find the biological processes associated with the target
                     bp_nodes = [n for n in self.G.neighbors(target) if self._is_annotated(target, n, self._bp)]

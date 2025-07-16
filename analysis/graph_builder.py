@@ -209,15 +209,14 @@ class GraphBuilder:
             # sorted([(u, v) for u, v, d in self.G.edges(data=True) if u == 'EG10001' or v == 'EG10001'])
             # d = self.strains_data[strain]['unq_inter'][self.strains_data[strain]['unq_inter'][self.mrna_acc_col] == 'EG10001']
             
-            # TODO: fix that (fix is target?). currently self.G.predecessors(n) includes also other mRNA nodes that are orthologs to n
             mrna_with_interactions = [
-                n for n in mrna_nodes if any(self._is_target(p, n, strain) for p in self.G.predecessors(n))
+                n for n in mrna_nodes if any(self._is_target(p, n, strain) for p in self.G.predecessors(n) if self.G.nodes[p]['type'] == self._srna)
             ]
             mrna_with_interactions_count = len(mrna_with_interactions)
 
             # mRNA nodes with interactions (sRNA --targets--> mRNA) and BP GO annotations (mRNA --annotation--> BP)
             mrna_bp_annotations = {
-                n: [neighbor for neighbor in self.G.neighbors(n) if self._is_annotated(n, neighbor, self._bp)]
+                n: [neighbor for neighbor in self.G.neighbors(n) if self.G.nodes[neighbor]['type'] == self._bp and self._is_annotated(n, neighbor, self._bp)]
                 for n in mrna_with_interactions
             }
 
@@ -246,7 +245,7 @@ class GraphBuilder:
 
             # Count sRNA nodes with interactions (sRNA-mRNA)
             srna_with_interactions = [
-                n for n in srna_nodes if any(self._is_target(n, neighbor, strain) for neighbor in self.G.neighbors(n))
+                n for n in srna_nodes if any(self._is_target(n, neighbor, strain) for neighbor in self.G.neighbors(n) if self.G.nodes[neighbor]['type'] == self._mrna)
             ]
             srna_with_interactions_count = len(srna_with_interactions)
 
