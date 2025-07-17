@@ -28,46 +28,16 @@ class Analyzer:
         self.logger.info(f"initializing Analyzer")
         self.config = config
         
-        # graph
-        self.strains = graph_builder.get_strains()
+        # graph and utils
         self.G = graph_builder.get_graph()
+        self.U = graph_utils
 
         # TODO: remove after testing
         self.strains_data = graph_builder.strains_data
         self.ips_go_annotations = graph_builder.get_ips_go_annotations()
 
-        # node types
-        # GO
-        self._bp = graph_builder._bp
-        self._mf = graph_builder._mf
-        self._cc = graph_builder._cc
-        self._go_types = graph_builder._go_types
-        # mRNA
-        self._mrna = graph_builder._mrna
-        # sRNA
-        self._srna = graph_builder._srna
-
-        # edge types
-        # GO --> GO
-        self._part_of = graph_builder._part_of
-        self._regulates = graph_builder._regulates
-        self._neg_regulates = graph_builder._neg_regulates
-        self._pos_regulates = graph_builder._pos_regulates
-        self._is_a = graph_builder._is_a
-        self._sub_property_of = graph_builder._sub_property_of
-        # mRNA --> GO
-        self._annotated = graph_builder._annotated
-        # sRNA --> mRNA
-        self._targets = graph_builder._targets
-        # RNA <--> RNA
-        self._paralog = graph_builder._paralog    # paralogs: same strain
-        self._ortholog = graph_builder._ortholog  # orthologs: different strains
-
-        # edge annot types (annot_type)
-        self._curated = graph_builder._curated
-        self._ips = graph_builder._ips
-        self._eggnog = graph_builder._eggnog
-        self._annot_types = graph_builder._annot_types
+        # TODO: set enrichment p-value threshold
+        self.enrichment_pv_threshold = 0.05
 
     def run_analysis(self, dump_meta: bool = True):
         """
@@ -92,39 +62,8 @@ class Analyzer:
         if dump_meta:
             self._dump_metadata(meta)
     
-    def _log_mrna_with_bp(self, strain: str, unq_targets_without_bp: Set[str]):
-            ips_annot = self.ips_go_annotations.get(strain, None)
-            if ips_annot is not None:
-                mrna_w_mf = set(ips_annot[pd.notnull(ips_annot['MF_go_xrefs'])]['mRNA_accession_id'])
-                mrna_w_cc = set(ips_annot[pd.notnull(ips_annot['CC_go_xrefs'])]['mRNA_accession_id'])
-                mf_count = np.intersect1d(unq_targets_without_bp, mrna_w_mf).size
-                cc_count = np.intersect1d(unq_targets_without_bp, mrna_w_cc).size
-            self.logger.info(f"Strain: {strain}, Number of unique mRNAs targets without BPs: {len(unq_targets_without_bp)} (where {mf_count} have ips MF annotation, {cc_count} have ips CC annotation)")    
-
-    # def _is_target(self, srna_node_id, mrna_node_id, strain):
-    #     """ Check if there is an interaction edge between sRNA and mRNA nodes """
-    #     assert self.G.nodes[srna_node_id]['strain'] == strain
-    #     assert self.G.nodes[mrna_node_id]['strain'] == strain
-
-    #     is_srna = self.G.nodes[srna_node_id]['type'] == self._srna
-    #     is_mrna = self.G.nodes[mrna_node_id]['type'] == self._mrna
-    #     is_interaction = False
-    #     for d in self.G[srna_node_id][mrna_node_id].values():
-    #         if d['type'] == self._targets:
-    #             is_interaction = True
-    #             break 
-    #     return is_srna and is_mrna and is_interaction
-    
-    # def _is_annotated(self, mrna_node_id, go_node_id, go_node_type, annot_type=None):
-    #     """ Check if there is an annotation edge from mRNA to GO node."""
-    #     is_mrna = self.G.nodes[mrna_node_id]['type'] == self._mrna
-    #     is_go_type = self.G.nodes[go_node_id]['type'] == go_node_type
-    #     is_annotated = False
-    #     for d in self.G[mrna_node_id][go_node_id].values():
-    #         if d['type'] == self._annotated and (annot_type is None or d['annot_type'] == annot_type):
-    #             is_annotated = True
-    #             break
-    #     return is_mrna and is_go_type and is_annotated
+    def _analyze_rna_clustering(self):
+        print("Analyzing RNA clustering...")
 
     def _generate_srna_bp_mapping(self) -> dict:
         """
@@ -144,18 +83,18 @@ class Analyzer:
             }               
         """
         bp_mapping = {}  
-        for strain in self.strains:
+        for strain in self.U.strains:
             unq_targets_without_bp = set()
             # Filter sRNA nodes for the current strain
             # d = self.strains_data[strain]['unq_inter'][self.strains_data[strain]['unq_inter']['sRNA_accession_id'] == 'G0-16636']
             srna_bp_mapping = {}
-            srna_nodes = [n for n, d in self.G.nodes(data=True) if d['type'] == self._srna and d['strain'] == strain]
+            srna_nodes = [n for n, d in self.G.nodes(data=True) if d['type'] == self.U.srna and d['strain'] == strain]
             for srna in srna_nodes:
                 targets_to_bp = {}
-                srna_targets = [n for n in self.G.neighbors(srna) if self.G.nodes[n]['type'] == self._mrna and self._is_target(srna, n, strain)]
+                srna_targets = [n for n in self.G.neighbors(srna) if self.G.nodes[n]['type'] == self.U.mrna and self.U.is_target(self.G, srna, n)]
                 for target in srna_targets:
                     # Find the biological processes associated with the target
-                    bp_nodes = [n for n in self.G.neighbors(target) if self._is_annotated(target, n, self._bp)]
+                    bp_nodes = [n for n in self.G.neighbors(target) if self.G.nodes[n]['type'] == self.U.bp and self.U.is_annotated(self.G, target, n, self.U.bp)]
                     if bp_nodes:
                         targets_to_bp[target] = bp_nodes
                     else:
@@ -167,6 +106,15 @@ class Analyzer:
             self._log_mrna_with_bp(strain, unq_targets_without_bp)
 
         return bp_mapping
+
+    def _log_mrna_with_bp(self, strain: str, unq_targets_without_bp: Set[str]):
+            ips_annot = self.ips_go_annotations.get(strain, None)
+            if ips_annot is not None:
+                mrna_w_mf = set(ips_annot[pd.notnull(ips_annot['MF_go_xrefs'])]['mRNA_accession_id'])
+                mrna_w_cc = set(ips_annot[pd.notnull(ips_annot['CC_go_xrefs'])]['mRNA_accession_id'])
+                mf_count = np.intersect1d(unq_targets_without_bp, mrna_w_mf).size
+                cc_count = np.intersect1d(unq_targets_without_bp, mrna_w_cc).size
+            self.logger.info(f"Strain: {strain}, Number of unique mRNAs targets without BPs: {len(unq_targets_without_bp)} (where {mf_count} have ips MF annotation, {cc_count} have ips CC annotation)")
 
     def _log_mapping(self, mapping: dict):
         for strain, srna_bp_mapping in mapping.items():

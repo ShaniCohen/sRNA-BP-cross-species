@@ -44,46 +44,9 @@ class GraphBuilder:
         self.graph_is_built = False
 
         self.U = graph_utils
-
-        # # node types
-        # # GO
-        # self._bp = ontology.type_bp
-        # self._mf = ontology.type_mf
-        # self._cc = ontology.type_cc
-        # self._go_types = [self._bp, self._mf, self._cc]
-        # # mRNA
-        # self._mrna = "mrna"
-        # # sRNA
-        # self._srna = "srna"
-
-        # # edge types
-        # # GO --> GO  
-        # self._part_of = ontology.type_part_of
-        # self._regulates = ontology.type_regulates
-        # self._neg_regulates = ontology.type_neg_regulates
-        # self._pos_regulates = ontology.type_pos_regulates
-        # self._is_a = ontology.type_is_a
-        # self._sub_property_of = ontology.type_sub_property_of
-        # # mRNA --> GO
-        # self._annotated = "annotated"
-        # # sRNA --> mRNA     
-        # self._targets = "targets"
-        # # RNA <--> RNA
-        # self._paralog = "paralog"    # paralogs: same strain
-        # self._ortholog = "ortholog"  # orthologs: different strains
-
-        # # edge annot types (annot_type)
-        # self._curated = "curated"
-        # self._ips = "interproscan"
-        # self._eggnog = "eggnog"
-        # self._annot_types = [self._curated, self._ips, self._eggnog]
-
         # define annotation types to add (curated are always added)
         self.add_ips_annot = True
         self.add_eggnog_annot = True
-    
-    # def get_strains(self) -> List[str]:
-    #     return list(self.strains_data.keys())
     
     def get_graph(self) -> nx.Graph:
         if not self.graph_is_built:
