@@ -133,16 +133,14 @@ class GraphUtils:
     def is_target(self, G, srna_node_id, mrna_node_id):
         """ Check if there is an interaction edge between sRNA and mRNA nodes """
         assert G.has_node(srna_node_id) and G.has_node(mrna_node_id)
-        assert G.nodes[srna_node_id]['strain'] == G.nodes[mrna_node_id]['strain']
-        assert G.nodes[srna_node_id]['type'] == self.srna
-        assert G.nodes[mrna_node_id]['type'] == self.mrna
-        
-        _is_target = False
-        for d in G[srna_node_id][mrna_node_id].values():
-            if d['type'] == self.targets:
-                _is_target = True
-                break 
-        return _is_target
+        if \
+            G.nodes[srna_node_id]['strain'] == G.nodes[mrna_node_id]['strain'] and \
+            G.nodes[srna_node_id]['type'] == self.srna and \
+            G.nodes[mrna_node_id]['type'] == self.mrna:
+            for d in G[srna_node_id][mrna_node_id].values():
+                if d['type'] == self.targets:
+                    return True
+        return False
     
     def is_annotated(self, G, mrna_node_id, go_node_id, go_node_type, annot_type=None):
         """ Check if there is an annotation edge from mRNA to GO node."""
@@ -150,39 +148,39 @@ class GraphUtils:
         assert go_node_type in self.go_types, f"invalid GO node type: {go_node_type}"
         if annot_type is not None:
             assert annot_type in self.annot_types, f"invalid annotation type: {annot_type}"
-        assert G.nodes[mrna_node_id]['type'] == self.mrna
-        assert G.nodes[go_node_id]['type'] == go_node_type
-        
-        _is_annotated = False
-        for d in G[mrna_node_id][go_node_id].values():
-            if d['type'] == self.annotated and (annot_type is None or d['annot_type'] == annot_type):
-                _is_annotated = True
-                break
-        return _is_annotated
+        if \
+            G.nodes[mrna_node_id]['type'] == self.mrna and \
+            G.nodes[go_node_id]['type'] == go_node_type:
+            for d in G[mrna_node_id][go_node_id].values():
+                if d['type'] == self.annotated and (annot_type is None or d['annot_type'] == annot_type):
+                    return True
+        return False
     
     def are_paralogs(self, G, rna_node_id_1, rna_node_id_2, strain):
         """ Check if there are paralog edges between two RNA nodes of the same strain """
         assert G.has_node(rna_node_id_1) and G.has_node(rna_node_id_2)
         assert strain in self.strains, f"strain {strain} is not in the list of strains: {self.strains}"
-        assert G.nodes[rna_node_id_1]['strain'] == G.nodes[rna_node_id_2]['strain'] == strain
+
+        same_strain = G.nodes[rna_node_id_1]['strain'] == G.nodes[rna_node_id_2]['strain'] == strain
         both_srna = (G.nodes[rna_node_id_1]['type'] == self.srna) & (G.nodes[rna_node_id_2]['type'] == self.srna)
         both_mrna = (G.nodes[rna_node_id_2]['type'] == self.mrna) & (G.nodes[rna_node_id_2]['type'] == self.mrna)
-        assert both_srna or both_mrna
         
-        is_paralog_1_2 = False
-        if G.has_edge(rna_node_id_1, rna_node_id_2):
-            for d in G[rna_node_id_1][rna_node_id_2].values():
-                if d['type'] == self.paralog:
-                    is_paralog_1_2 = True
-                    break
-        is_paralog_2_1 = False
-        if G.has_edge(rna_node_id_2, rna_node_id_1):
-            for d in G[rna_node_id_2][rna_node_id_1].values():
-                if d['type'] == self.paralog:
-                    is_paralog_2_1 = True
-                    break
-        assert is_paralog_1_2 == is_paralog_2_1, "Paralog edge should be symmetric"
-        return is_paralog_1_2 and is_paralog_2_1
+        if same_strain and (both_srna or both_mrna):
+            is_paralog_1_2 = False
+            if G.has_edge(rna_node_id_1, rna_node_id_2):
+                for d in G[rna_node_id_1][rna_node_id_2].values():
+                    if d['type'] == self.paralog:
+                        is_paralog_1_2 = True
+                        break
+            is_paralog_2_1 = False
+            if G.has_edge(rna_node_id_2, rna_node_id_1):
+                for d in G[rna_node_id_2][rna_node_id_1].values():
+                    if d['type'] == self.paralog:
+                        is_paralog_2_1 = True
+                        break
+            assert is_paralog_1_2 == is_paralog_2_1, "Paralog edge should be symmetric"
+            return is_paralog_1_2 and is_paralog_2_1
+        return False
     
     def are_orthologs(self, G, rna_node_id_1, rna_node_id_2, strain_1, strain_2):
         """ Check if there are ortholog edges between two RNA nodes of different strains """
@@ -191,25 +189,27 @@ class GraphUtils:
         assert strain_2 in self.strains, f"strain {strain_2} is not in the list of strains: {self.strains}"
         assert G.nodes[rna_node_id_1]['strain'] == strain_1
         assert G.nodes[rna_node_id_2]['strain'] == strain_2
-        assert strain_1 != strain_2, "Strains should be different for orthologs"
+
+        different_strains = strain_1 != strain_2
         both_srna = (G.nodes[rna_node_id_1]['type'] == self.srna) & (G.nodes[rna_node_id_2]['type'] == self.srna)
         both_mrna = (G.nodes[rna_node_id_2]['type'] == self.mrna) & (G.nodes[rna_node_id_2]['type'] == self.mrna)
-        assert both_srna or both_mrna
         
-        is_ortholog_1_2 = False
-        if G.has_edge(rna_node_id_1, rna_node_id_2):
-            for d in G[rna_node_id_1][rna_node_id_2].values():
-                if d['type'] == self.ortholog:
-                    is_ortholog_1_2 = True
-                    break
-        is_ortholog_2_1 = False
-        if G.has_edge(rna_node_id_2, rna_node_id_1):
-            for d in G[rna_node_id_2][rna_node_id_1].values():
-                if d['type'] == self.ortholog:
-                    is_ortholog_2_1 = True
-                    break
-        assert is_ortholog_1_2 == is_ortholog_2_1, "Ortholog edge should be symmetric"
-        return is_ortholog_1_2 and is_ortholog_2_1
+        if different_strains and (both_srna or both_mrna):
+            is_ortholog_1_2 = False
+            if G.has_edge(rna_node_id_1, rna_node_id_2):
+                for d in G[rna_node_id_1][rna_node_id_2].values():
+                    if d['type'] == self.ortholog:
+                        is_ortholog_1_2 = True
+                        break
+            is_ortholog_2_1 = False
+            if G.has_edge(rna_node_id_2, rna_node_id_1):
+                for d in G[rna_node_id_2][rna_node_id_1].values():
+                    if d['type'] == self.ortholog:
+                        is_ortholog_2_1 = True
+                        break
+            assert is_ortholog_1_2 == is_ortholog_2_1, "Ortholog edge should be symmetric"
+            return is_ortholog_1_2 and is_ortholog_2_1
+        return False
         
     def _create_3D_visualization(self, G):
         # nx_graph = nx.Graph()

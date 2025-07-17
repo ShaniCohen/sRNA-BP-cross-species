@@ -173,14 +173,14 @@ class GraphBuilder:
             # d = self.strains_data[strain]['unq_inter'][self.strains_data[strain]['unq_inter'][self.mrna_acc_col] == 'EG10001']
             
             mrna_with_interactions = [
-                n for n in mrna_nodes if any(self.U.is_target(self.G, p, n) for p in self.G.predecessors(n) if self.G.nodes[p]['type'] == self.U.srna)
+                mrna for mrna in mrna_nodes if any(self.U.is_target(self.G, p, mrna) for p in self.G.predecessors(mrna) if self.G.nodes[p]['type'] == self.U.srna)
             ]
             mrna_with_interactions_count = len(mrna_with_interactions)
 
             # mRNA nodes with interactions (sRNA --targets--> mRNA) and BP GO annotations (mRNA --annotation--> BP)
             mrna_bp_annotations = {
-                n: [neighbor for neighbor in self.G.neighbors(n) if self.G.nodes[neighbor]['type'] == self.U.bp and self.U.is_annotated(self.G, n, neighbor, self.U.bp)]
-                for n in mrna_with_interactions
+                mrna: [n for n in self.G.neighbors(mrna) if self.U.is_annotated(self.G, mrna, n, self.U.bp)]
+                for mrna in mrna_with_interactions
             }
 
             emb_type = self.ontology.emb_type_po2vec
@@ -208,7 +208,7 @@ class GraphBuilder:
 
             # Count sRNA nodes with interactions (sRNA-mRNA)
             srna_with_interactions = [
-                n for n in srna_nodes if any(self.U.is_target(self.G, n, neighbor) for neighbor in self.G.neighbors(n) if self.G.nodes[neighbor]['type'] == self.U.mrna)
+                srna for srna in srna_nodes if any(self.U.is_target(self.G, srna, neighbor) for neighbor in self.G.neighbors(n) if self.G.nodes[neighbor]['type'] == self.U.mrna)
             ]
             srna_with_interactions_count = len(srna_with_interactions)
 
@@ -259,9 +259,9 @@ class GraphBuilder:
         self.logger.info(f"Dumping mRNA with interactions and their BP annotations for {strain}")
         data = []
         for mrna in mrna_with_interactions:
-            bp_nodes = sorted([n for n in self.G.neighbors(mrna) if self.G.nodes[n]['type'] == self.U.bp and self.U.is_annotated(self.G, mrna, n, self.U.bp)])
-            bp_nodes_ips = sorted([n for n in self.G.neighbors(mrna) if self.G.nodes[n]['type'] == self.U.ips and self.U.is_annotated(self.G, mrna, n, self.U.ips)])
-            bp_nodes_eggnog = sorted([n for n in self.G.neighbors(mrna) if self.G.nodes[n]['type'] == self.U.eggnog and self.U.is_annotated(self.G, mrna, n, self.U.eggnog)])
+            bp_nodes = sorted([n for n in self.G.neighbors(mrna) if self.U.is_annotated(self.G, mrna, n, self.U.bp)])
+            bp_nodes_ips = sorted([n for n in self.G.neighbors(mrna) if self.U.is_annotated(self.G, mrna, n, self.U.ips)])
+            bp_nodes_eggnog = sorted([n for n in self.G.neighbors(mrna) if self.U.is_annotated(self.G, mrna, n, self.U.eggnog)])
 
             BP_ips_only = set(bp_nodes_ips) - set(bp_nodes_eggnog)
             BP_eggnog_only = set(bp_nodes_eggnog) - set(bp_nodes_ips)

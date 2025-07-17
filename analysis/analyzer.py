@@ -64,6 +64,16 @@ class Analyzer:
     
     def _analyze_rna_clustering(self):
         print("Analyzing RNA clustering...")
+        for strain in self.U.strains:
+            # Get mRNA nodes for the strain
+            mrna_nodes = [n for n, d in self.G.nodes(data=True) if d['type'] == self.U.mrna and d['strain'] == strain]
+            # Get sRNA nodes for the strain
+            srna_nodes = [n for n, d in self.G.nodes(data=True) if d['type'] == self.U.srna and d['strain'] == strain]
+
+            # Count sRNA nodes with paralogues (sRNA-sRNA)
+            srna_with_paralogues = [
+                srna for srna in srna_nodes if any(self.U.are_paralogs(self.G, srna, neighbor, strain) for neighbor in self.G.neighbors(srna))
+            ]
 
     def _generate_srna_bp_mapping(self) -> dict:
         """
@@ -94,7 +104,7 @@ class Analyzer:
                 srna_targets = [n for n in self.G.neighbors(srna) if self.G.nodes[n]['type'] == self.U.mrna and self.U.is_target(self.G, srna, n)]
                 for target in srna_targets:
                     # Find the biological processes associated with the target
-                    bp_nodes = [n for n in self.G.neighbors(target) if self.G.nodes[n]['type'] == self.U.bp and self.U.is_annotated(self.G, target, n, self.U.bp)]
+                    bp_nodes = [n for n in self.G.neighbors(target) if self.U.is_annotated(self.G, target, n, self.U.bp)]
                     if bp_nodes:
                         targets_to_bp[target] = bp_nodes
                     else:
