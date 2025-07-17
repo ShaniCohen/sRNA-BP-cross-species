@@ -260,8 +260,8 @@ class GraphBuilder:
         data = []
         for mrna in mrna_with_interactions:
             bp_nodes = sorted([n for n in self.G.neighbors(mrna) if self.U.is_annotated(self.G, mrna, n, self.U.bp)])
-            bp_nodes_ips = sorted([n for n in self.G.neighbors(mrna) if self.U.is_annotated(self.G, mrna, n, self.U.ips)])
-            bp_nodes_eggnog = sorted([n for n in self.G.neighbors(mrna) if self.U.is_annotated(self.G, mrna, n, self.U.eggnog)])
+            bp_nodes_ips = sorted([n for n in self.G.neighbors(mrna) if self.U.is_annotated(self.G, mrna, n, self.U.bp, self.U.ips)])
+            bp_nodes_eggnog = sorted([n for n in self.G.neighbors(mrna) if self.U.is_annotated(self.G, mrna, n, self.U.bp, self.U.eggnog)])
 
             BP_ips_only = set(bp_nodes_ips) - set(bp_nodes_eggnog)
             BP_eggnog_only = set(bp_nodes_eggnog) - set(bp_nodes_ips)

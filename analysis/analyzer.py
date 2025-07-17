@@ -72,8 +72,31 @@ class Analyzer:
 
             # Count sRNA nodes with paralogues (sRNA-sRNA)
             srna_with_paralogues = [
-                srna for srna in srna_nodes if any(self.U.are_paralogs(self.G, srna, neighbor, strain) for neighbor in self.G.neighbors(srna))
+                srna for srna in srna_nodes if any(self.U.are_paralogs(self.G, srna, n, strain) for n in self.G.neighbors(srna))
             ]
+
+            mrna_with_paralogues = [
+                mrna for mrna in mrna_nodes if any(self.U.are_paralogs(self.G, mrna, n, strain) for n in self.G.neighbors(mrna) if self.G.nodes[n]['type'] == self.U.mrna)
+            ]
+
+            for srna in srna_with_paralogues:
+                print()
+                print(f"Strain: {strain}")
+                print(f"sRNA: {srna}: {self.G.nodes[srna]}")
+                print("Paralogues: ")
+                for n in self.G.neighbors(srna): 
+                    if self.U.are_paralogs(self.G, srna, n, strain):
+                        print(f"  {n}: {self.G.nodes[n]}")
+            
+            # TODO: review K12 mRNAs: EG10085 (ascb), EG10114 (bglb)
+            for mrna in mrna_with_paralogues:
+                print()
+                print(f"Strain: {strain}")
+                print(f"mRNA: {mrna}: {self.G.nodes[mrna]}")
+                print("Paralogues: ")
+                for n in self.G.neighbors(mrna): 
+                    if self.G.nodes[n]['type'] == self.U.mrna and self.U.are_paralogs(self.G, mrna, n, strain):
+                        print(f"  {n}: {self.G.nodes[n]}")
 
     def _generate_srna_bp_mapping(self) -> dict:
         """
