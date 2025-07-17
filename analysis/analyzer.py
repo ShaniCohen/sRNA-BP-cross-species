@@ -1,8 +1,9 @@
-from typing import Tuple, Set
+from typing import Tuple, Set, List
 import pandas as pd
 import numpy as np
+from os.path import join
 from pathlib import Path
-from utils.general import read_df, write_df
+from utils.general import read_df, write_df, create_dir_if_not_exists
 import networkx as nx
 from pyvis.network import Network
 from scipy.stats import hypergeom, false_discovery_control
@@ -63,40 +64,43 @@ class Analyzer:
             self._dump_metadata(meta)
     
     def _analyze_rna_clustering(self):
-        print("Analyzing RNA clustering...")
+        self._analyze_paralogs()
+    
+    def _analyze_paralogs(self):
+        out_path = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "paralogs"))
         for strain in self.U.strains:
-            # Get mRNA nodes for the strain
-            mrna_nodes = [n for n, d in self.G.nodes(data=True) if d['type'] == self.U.mrna and d['strain'] == strain]
-            # Get sRNA nodes for the strain
-            srna_nodes = [n for n, d in self.G.nodes(data=True) if d['type'] == self.U.srna and d['strain'] == strain]
+            self.logger.info(f"Strain: {strain}")
+            for (rna_str, rna_type) in [('sRNA', self.U.srna), ('mRNA', self.U.mrna)]:
+                # all RNAs
+                rna_nodes =  [n for n, d in self.G.nodes(data=True) if d['type'] == rna_type and d['strain'] == strain]
+                # RNAs that are paralogs
+                rna_paralogs_clusters = []
+                for rna in rna_nodes:
+                    rna_paralogs = [n for n in self.G.neighbors(rna) if self.G.nodes[n]['type'] == rna_type and self.U.are_paralogs(self.G, rna, n, strain)]
+                    if rna_paralogs:
+                        cluster = set([rna] + rna_paralogs)
+                        if cluster not in rna_paralogs_clusters:
+                            rna_paralogs_clusters.append(cluster)
 
-            # Count sRNA nodes with paralogues (sRNA-sRNA)
-            srna_with_paralogues = [
-                srna for srna in srna_nodes if any(self.U.are_paralogs(self.G, srna, n, strain) for n in self.G.neighbors(srna))
-            ]
+                self.logger.info(
+                    f"  ----------------   \n"
+                    f"  Number of {rna_str}: {len(rna_nodes)} \n"
+                    f"  Number of {rna_str} with paralogs: {sum(len(c) for c in rna_paralogs_clusters)} \n"
+                    f"  Number of {rna_str} paralogs clusters: {len(rna_paralogs_clusters)}"
+                )
+                self._dump_paralogs(strain, rna_str, rna_paralogs_clusters, out_path) # K12 mRNAs:  EG11272 (too short)  |  EG10085 (ascb), EG10114 (bglb) different strands
+    
+    def _dump_paralogs(self, strain: str, rna_type: str, rna_paralogs_clusters: List[Set[str]], out_path):
+        out_file = join(out_path, f"{strain}_{rna_type}_paralogs_clusters.txt")
 
-            mrna_with_paralogues = [
-                mrna for mrna in mrna_nodes if any(self.U.are_paralogs(self.G, mrna, n, strain) for n in self.G.neighbors(mrna) if self.G.nodes[n]['type'] == self.U.mrna)
-            ]
-
-            for srna in srna_with_paralogues:
-                print()
-                print(f"Strain: {strain}")
-                print(f"sRNA: {srna}: {self.G.nodes[srna]}")
-                print("Paralogues: ")
-                for n in self.G.neighbors(srna): 
-                    if self.U.are_paralogs(self.G, srna, n, strain):
-                        print(f"  {n}: {self.G.nodes[n]}")
-            
-            # TODO: review K12 mRNAs: EG10085 (ascb), EG10114 (bglb)
-            for mrna in mrna_with_paralogues:
-                print()
-                print(f"Strain: {strain}")
-                print(f"mRNA: {mrna}: {self.G.nodes[mrna]}")
-                print("Paralogues: ")
-                for n in self.G.neighbors(mrna): 
-                    if self.G.nodes[n]['type'] == self.U.mrna and self.U.are_paralogs(self.G, mrna, n, strain):
-                        print(f"  {n}: {self.G.nodes[n]}")
+        with open(out_file, 'w', encoding='utf-8') as f:
+            f.write(f"Strain: {strain}\n")
+            f.write(f"{rna_type} paralogs:\n")
+            for cluster in rna_paralogs_clusters:
+                f.write("\n")
+                for rna_node_id in cluster:
+                    node_info = self.G.nodes[rna_node_id]
+                    f.write(f"  {rna_node_id}: {json.dumps(node_info, ensure_ascii=False)}\n")
 
     def _generate_srna_bp_mapping(self) -> dict:
         """
