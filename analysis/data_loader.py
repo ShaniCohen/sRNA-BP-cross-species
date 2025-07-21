@@ -45,7 +45,13 @@ class DataLoader:
         self.strains_data = {}
         self.srna_acc_col = 'sRNA_accession_id'
         self.mrna_acc_col = 'mRNA_accession_id'
+        
         self.clustering_data = {}
+        self.srna_seq_type = 'sRNA'
+        self.protein_seq_type = 'protein'
+        self.clutering_min_seq_ratio_srna = 0.5  # similarity 
+        self.clutering_min_similarity_ratio_srna = 0.5
+        self.clutering_min_seq_ratio_protein = 0.8
     
     def get_strains(self) -> List[str]:
         return self.strains
@@ -124,7 +130,7 @@ class DataLoader:
         salmo_unq_inter, salmo_sum, salmo_srna, salmo_mrna = \
             ap.analyze_salmonella_inter(mrna_data=salmonella_mrna, srna_data=salmonella_srna, inter_data=salmonella_inter)
         
-		# TODO: check sRNA SL1344_0808
+        # TODO: check sRNA SL1344_0808
         # 3.1 - update info
         if self.salmonella_nm not in self.strains_data:
             self.strains_data[self.salmonella_nm] = {}
@@ -210,7 +216,7 @@ class DataLoader:
         interproscan_annot, i_header_col = ap_annot.preprocess_interproscan_annot(epec_annot_interproscan)
         eggnog_annot, e_header_col = ap_annot.load_and_preprocess_eggnog_annot(eggnog_annot_file)
         
-		# 2.1 - update info
+        # 2.1 - update info
         if self.ecoli_epec_nm not in self.strains_data:
             self.strains_data[self.ecoli_epec_nm] = {}
         self.strains_data[self.ecoli_epec_nm].update({
@@ -232,7 +238,7 @@ class DataLoader:
         interproscan_annot[i_header_col] = interproscan_annot[i_header_col].apply(_lambda)
         eggnog_annot[e_header_col] = eggnog_annot[e_header_col].apply(_lambda)
         
-		# 3.1 - update info
+        # 3.1 - update info
         if self.salmonella_nm not in self.strains_data:
             self.strains_data[self.salmonella_nm] = {}
         self.strains_data[self.salmonella_nm].update({
@@ -257,14 +263,14 @@ class DataLoader:
 
     def _load_clustering_data(self):
         # 1 - load sRNA and mRNA clustering
-        srna_clstr_dict = self._load_bacteria_pairs_clustering(seq_type='sRNA')
-        mrna_clstr_dict = self._load_bacteria_pairs_clustering(seq_type='protein')
+        srna_clstr_dict = self._load_n_preprocess_bacteria_pairs_clustering(seq_type=self.srna_seq_type)
+        mrna_clstr_dict = self._load_n_preprocess_bacteria_pairs_clustering(seq_type=self.protein_seq_type)
 
         # 2 - save clustering
         self.clustering_data['srna'] = srna_clstr_dict
         self.clustering_data['mrna'] = mrna_clstr_dict
 
-    def _load_bacteria_pairs_clustering(self, seq_type: str) -> pd.DataFrame:
+    def _load_n_preprocess_bacteria_pairs_clustering(self, seq_type: str) -> pd.DataFrame:
         _dir = self.clustering_config[f'{seq_type.lower()}_dir']
         dir_path = join(self.config['clustering_dir'], seq_type, _dir)
         
@@ -277,29 +283,29 @@ class DataLoader:
             file_2_to_1 = [f for f in os.listdir(dir_path) if re.match(f"(.*?){b2}-{b1}.clstr$", f)][0]
 
             # 2 - load and parse the clustering files
-            clstr_df_1_to_2 = self._load_n_parse_clstr_file(clstr_file_path=join(dir_path, file_1_to_2))
-            clstr_df_2_to_1 = self._load_n_parse_clstr_file(clstr_file_path=join(dir_path, file_2_to_1))
+            clstr_df_1_to_2 = self._load_n_parse_clstr_file(clstr_file_path=join(dir_path, file_1_to_2), seq_type=seq_type)
+            clstr_df_2_to_1 = self._load_n_parse_clstr_file(clstr_file_path=join(dir_path, file_2_to_1), seq_type=seq_type)
+            
+            # 3 - filter invalid matches from the clustering data 
+            clstr_df_1_to_2 = self._filter_invalid_matches(clstr_df_1_to_2, f"{b1} to {b2}", seq_type)
+            clstr_df_2_to_1 = self._filter_invalid_matches(clstr_df_2_to_1, f"{b2} to {b1}", seq_type)
 
-            # 3 - add to the pairs_clustering dictionary
+            # 4 - add to the pairs_clustering dictionary
             pairs_clustering[(b1, b2)] = clstr_df_1_to_2
             pairs_clustering[(b2, b1)] = clstr_df_2_to_1
 
         return pairs_clustering
 
-    def _load_n_parse_clstr_file(self, clstr_file_path: str) -> pd.DataFrame:
-        col_cluster_id = 'cluster_id'
-        col_counter = 'counter'
-        col_seq_length = 'seq_length'
+    def _load_n_parse_clstr_file(self, clstr_file_path: str, seq_type: str, col_cluster_id: str = 'cluster_id', col_name: str = 'rna_name',
+                                 col_seq_length: str = 'seq_length', col_is_rep: str = 'is_representative', col_similarity_score: str = 'similarity_score') -> pd.DataFrame:
+        col_counter = 'counter'       
         col_strain_str = 'strain_str'
         col_acc = 'rna_accession_id'
         col_locus = 'rna_locus_tag'
-        col_name = 'rna_name'
-        col_is_rep = 'is_representative'
         col_seq_location = 'seq_location'
         col_rep_location = 'rep_location'
         col_strand = 'strand'
-        col_match_score = 'match_score'
-        out_cols = [col_cluster_id, col_counter, col_strain_str, col_name, col_is_rep, col_seq_length, col_acc, col_locus, col_seq_location, col_rep_location, col_strand, col_match_score]
+        out_cols = [col_cluster_id, col_counter, col_strain_str, col_name, col_is_rep, col_seq_length, col_acc, col_locus, col_similarity_score, col_seq_location, col_rep_location]
 
         # 1 - bacterial names mapping
         _map = {
@@ -329,17 +335,64 @@ class DataLoader:
         clstr_df[[col_strain_str, col_acc, col_locus, col_name]] = pd.DataFrame(list(map(lambda x: x.split('...')[0].split('>')[1].split('|'), clstr_df['header'])))
         clstr_df[col_strain_str] =  clstr_df[col_strain_str].apply(lambda x: _map[x])
         clstr_df[col_is_rep] =  clstr_df[col_is_rep].apply(lambda x: True if x=='*' else False)
-        clstr_df[['location', col_strand, 'match_score_str']] =  pd.DataFrame(list(map(lambda x: x.split('/') if pd.notnull(x) else [None, None, None], clstr_df['footer'])))
+        
+        if seq_type == self.srna_seq_type:
+            clstr_df[['location', col_strand, 'similarity_score_str']] =  pd.DataFrame(list(map(lambda x: x.split('/') if pd.notnull(x) else [None, None, None], clstr_df['footer'])))
+            out_cols = out_cols + [col_strand]
+        elif seq_type == self.protein_seq_type:
+            clstr_df[['location', 'similarity_score_str']] =  pd.DataFrame(list(map(lambda x: x.split('/') if pd.notnull(x) else [None, None], clstr_df['footer'])))
+        else:
+            raise ValueError(f"seq_type {seq_type} is not supported")
+        
         clstr_df['location'] =  pd.DataFrame(list(map(lambda x: re.findall(f"(.*?):(.*?):(.*?):(.*?)$", x)[0] if pd.notnull(x) else x, clstr_df['location'])))
         clstr_df[col_seq_location] =  pd.DataFrame(list(map(lambda x: (int(x[0]), int(x[1])) if pd.notnull(x) else x, clstr_df['location'])))
         clstr_df[col_rep_location] =  pd.DataFrame(list(map(lambda x: (int(x[2]), int(x[3])) if pd.notnull(x) else x, clstr_df['location'])))
-        clstr_df[col_match_score] =  pd.DataFrame(list(map(lambda x: float(re.findall(f"(.*?)%$", x)[0]) if pd.notnull(x) else x, clstr_df['match_score_str'])))
+        clstr_df[col_similarity_score] =  pd.DataFrame(list(map(lambda x: float(re.findall(f"(.*?)%$", x)[0]) if pd.notnull(x) else x, clstr_df['similarity_score_str'])))
         clstr_df = clstr_df[out_cols]
 
         # patch to adjust salmonella's accession id
         clstr_df[col_acc] = list(map(lambda strain, acc, locus: locus if strain==self.salmonella_nm else acc, clstr_df[col_strain_str], clstr_df[col_acc], clstr_df[col_locus]))
         
         return clstr_df
+    
+    def _filter_invalid_matches(self, clstr_df: pd.DataFrame, clstr_nm: str, seq_type: str, debug: bool = False,
+                                col_cluster_id: str = 'cluster_id', col_name: str = 'rna_name', col_seq_length: str = 'seq_length', col_is_rep: str = 'is_representative', col_similarity_score: str = 'similarity_score') -> pd.DataFrame:
+        """Filter invalid matches from the clustering df.
+        Keep representatives. For matches, keep only if sequence length ratio (match/rep) >= 0.5.
+        Returns filtered DataFrame.
+        """
+        filtered_rows = []
+        for cluster_id, group in clstr_df.groupby(col_cluster_id):
+            # Find representative row
+            rep_row = group[group[col_is_rep] == True]
+            rep_row = rep_row.iloc[0]
+            rep_seq_length = float(rep_row[col_seq_length])
+            # Always keep representative
+            filtered_rows.append(rep_row)
+            # Check matches
+            match_rows = group[group[col_is_rep] == False]
+            for _, match_row in match_rows.iterrows():
+                match_seq_length = float(match_row[col_seq_length])
+                if self._is_valid_match(seq_type, match_seq_length, rep_seq_length, match_row[col_similarity_score]):
+                    filtered_rows.append(match_row)
+                elif debug:
+                    prfx = "**** RECHECK **** " if match_row[col_name].lower() == rep_row[col_name].lower() else ""
+                    self.logger.debug(f"{prfx}{clstr_nm}: invalid match (seq ratio: {round(match_seq_length / rep_seq_length, 2)}, similarity: {match_row[col_similarity_score]}) {match_row[col_name]} to {rep_row[col_name]} in cluster id {cluster_id}")
+            
+        filtered_df = pd.DataFrame(filtered_rows, columns=clstr_df.columns)
+        self.logger.info(f"{seq_type} clustering {clstr_nm} ---> filtered {len(clstr_df) - len(filtered_df)} invalid matches\n")
+        return filtered_df
+    
+    def _is_valid_match(self, seq_type: str, match_seq_length: float, rep_seq_length: float, similarity_score: float):
+        if seq_type == self.srna_seq_type:
+            res = match_seq_length / rep_seq_length >= 0.5  
+        elif seq_type == self.protein_seq_type:
+            valid_1 = (match_seq_length / rep_seq_length >= 0.5) and similarity_score >= 75
+            valid_2 = (match_seq_length / rep_seq_length >= 0.75) and similarity_score >= 50
+            res = valid_1 or valid_2
+        else:
+            raise ValueError(f"seq_type {seq_type} is not supported")
+        return res
     
     # def compute_unique_mrna_names(self) -> pd.DataFrame:
     #     """Compute the number of unique mRNA_name for each value of signature_library in interproscan_annot."""
