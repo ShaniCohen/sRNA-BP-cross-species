@@ -40,7 +40,11 @@ class DataLoader:
         self.ecoli_k12_nm = 'ecoli_k12'    
         self.ecoli_epec_nm = 'ecoli_epec' 
         self.salmonella_nm = 'salmonella'
-        self.strains = [self.ecoli_k12_nm, self.ecoli_epec_nm, self.salmonella_nm]
+        self.vibrio_nm = 'vibrio'
+        self.klebsiella_nm = 'klebsiella'
+        self.pseudomonas_nm = 'pseudomonas'
+
+        self.strains = [self.ecoli_k12_nm, self.ecoli_epec_nm, self.salmonella_nm, self.vibrio_nm, self.klebsiella_nm, self.pseudomonas_nm]
         
         self.strains_data = {}
         self.srna_acc_col = 'sRNA_accession_id'
@@ -49,9 +53,6 @@ class DataLoader:
         self.clustering_data = {}
         self.srna_seq_type = 'sRNA'
         self.protein_seq_type = 'protein'
-        self.clutering_min_seq_ratio_srna = 0.5  # similarity 
-        self.clutering_min_similarity_ratio_srna = 0.5
-        self.clutering_min_seq_ratio_protein = 0.8
     
     def get_strains(self) -> List[str]:
         return self.strains
@@ -94,7 +95,7 @@ class DataLoader:
             'all_inter_mrna_acc_col': 'mRNA_accession_id_Eco'
         })
 
-        # 2 - Escherichia coli EPEC E2348/69
+        # 2 - Escherichia coli EPEC E2348/69  (Mizrahi 2021)
         epec_dir = self.config['epec_dir']
         epec_mrna = read_df(file_path=join(self.config['rna_dir'], epec_dir, "mizrahi_epec_all_mRNA_molecules.csv"))
         epec_srna = read_df(file_path=join(self.config['rna_dir'], epec_dir, "mizrahi_epec_all_sRNA_molecules.csv"))
@@ -118,7 +119,7 @@ class DataLoader:
             'all_inter_mrna_acc_col': 'mRNA_accession_id_Eco'
         })
 
-        # 3 - Salmonella enterica serovar Typhimurium strain SL1344,  Genome: NC_016810.1  (Matera_2022)
+        # 3 - Salmonella enterica serovar Typhimurium strain SL1344,  Genome: NC_016810.1  (Matera 2022)
         salmonella_dir = self.config['salmonella_dir']
         salmonella_mrna = read_df(file_path=join(self.config['rna_dir'], salmonella_dir, "matera_salmonella_all_mRNA_molecules.csv"))
         salmonella_srna = read_df(file_path=join(self.config['rna_dir'], salmonella_dir, "matera_salmonella_all_sRNA_molecules.csv"))
@@ -146,9 +147,24 @@ class DataLoader:
         })
 
         # 4 - Vibrio cholerae, NCBI Genomes:  NC_002505.1 and NC_002506.1  (Huber 2022)
+        vibrio_dir = self.config['vibrio_dir']
+        vibrio_mrna = read_df(file_path=join(self.config['rna_dir'], vibrio_dir, "huber_vibrio_all_mRNA_molecules.csv"))
+        vibrio_srna = read_df(file_path=join(self.config['rna_dir'], vibrio_dir, "huber_vibrio_all_sRNA_molecules.csv"))
+        vibrio_inter = read_df(file_path=join(self.config['interactions_dir'], vibrio_dir, "huber_vibrio_interactions.csv"))
 
-        # 5 - Klebsiella pneumoniae str. SGH10; KL1, ST23  (Goh_2024)
+        # 5 - Klebsiella pneumoniae str. SGH10; KL1, ST23  (Goh 2024)
+        klebsiella_dir = self.config['klebsiella_dir']
+        klebsiella_mrna = read_df(file_path=join(self.config['rna_dir'], klebsiella_dir, "goh_klebsiella_all_mRNA_molecules.csv"))
+        klebsiella_srna = read_df(file_path=join(self.config['rna_dir'], klebsiella_dir, "goh_klebsiella_all_sRNA_molecules.csv"))
+        klebsiella_inter = read_df(file_path=join(self.config['interactions_dir'], klebsiella_dir, "goh_klebsiella_interactions.csv"))
 
+        # 6 - Pseudomonas aeruginosa  (Gebhardt 2023)
+        pseudomonas_dir = self.config['pseudomonas_dir']
+        pseudomonas_mrna = read_df(file_path=join(self.config['rna_dir'], pseudomonas_dir, "gebhardt_pseudomonas_all_mRNA_molecules.csv"))
+        pseudomonas_srna = read_df(file_path=join(self.config['rna_dir'], pseudomonas_dir, "gebhardt_pseudomonas_all_sRNA_molecules.csv"))
+        pseudomonas_inter = read_df(file_path=join(self.config['interactions_dir'], pseudomonas_dir, "gebhardt_pseudomonas_interactions.csv"))
+
+        print()
 
     def _align_rna_and_inter_data(self) -> Dict[str, Dict[str, pd.DataFrame]]:
         self._align_accession_ids_between_rna_and_inter()
