@@ -704,7 +704,7 @@ def analyze_vibrio_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, inter
 def analyze_klebsiella_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, inter_data: pd.DataFrame) -> \
         Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
-    Vibrio cholerae, NCBI Genomes:  NC_002505.1 and NC_002506.1
+    Klebsiella pneumoniae str. SGH10; KL1, ST23
 
     :param mrna_data:
     :param srna_data:
@@ -745,14 +745,14 @@ def analyze_klebsiella_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, i
     assert len(mrna_data) == len(set(mrna_data['mRNA_accession_id']))
 
     # --------------  interactions  --------------
-    logger.info(f"FINAL - Vibrio cholerae - interactions: {len(inter_data)}, "
+    logger.info(f"FINAL - Klebsiella pneumoniae - interactions: {len(inter_data)}, "
                 f"unique interactions: {len(inter_data.groupby([srna_acc_col, mrna_acc_col]).count())}")
     # -------------- complete cols
     inter_data['count'] = 1
 
     # -------------- unique interactions intersection
     strain_col = 'strain_name'
-    inter_data[strain_col] = "Vibrio cholerae"
+    inter_data[strain_col] = "Klebsiella pneumoniae str. SGH10; KL1, ST23"
     g_cols = [strain_col, srna_acc_col, srna_nm_col, mrna_acc_col, mrna_nm_col, 'interaction_label']
     unq_inter = inter_data.copy()[g_cols + ['count']].groupby(g_cols, as_index=False).count().reset_index(drop=True)
     assert list(set(inter_data[strain_col])) == list(set(unq_inter[strain_col]))
@@ -764,7 +764,7 @@ def analyze_klebsiella_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, i
     # -------------- summary
     strain_col = 'strain_name'
     df_sum = unq_inter.groupby([strain_col]).agg(
-        dataset=('count', lambda x: 'Huber 2022'),
+        dataset=('count', lambda x: 'Goh 2024'),
         unique_sRNAs=(srna_acc_col, lambda x: len(set(x))),
         unique_targets=(mrna_acc_col, lambda x: len(set(x))),
         unq_pos_inter=('interaction_label', 'sum'),
@@ -870,11 +870,9 @@ def preprocess_ecoli_k12_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame,
     logger.info(f"filtered out {sum(mask_negative_interactions)} negative interactions")
 
     # --------------  assert  --------------
-    assert check_interacting_rna_names_included_in_all_rnas(inter_df=inter_data,
-                                                            inter_rna_nm_col='sRNA',
+    assert check_interacting_rna_names_included_in_all_rnas(inter_df=inter_data, inter_rna_nm_col='sRNA',
                                                             all_rna=srna_data, all_rna_nm_col='EcoCyc_rna_name')
-    assert check_interacting_rna_names_included_in_all_rnas(inter_df=inter_data,
-                                                            inter_rna_nm_col='mRNA',
+    assert check_interacting_rna_names_included_in_all_rnas(inter_df=inter_data, inter_rna_nm_col='mRNA',
                                                             all_rna=mrna_data, all_rna_nm_col='EcoCyc_rna_name')
 
     return mrna_data, srna_data, inter_data
@@ -930,11 +928,9 @@ def preprocess_ecoli_epec_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame
     inter_data['dir'] = inter_data['Data_source']
 
     # --------------  assert  --------------
-    assert check_interacting_rna_names_included_in_all_rnas(inter_df=inter_data,
-                                                            inter_rna_nm_col='sRNA',
+    assert check_interacting_rna_names_included_in_all_rnas(inter_df=inter_data, inter_rna_nm_col='sRNA',
                                                             all_rna=srna_data, all_rna_nm_col='sRNA_name')
-    assert check_interacting_rna_names_included_in_all_rnas(inter_df=inter_data,
-                                                            inter_rna_nm_col='mRNA',
+    assert check_interacting_rna_names_included_in_all_rnas(inter_df=inter_data, inter_rna_nm_col='mRNA',
                                                             all_rna=mrna_data, all_rna_nm_col='mRNA_name')
 
     return mrna_data, srna_data, inter_data
@@ -991,11 +987,9 @@ def preprocess_salmonella_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame
     inter_data['interaction_label'] = inter_data['Interaction_label'].apply(lambda x: 1 if x == 'interaction' else 0)
 
     # --------------  assert  --------------
-    assert check_interacting_rna_names_included_in_all_rnas(inter_df=inter_data,
-                                                            inter_rna_nm_col='sRNA',
+    assert check_interacting_rna_names_included_in_all_rnas(inter_df=inter_data, inter_rna_nm_col='sRNA',
                                                             all_rna=srna_data, all_rna_nm_col='sRNA_name')
-    assert check_interacting_rna_names_included_in_all_rnas(inter_df=inter_data,
-                                                            inter_rna_nm_col='mRNA',
+    assert check_interacting_rna_names_included_in_all_rnas(inter_df=inter_data, inter_rna_nm_col='mRNA',
                                                             all_rna=mrna_data, all_rna_nm_col='mRNA_name')
     return mrna_data, srna_data, inter_data
 
@@ -1053,11 +1047,9 @@ def preprocess_vibrio_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, in
     inter_data['interaction_label'] = inter_data['Interaction_label'].apply(lambda x: 1 if x == 'interaction' else 0)
 
     # --------------  assert  --------------
-    assert check_interacting_rna_names_included_in_all_rnas(inter_df=inter_data,
-                                                            inter_rna_nm_col='sRNA_name',
+    assert check_interacting_rna_names_included_in_all_rnas(inter_df=inter_data, inter_rna_nm_col='sRNA_name',
                                                             all_rna=srna_data, all_rna_nm_col='sRNA_name')
-    assert check_interacting_rna_names_included_in_all_rnas(inter_df=inter_data,
-                                                            inter_rna_nm_col='mRNA_name',
+    assert check_interacting_rna_names_included_in_all_rnas(inter_df=inter_data, inter_rna_nm_col='mRNA_name',
                                                             all_rna=mrna_data, all_rna_nm_col='mRNA_name')
     assert check_accession_ids_not_nulls(df=srna_data, acc_cols=['sRNA_accession_id'])
     assert check_accession_ids_not_nulls(df=mrna_data, acc_cols=['mRNA_accession_id'])
@@ -1086,9 +1078,6 @@ def preprocess_klebsiella_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame
     mrna_data['mRNA_locus_tag'] = mrna_data['mRNA_locus_tag'].apply(lambda x: x.lower())
     mrna_data['mRNA_name'] = mrna_data['mRNA_name'].apply(lambda x: x.lower())
 
-    # 2 - filter out riboswitches
-    # mrna_data = mrna_data[mrna_data['mRNA_name'].apply(lambda x: "riboswitch" not in x)].reset_index(drop=True)
-
     # --------------  all sRNAs  --------------
     # 1 - lower
     srna_data['sRNA_accession_id'] = srna_data['sRNA_accession_id'].apply(lambda x: x.lower())
@@ -1096,34 +1085,28 @@ def preprocess_klebsiella_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame
     srna_data['sRNA_name'] = srna_data['sRNA_name'].apply(lambda x: x.lower())
 
     # --------------  interactions  --------------
-    # 1 - filter out invalid mRNAs
-    invalid_mrna_nms = ['QrrT']
-    inter_data = inter_data[~inter_data['mRNA_name'].isin(invalid_mrna_nms)].reset_index(drop=True)
-    
-    # 2 - lower
+    # 1 - lower
     inter_data['mRNA_accession_id'] = inter_data['mRNA_accession_id'].apply(lambda x: x.lower())
     inter_data['mRNA_name'] = inter_data['mRNA_name'].apply(lambda x: x.lower())
     inter_data['sRNA_accession_id'] = inter_data['sRNA_accession_id'].apply(lambda x: x.lower())
     inter_data['sRNA_name'] = inter_data['sRNA_name'].apply(lambda x: x.lower())
+    
+    # 2 - PATCH: fix sRNA and mRNA accession ids in the interactions table
+    srna_map = dict(zip(srna_data['sRNA_locus_tag'], srna_data['sRNA_accession_id']))
+    inter_data['sRNA_accession_id'] = inter_data['sRNA_accession_id'].apply(lambda x: srna_map[x])
 
-    # 3 - PATCH: fill in mRNA names in the interactions table
-    mrna_map = dict(zip(mrna_data['mRNA_accession_id'], mrna_data['mRNA_name']))
-    inter_data['mRNA_name'] = inter_data['mRNA_accession_id'].apply(lambda x: mrna_map[x])
+    mrna_map = dict(zip(mrna_data['mRNA_locus_tag'], mrna_data['mRNA_accession_id']))
+    inter_data['mRNA_accession_id'] = inter_data['mRNA_accession_id'].apply(lambda x: mrna_map[x])
 
-    # 4 - filter out riboswitches
-    # inter_data = inter_data[inter_data['mRNA_name'].apply(lambda x: "riboswitch" not in x)].reset_index(drop=True)
-
-    # 5 - save 'dir' and 'file_name' columns
+    # 3 - save 'dir' and 'file_name' columns
     inter_data['dir'] = inter_data['Data_source']
     inter_data['file_name'] = inter_data['Experiment']
     inter_data['interaction_label'] = inter_data['Interaction_label'].apply(lambda x: 1 if x == 'interaction' else 0)
 
     # --------------  assert  --------------
-    assert check_interacting_rna_names_included_in_all_rnas(inter_df=inter_data,
-                                                            inter_rna_nm_col='sRNA_name',
+    assert check_interacting_rna_names_included_in_all_rnas(inter_df=inter_data, inter_rna_nm_col='sRNA_name',
                                                             all_rna=srna_data, all_rna_nm_col='sRNA_name')
-    assert check_interacting_rna_names_included_in_all_rnas(inter_df=inter_data,
-                                                            inter_rna_nm_col='mRNA_name',
+    assert check_interacting_rna_names_included_in_all_rnas(inter_df=inter_data, inter_rna_nm_col='mRNA_name',
                                                             all_rna=mrna_data, all_rna_nm_col='mRNA_name')
     assert check_accession_ids_not_nulls(df=srna_data, acc_cols=['sRNA_accession_id'])
     assert check_accession_ids_not_nulls(df=mrna_data, acc_cols=['mRNA_accession_id'])
