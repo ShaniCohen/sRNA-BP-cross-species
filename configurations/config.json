@@ -8,6 +8,7 @@
   "data_loader": {
     "interactions_dir": "interactions",
     "rna_dir": "rna",
+    "proteins_dir": "proteins",
     "go_annotations_dir": "go_annotations",
     "clustering_dir": "clustering",
     

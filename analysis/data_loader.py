@@ -2,6 +2,7 @@ from typing import Dict, List
 import pandas as pd
 import itertools
 import numpy as np
+from Bio import SeqIO
 import re
 from os.path import join
 from pathlib import Path
@@ -29,6 +30,15 @@ def load_json(file_path):
         data = json.load(f)
     return data
 
+def load_fasta(file_path) -> pd.DataFrame:
+    records = []
+    for rec in SeqIO.parse(file_path, "fasta"):
+        records.append({
+            'id': rec.id,
+            'seq': str(rec.seq),
+            'description': rec.description
+        })
+    return pd.DataFrame(records)
 
 class DataLoader:
     def __init__(self, config, logger):
@@ -63,10 +73,12 @@ class DataLoader:
         # 1 - RNA and interactions data
         self._load_rna_and_inter_data()
         self._align_rna_and_inter_data()
-        # 2 - GO annotations
+        # 2 - proteins
+        self._load_proteins()
+        # 3 - GO annotations
         self._load_annotations()
         self._match_annotations_to_mrnas()
-        # 3 - clustering
+        # 4 - clustering
         self._load_clustering_data()
     
     def _load_rna_and_inter_data(self) -> Dict[str, Dict[str, pd.DataFrame]]:
@@ -256,10 +268,45 @@ class DataLoader:
             data['all_mrna_locus_col'] = 'mRNA_locus_tag'
             data['all_mrna_name_col'] = 'mRNA_name'
             data['all_mrna_name_syn_col'] = 'mRNA_name_synonyms'
+         
+    def _load_proteins(self) -> Dict[str, Dict[str, pd.DataFrame]]:
+        # ---------------------------   per dataset preprocessing   ---------------------------
+        # 1 - Escherichia coli K12 MG1655
+        k12_proteins = load_fasta(file_path=join(self.config['proteins_dir'], f"{self.ecoli_k12_nm}_proteins.fasta"))
+
+        k12_mrna, k12_srna, k12_inter = \
+            ap.preprocess_ecoli_k12_inter(mrna_data=k12_mrna, srna_data=k12_srna, inter_data=k12_inter)
+        k12_unq_inter, k12_sum, k12_srna, k12_mrna = ap.analyze_ecoli_k12_inter(mrna_data=k12_mrna, srna_data=k12_srna, inter_data=k12_inter)
+        # 1.1 - update info
+        if self.ecoli_k12_nm not in self.strains_data:
+            self.strains_data[self.ecoli_k12_nm] = {}
+        self.strains_data[self.ecoli_k12_nm].update({
+            'all_mrna': k12_mrna,
+            'all_srna': k12_srna,
+            'unq_inter': k12_unq_inter,
+            'all_inter': k12_inter,
+            'all_srna_acc_col': 'EcoCyc_accession_id',
+            'all_mrna_acc_col': 'EcoCyc_accession_id',
+            'all_inter_srna_acc_col': 'sRNA_accession_id_Eco',
+            'all_inter_mrna_acc_col': 'mRNA_accession_id_Eco'
+        })
+
+        # 2 - Escherichia coli EPEC
+
+        # 3 - Salmonella enterica
+
+        # 4 - Vibrio cholerae
+
+        # 5 - Klebsiella pneumoniae
+
+        # 6 - Pseudomonas aeruginosa
+
+
+        print()
     
     def _load_annotations(self) -> Dict[str, Dict[str, pd.DataFrame]]:
         # ---------------------------   per dataset preprocessing   ---------------------------
-        # 1 - Escherichia coli K12 MG1655
+        # 1 - Escherichia coli K12
         k12_dir = self.config['k12_dir']
         k12_annot_uniport = load_goa(file_path=join(self.config['go_annotations_dir'], k12_dir, 'e_coli_MG1655.goa'))
         k12_annot_map_uniport_to_locus = read_df(file_path=join(self.config['go_annotations_dir'], k12_dir, 'ECOLI_83333_idmapping.dat'))
@@ -279,7 +326,7 @@ class DataLoader:
             "curated_locus_col": c_locus_col
         })
         
-        # 2 - Escherichia coli EPEC E2348/69
+        # 2 - Escherichia coli EPEC
         epec_dir = self.config['epec_dir']
         epec_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], epec_dir, 'InterProScan', 'EPEC_proteins.fasta.json'))
         eggnog_annot_file=join(self.config['go_annotations_dir'], epec_dir, 'EggNog', 'EPEC.annotations')
@@ -297,7 +344,7 @@ class DataLoader:
             "eggnog_header_col": e_header_col
         })
     
-        # 3 - Salmonella enterica serovar Typhimurium strain SL1344,  Genome: NC_016810.1  (Matera_2022)
+        # 3 - Salmonella enterica
         salmonella_dir = self.config['salmonella_dir']
         salmonella_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], salmonella_dir, 'InterProScan', 'Salmonella_proteins.fasta.json'))
         eggnog_annot_file=join(self.config['go_annotations_dir'], salmonella_dir, 'EggNog', 'Salmonella.annotations')
@@ -319,9 +366,11 @@ class DataLoader:
             "eggnog_header_col": e_header_col
         })
     
-        # 4 - Vibrio cholerae, NCBI Genomes:  NC_002505.1 and NC_002506.1  (Huber 2022)
+        # 4 - Vibrio cholerae
 
-        # 5 - Klebsiella pneumoniae str. SGH10; KL1, ST23  (Goh_2024)
+        # 5 - Klebsiella pneumoniae
+
+        # 6 - Pseudomonas aeruginosa
 
     def _match_annotations_to_mrnas(self):
         for strain, data in self.strains_data.items():
