@@ -144,7 +144,7 @@ class DataLoader:
             'all_inter_mrna_acc_col': 'mRNA_accession_id'
         })
 
-        # 4 - Vibrio cholerae, NCBI Genomes:  NC_002505.1 and NC_002506.1  (Huber 2022)
+        # 4 - Vibrio cholerae O1 biovar El Tor str. N16961 (NC_002505.1 and NC_002506.1)  (Huber 2022)
         vibrio_dir = self.config['vibrio_dir']
         vibrio_mrna = read_df(file_path=join(self.config['rna_dir'], vibrio_dir, "huber_vibrio_all_mRNA_molecules.csv"))
         vibrio_srna = read_df(file_path=join(self.config['rna_dir'], vibrio_dir, "huber_vibrio_all_sRNA_molecules.csv"))
@@ -194,11 +194,30 @@ class DataLoader:
             'all_inter_mrna_acc_col': 'mRNA_accession_id'
         })
 
-        # 6 - Pseudomonas aeruginosa  (Gebhardt 2023)
+        # 6 - Pseudomonas aeruginosa PAO1  (Gebhardt 2023)
         pseudomonas_dir = self.config['pseudomonas_dir']
         pseudomonas_mrna = read_df(file_path=join(self.config['rna_dir'], pseudomonas_dir, "gebhardt_pseudomonas_all_mRNA_molecules.csv"))
         pseudomonas_srna = read_df(file_path=join(self.config['rna_dir'], pseudomonas_dir, "gebhardt_pseudomonas_all_sRNA_molecules.csv"))
         pseudomonas_inter = read_df(file_path=join(self.config['interactions_dir'], pseudomonas_dir, "gebhardt_pseudomonas_interactions.csv"))
+
+        pseudomonas_mrna, pseudomonas_srna, pseudomonas_inter = \
+            ap.preprocess_pseudomonas_inter(mrna_data=pseudomonas_mrna, srna_data=pseudomonas_srna, inter_data=pseudomonas_inter)
+        pseudomonas_unq_inter, pseudomonas_sum, pseudomonas_srna, pseudomonas_mrna = \
+            ap.analyze_pseudomonas_inter(mrna_data=pseudomonas_mrna, srna_data=pseudomonas_srna, inter_data=pseudomonas_inter)
+        
+        # 4.1 - update info
+        if self.pseudomonas_nm not in self.strains_data:
+            self.strains_data[self.pseudomonas_nm] = {}
+        self.strains_data[self.pseudomonas_nm].update({
+            'all_mrna': pseudomonas_mrna,
+            'all_srna': pseudomonas_srna,
+            'unq_inter': pseudomonas_unq_inter,
+            'all_inter': pseudomonas_inter,
+            'all_srna_acc_col': 'sRNA_accession_id',
+            'all_mrna_acc_col': 'mRNA_accession_id',
+            'all_inter_srna_acc_col': 'sRNA_accession_id',
+            'all_inter_mrna_acc_col': 'mRNA_accession_id'
+        })
 
         print()
 
