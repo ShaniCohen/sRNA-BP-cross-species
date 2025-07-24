@@ -110,6 +110,15 @@ def check_interacting_rna_names_included_in_all_rnas(inter_df: pd.DataFrame, int
     return passed
 
 
+def check_accession_ids_not_nulls(df: pd.DataFrame, acc_cols: List[str]) -> bool:
+    passed = True
+    for col in acc_cols:
+        passed = passed and sum(pd.isnull(df[col])) == 0
+        if not passed:
+            logger.error(f"some accession ids are null in column {col}")
+    return passed
+
+
 def find_srna_mrna_intersection(nm1: str, all_srna1: pd.DataFrame, all_mrna1: pd.DataFrame, srna_nm_col_1: str, mrna_nm_col_1: str,
                                 nm2: str, all_srna2: pd.DataFrame, all_mrna2: pd.DataFrame, srna_nm_col_2: str, mrna_nm_col_2: str,
                                 dataset_out_col: str = 'dataset') \
@@ -370,74 +379,62 @@ def analyze_target_rna3_inter(inter_data: pd.DataFrame) -> Tuple[pd.DataFrame, p
     return unq_inter, df_sum
 
 
-def analyze_salmonella_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, inter_data: pd.DataFrame) -> \
+def analyze_ecoli_k12_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, inter_data: pd.DataFrame) -> \
         Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
-    Salmonella enterica serovar Typhimurium strain SL1344,  Genome: NC_016810.1
+    "Escherichia coli str. K-12 substr. MG1655"    (4332) srna = 61, mrna = 2095
 
     :param mrna_data:
     :param srna_data:
     :param inter_data:
-    :return:
     """
-    srna_acc_col = 'sRNA_accession_id'
-    srna_nm_col = 'sRNA'
-    mrna_acc_col = 'mRNA_accession_id'
-    mrna_nm_col = 'mRNA'
     # --------------  validations  --------------
     # 1 - check sRNA acc is mapped to a single sRNA name
-    srna_map = inter_data[[srna_acc_col, srna_nm_col]].groupby([srna_acc_col]).agg(
-        sRNA_count=(srna_nm_col, lambda x: len(set(x))),
-        sRNA_names=(srna_nm_col, lambda x: sorted(set(x)))
+    srna_map = inter_data[['sRNA_accession_id_Eco', 'sRNA']].groupby(['sRNA_accession_id_Eco']).agg(
+        sRNA_count=('sRNA', lambda x: len(set(x))),
+        sRNA_names=('sRNA', lambda x: sorted(set(x)))
     ).reset_index(drop=False)
     srna_map = srna_map.sort_values(by='sRNA_count', ascending=False).reset_index(drop=True)
     assert list(srna_map['sRNA_count'])[0] == 1
 
     # 2 - check mRNA acc is mapped to a single mRNA name
-    mrna_map = inter_data[[mrna_acc_col, mrna_nm_col]].groupby([mrna_acc_col]).agg(
-        mRNA_count=(mrna_nm_col, lambda x: len(set(x))),
-        mRNA_names=(mrna_nm_col, lambda x: sorted(set(x)))
+    mrna_map = inter_data[['mRNA_accession_id_Eco', 'mRNA']].groupby(['mRNA_accession_id_Eco']).agg(
+        mRNA_count=('mRNA', lambda x: len(set(x))),
+        mRNA_names=('mRNA', lambda x: sorted(set(x)))
     ).reset_index(drop=False)
     mrna_map = mrna_map.sort_values(by='mRNA_count', ascending=False).reset_index(drop=True)
     assert list(mrna_map['mRNA_count'])[0] == 1
     # write_df(df=mrna_map, file_path=join(output_data_path, "mrna_map.csv"))
 
     # 3 - check all sRNA in interactions table are included in "all sRNA"
-    missing_srnas = set(inter_data[srna_acc_col]) - set(srna_data['sRNA_accession_id'])
+    missing_srnas = set(inter_data['sRNA_accession_id_Eco']) - set(srna_data['EcoCyc_accession_id'])
     assert len(missing_srnas) == 0, f"sRNAs {missing_srnas} are missing in srna_data"
     # 4 - check all mRNA in interactions table are included in "all mRNA"
-    missing_mrnas = set(inter_data[mrna_acc_col]) - set(mrna_data['mRNA_accession_id'])
+    missing_mrnas = set(inter_data['mRNA_accession_id_Eco']) - set(mrna_data['EcoCyc_accession_id'])
     assert len(missing_mrnas) == 0, f"{len(missing_mrnas)} mRNAs {missing_mrnas} are missing in mrna_data"
 
     # 4 - check structure of mRNA and sRNA data
-    assert len(srna_data) == len(set(srna_data['sRNA_accession_id']))
-    assert len(mrna_data) == len(set(mrna_data['mRNA_accession_id']))
+    assert len(srna_data) == len(set(srna_data['EcoCyc_accession_id']))
+    assert len(mrna_data) == len(set(mrna_data['EcoCyc_accession_id']))
 
     # --------------  interactions  --------------
-    logger.info(f"Salmonella enterica - interactions: {len(inter_data)}, "
-                f"unique interactions: {len(inter_data.groupby([srna_acc_col, mrna_acc_col]).count())}")
+    logger.info(f"FINAL - ecoli_k12 - interactions: {len(inter_data)}, "
+                f"unique interactions: {len(inter_data.groupby(['sRNA_accession_id_Eco', 'mRNA_accession_id_Eco']).count())}")
     # -------------- complete cols
     inter_data['count'] = 1
 
     # -------------- unique interactions intersection
-    strain_col = 'strain_name'
-    inter_data[strain_col] = "Salmonella enterica serovar Typhimurium strain SL1344"
-    g_cols = [strain_col, srna_acc_col, srna_nm_col, mrna_acc_col, mrna_nm_col, 'interaction_label']
+    g_cols = ['strain_name', 'chromosome', 'sRNA_accession_id_Eco', 'sRNA', 'mRNA_accession_id_Eco', 'mRNA',
+              'interaction_label']
     unq_inter = inter_data.copy()[g_cols + ['count']].groupby(g_cols, as_index=False).count().reset_index(drop=True)
+    strain_col = 'strain_name'
     assert list(set(inter_data[strain_col])) == list(set(unq_inter[strain_col]))
 
-    # -------------- adjust sRNA acc names
-    rnm = {'SL1344_0808': 'SL1344_0808_5utr'}
-    srna_data[srna_acc_col] = srna_data[srna_acc_col].apply(lambda x: rnm.get(x, x))
-    
-	# -------------- convert sRNA names
-
     # -------------- summary
-    strain_col = 'strain_name'
     df_sum = unq_inter.groupby([strain_col]).agg(
-        dataset=('count', lambda x: 'Matera 2022'),
-        unique_sRNAs=(srna_acc_col, lambda x: len(set(x))),
-        unique_targets=(mrna_acc_col, lambda x: len(set(x))),
+        dataset=('count', lambda x: 'GraphRNA'),
+        unique_sRNAs=('sRNA_accession_id_Eco', lambda x: len(set(x))),
+        unique_targets=('mRNA_accession_id_Eco', lambda x: len(set(x))),
         unq_pos_inter=('interaction_label', 'sum'),
         unq_neg_inter=('interaction_label', lambda x: sum(x == 0)),
         unq_inter=('interaction_label', 'count'),
@@ -448,6 +445,23 @@ def analyze_salmonella_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, i
     df_sum = df_sum.rename(columns={strain_col: 'strain'})
     df_sum['total_sRNAs'] = len(srna_data)
     df_sum['total_mRNAs'] = len(mrna_data)
+
+    # -------------- align columns
+    for rna in ['sRNA', 'mRNA']:
+        rename_map = {
+            'EcoCyc_locus_tag': f'{rna}_locus_tag',
+            'EcoCyc_rna_name': f'{rna}_name',
+            'EcoCyc_rna_name_synonyms': f'{rna}_name_synonyms',
+            'EcoCyc_start': f'{rna}_start',
+            'EcoCyc_end': f'{rna}_end',
+            'EcoCyc_strand': f'{rna}_strand',
+            'EcoCyc_sequence': f'{rna}_sequence',
+            'EcoCyc_accession-2': f'{rna}_accession_2'
+        }
+        if rna == 'sRNA':
+            srna_data = srna_data.rename(columns=rename_map)
+        else:
+            mrna_data = mrna_data.rename(columns=rename_map)
 
     return unq_inter, df_sum, srna_data, mrna_data
 
@@ -492,7 +506,7 @@ def analyze_ecoli_epec_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, i
     assert len(mrna_data) == len(set(mrna_data['mRNA_accession_id']))
 
     # --------------  interactions  --------------
-    logger.info(f"mizrahi_epec_inter - interactions: {len(inter_data)}, "
+    logger.info(f"FINAL - ecoli_epec - interactions: {len(inter_data)}, "
                 f"unique interactions: {len(inter_data.groupby(['sRNA_accession_id_Eco', 'mRNA_accession_id_Eco']).count())}")
     # -------------- complete cols
     inter_data['count'] = 1
@@ -525,62 +539,74 @@ def analyze_ecoli_epec_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, i
     return unq_inter, df_sum, srna_data, mrna_data
 
 
-def analyze_ecoli_k12_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, inter_data: pd.DataFrame) -> \
+def analyze_salmonella_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, inter_data: pd.DataFrame) -> \
         Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
-    "Escherichia coli str. K-12 substr. MG1655"    (4332) srna = 61, mrna = 2095
+    Salmonella enterica serovar Typhimurium strain SL1344,  Genome: NC_016810.1
 
     :param mrna_data:
     :param srna_data:
     :param inter_data:
+    :return:
     """
+    srna_acc_col = 'sRNA_accession_id'
+    srna_nm_col = 'sRNA'
+    mrna_acc_col = 'mRNA_accession_id'
+    mrna_nm_col = 'mRNA'
     # --------------  validations  --------------
     # 1 - check sRNA acc is mapped to a single sRNA name
-    srna_map = inter_data[['sRNA_accession_id_Eco', 'sRNA']].groupby(['sRNA_accession_id_Eco']).agg(
-        sRNA_count=('sRNA', lambda x: len(set(x))),
-        sRNA_names=('sRNA', lambda x: sorted(set(x)))
+    srna_map = inter_data[[srna_acc_col, srna_nm_col]].groupby([srna_acc_col]).agg(
+        sRNA_count=(srna_nm_col, lambda x: len(set(x))),
+        sRNA_names=(srna_nm_col, lambda x: sorted(set(x)))
     ).reset_index(drop=False)
     srna_map = srna_map.sort_values(by='sRNA_count', ascending=False).reset_index(drop=True)
     assert list(srna_map['sRNA_count'])[0] == 1
 
     # 2 - check mRNA acc is mapped to a single mRNA name
-    mrna_map = inter_data[['mRNA_accession_id_Eco', 'mRNA']].groupby(['mRNA_accession_id_Eco']).agg(
-        mRNA_count=('mRNA', lambda x: len(set(x))),
-        mRNA_names=('mRNA', lambda x: sorted(set(x)))
+    mrna_map = inter_data[[mrna_acc_col, mrna_nm_col]].groupby([mrna_acc_col]).agg(
+        mRNA_count=(mrna_nm_col, lambda x: len(set(x))),
+        mRNA_names=(mrna_nm_col, lambda x: sorted(set(x)))
     ).reset_index(drop=False)
     mrna_map = mrna_map.sort_values(by='mRNA_count', ascending=False).reset_index(drop=True)
     assert list(mrna_map['mRNA_count'])[0] == 1
     # write_df(df=mrna_map, file_path=join(output_data_path, "mrna_map.csv"))
 
     # 3 - check all sRNA in interactions table are included in "all sRNA"
-    missing_srnas = set(inter_data['sRNA_accession_id_Eco']) - set(srna_data['EcoCyc_accession_id'])
+    missing_srnas = set(inter_data[srna_acc_col]) - set(srna_data['sRNA_accession_id'])
     assert len(missing_srnas) == 0, f"sRNAs {missing_srnas} are missing in srna_data"
     # 4 - check all mRNA in interactions table are included in "all mRNA"
-    missing_mrnas = set(inter_data['mRNA_accession_id_Eco']) - set(mrna_data['EcoCyc_accession_id'])
+    missing_mrnas = set(inter_data[mrna_acc_col]) - set(mrna_data['mRNA_accession_id'])
     assert len(missing_mrnas) == 0, f"{len(missing_mrnas)} mRNAs {missing_mrnas} are missing in mrna_data"
 
     # 4 - check structure of mRNA and sRNA data
-    assert len(srna_data) == len(set(srna_data['EcoCyc_accession_id']))
-    assert len(mrna_data) == len(set(mrna_data['EcoCyc_accession_id']))
+    assert len(srna_data) == len(set(srna_data['sRNA_accession_id']))
+    assert len(mrna_data) == len(set(mrna_data['mRNA_accession_id']))
 
     # --------------  interactions  --------------
-    logger.info(f"ecoli_inter - interactions: {len(inter_data)}, "
-                f"unique interactions: {len(inter_data.groupby(['sRNA_accession_id_Eco', 'mRNA_accession_id_Eco']).count())}")
+    logger.info(f"FINAL - Salmonella enterica - interactions: {len(inter_data)}, "
+                f"unique interactions: {len(inter_data.groupby([srna_acc_col, mrna_acc_col]).count())}")
     # -------------- complete cols
     inter_data['count'] = 1
 
     # -------------- unique interactions intersection
-    g_cols = ['strain_name', 'chromosome', 'sRNA_accession_id_Eco', 'sRNA', 'mRNA_accession_id_Eco', 'mRNA',
-              'interaction_label']
-    unq_inter = inter_data.copy()[g_cols + ['count']].groupby(g_cols, as_index=False).count().reset_index(drop=True)
     strain_col = 'strain_name'
+    inter_data[strain_col] = "Salmonella enterica serovar Typhimurium strain SL1344"
+    g_cols = [strain_col, srna_acc_col, srna_nm_col, mrna_acc_col, mrna_nm_col, 'interaction_label']
+    unq_inter = inter_data.copy()[g_cols + ['count']].groupby(g_cols, as_index=False).count().reset_index(drop=True)
     assert list(set(inter_data[strain_col])) == list(set(unq_inter[strain_col]))
 
+    # -------------- adjust sRNA acc names
+    rnm = {'SL1344_0808': 'SL1344_0808_5utr'}
+    srna_data[srna_acc_col] = srna_data[srna_acc_col].apply(lambda x: rnm.get(x, x))
+    
+	# -------------- convert sRNA names
+
     # -------------- summary
+    strain_col = 'strain_name'
     df_sum = unq_inter.groupby([strain_col]).agg(
-        dataset=('count', lambda x: 'GraphRNA'),
-        unique_sRNAs=('sRNA_accession_id_Eco', lambda x: len(set(x))),
-        unique_targets=('mRNA_accession_id_Eco', lambda x: len(set(x))),
+        dataset=('count', lambda x: 'Matera 2022'),
+        unique_sRNAs=(srna_acc_col, lambda x: len(set(x))),
+        unique_targets=(mrna_acc_col, lambda x: len(set(x))),
         unq_pos_inter=('interaction_label', 'sum'),
         unq_neg_inter=('interaction_label', lambda x: sum(x == 0)),
         unq_inter=('interaction_label', 'count'),
@@ -592,22 +618,165 @@ def analyze_ecoli_k12_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, in
     df_sum['total_sRNAs'] = len(srna_data)
     df_sum['total_mRNAs'] = len(mrna_data)
 
-    # -------------- align columns
-    for rna in ['sRNA', 'mRNA']:
-        rename_map = {
-            'EcoCyc_locus_tag': f'{rna}_locus_tag',
-            'EcoCyc_rna_name': f'{rna}_name',
-            'EcoCyc_rna_name_synonyms': f'{rna}_name_synonyms',
-            'EcoCyc_start': f'{rna}_start',
-            'EcoCyc_end': f'{rna}_end',
-            'EcoCyc_strand': f'{rna}_strand',
-            'EcoCyc_sequence': f'{rna}_sequence',
-            'EcoCyc_accession-2': f'{rna}_accession_2'
-        }
-        if rna == 'sRNA':
-            srna_data = srna_data.rename(columns=rename_map)
-        else:
-            mrna_data = mrna_data.rename(columns=rename_map)
+    return unq_inter, df_sum, srna_data, mrna_data
+
+
+def analyze_vibrio_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, inter_data: pd.DataFrame) -> \
+        Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """
+    Vibrio cholerae, NCBI Genomes:  NC_002505.1 and NC_002506.1
+
+    :param mrna_data:
+    :param srna_data:
+    :param inter_data:
+    :return:
+    """
+    srna_acc_col = 'sRNA_accession_id'
+    srna_nm_col = 'sRNA_name'
+    mrna_acc_col = 'mRNA_accession_id'
+    mrna_nm_col = 'mRNA_name'
+    # --------------  validations  --------------
+    # 1 - check sRNA acc is mapped to a single sRNA name
+    srna_map = inter_data[[srna_acc_col, srna_nm_col]].groupby([srna_acc_col]).agg(
+        sRNA_count=(srna_nm_col, lambda x: len(set(x))),
+        sRNA_names=(srna_nm_col, lambda x: sorted(set(x)))
+    ).reset_index(drop=False)
+    srna_map = srna_map.sort_values(by='sRNA_count', ascending=False).reset_index(drop=True)
+    assert list(srna_map['sRNA_count'])[0] == 1
+
+    # 2 - check mRNA acc is mapped to a single mRNA name
+    mrna_map = inter_data[[mrna_acc_col, mrna_nm_col]].groupby([mrna_acc_col]).agg(
+        mRNA_count=(mrna_nm_col, lambda x: len(set(x))),
+        mRNA_names=(mrna_nm_col, lambda x: sorted(set(x)))
+    ).reset_index(drop=False)
+    mrna_map = mrna_map.sort_values(by='mRNA_count', ascending=False).reset_index(drop=True)
+    assert list(mrna_map['mRNA_count'])[0] == 1
+    # write_df(df=mrna_map, file_path=join(output_data_path, "mrna_map.csv"))
+
+    # 3 - check all sRNA in interactions table are included in "all sRNA"
+    missing_srnas = set(inter_data[srna_acc_col]) - set(srna_data['sRNA_accession_id'])
+    assert len(missing_srnas) == 0, f"sRNAs {missing_srnas} are missing in srna_data"
+    # 4 - check all mRNA in interactions table are included in "all mRNA"
+    missing_mrnas = set(inter_data[mrna_acc_col]) - set(mrna_data['mRNA_accession_id'])
+    assert len(missing_mrnas) == 0, f"{len(missing_mrnas)} mRNAs {missing_mrnas} are missing in mrna_data"
+
+    # 4 - check structure of mRNA and sRNA data
+    assert len(srna_data) == len(set(srna_data['sRNA_accession_id']))
+    assert len(mrna_data) == len(set(mrna_data['mRNA_accession_id']))
+
+    # --------------  interactions  --------------
+    logger.info(f"FINAL - Vibrio cholerae - interactions: {len(inter_data)}, "
+                f"unique interactions: {len(inter_data.groupby([srna_acc_col, mrna_acc_col]).count())}")
+    # -------------- complete cols
+    inter_data['count'] = 1
+
+    # -------------- unique interactions intersection
+    strain_col = 'strain_name'
+    inter_data[strain_col] = "Vibrio cholerae"
+    g_cols = [strain_col, srna_acc_col, srna_nm_col, mrna_acc_col, mrna_nm_col, 'interaction_label']
+    unq_inter = inter_data.copy()[g_cols + ['count']].groupby(g_cols, as_index=False).count().reset_index(drop=True)
+    assert list(set(inter_data[strain_col])) == list(set(unq_inter[strain_col]))
+
+    # -------------- adjust sRNA acc names
+    
+	# -------------- convert sRNA names
+
+    # -------------- summary
+    strain_col = 'strain_name'
+    df_sum = unq_inter.groupby([strain_col]).agg(
+        dataset=('count', lambda x: 'Huber 2022'),
+        unique_sRNAs=(srna_acc_col, lambda x: len(set(x))),
+        unique_targets=(mrna_acc_col, lambda x: len(set(x))),
+        unq_pos_inter=('interaction_label', 'sum'),
+        unq_neg_inter=('interaction_label', lambda x: sum(x == 0)),
+        unq_inter=('interaction_label', 'count'),
+        all_inter=('count', 'sum')
+    ).reset_index(drop=False)
+
+    df_sum = df_sum.sort_values(by='unq_inter', ascending=False).reset_index(drop=True)
+    df_sum = df_sum.rename(columns={strain_col: 'strain'})
+    df_sum['total_sRNAs'] = len(srna_data)
+    df_sum['total_mRNAs'] = len(mrna_data)
+
+    return unq_inter, df_sum, srna_data, mrna_data
+
+
+def analyze_klebsiella_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, inter_data: pd.DataFrame) -> \
+        Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """
+    Vibrio cholerae, NCBI Genomes:  NC_002505.1 and NC_002506.1
+
+    :param mrna_data:
+    :param srna_data:
+    :param inter_data:
+    :return:
+    """
+    srna_acc_col = 'sRNA_accession_id'
+    srna_nm_col = 'sRNA_name'
+    mrna_acc_col = 'mRNA_accession_id'
+    mrna_nm_col = 'mRNA_name'
+    # --------------  validations  --------------
+    # 1 - check sRNA acc is mapped to a single sRNA name
+    srna_map = inter_data[[srna_acc_col, srna_nm_col]].groupby([srna_acc_col]).agg(
+        sRNA_count=(srna_nm_col, lambda x: len(set(x))),
+        sRNA_names=(srna_nm_col, lambda x: sorted(set(x)))
+    ).reset_index(drop=False)
+    srna_map = srna_map.sort_values(by='sRNA_count', ascending=False).reset_index(drop=True)
+    assert list(srna_map['sRNA_count'])[0] == 1
+
+    # 2 - check mRNA acc is mapped to a single mRNA name
+    mrna_map = inter_data[[mrna_acc_col, mrna_nm_col]].groupby([mrna_acc_col]).agg(
+        mRNA_count=(mrna_nm_col, lambda x: len(set(x))),
+        mRNA_names=(mrna_nm_col, lambda x: sorted(set(x)))
+    ).reset_index(drop=False)
+    mrna_map = mrna_map.sort_values(by='mRNA_count', ascending=False).reset_index(drop=True)
+    assert list(mrna_map['mRNA_count'])[0] == 1
+    # write_df(df=mrna_map, file_path=join(output_data_path, "mrna_map.csv"))
+
+    # 3 - check all sRNA in interactions table are included in "all sRNA"
+    missing_srnas = set(inter_data[srna_acc_col]) - set(srna_data['sRNA_accession_id'])
+    assert len(missing_srnas) == 0, f"sRNAs {missing_srnas} are missing in srna_data"
+    # 4 - check all mRNA in interactions table are included in "all mRNA"
+    missing_mrnas = set(inter_data[mrna_acc_col]) - set(mrna_data['mRNA_accession_id'])
+    assert len(missing_mrnas) == 0, f"{len(missing_mrnas)} mRNAs {missing_mrnas} are missing in mrna_data"
+
+    # 4 - check structure of mRNA and sRNA data
+    assert len(srna_data) == len(set(srna_data['sRNA_accession_id']))
+    assert len(mrna_data) == len(set(mrna_data['mRNA_accession_id']))
+
+    # --------------  interactions  --------------
+    logger.info(f"FINAL - Vibrio cholerae - interactions: {len(inter_data)}, "
+                f"unique interactions: {len(inter_data.groupby([srna_acc_col, mrna_acc_col]).count())}")
+    # -------------- complete cols
+    inter_data['count'] = 1
+
+    # -------------- unique interactions intersection
+    strain_col = 'strain_name'
+    inter_data[strain_col] = "Vibrio cholerae"
+    g_cols = [strain_col, srna_acc_col, srna_nm_col, mrna_acc_col, mrna_nm_col, 'interaction_label']
+    unq_inter = inter_data.copy()[g_cols + ['count']].groupby(g_cols, as_index=False).count().reset_index(drop=True)
+    assert list(set(inter_data[strain_col])) == list(set(unq_inter[strain_col]))
+
+    # -------------- adjust sRNA acc names
+    
+	# -------------- convert sRNA names
+
+    # -------------- summary
+    strain_col = 'strain_name'
+    df_sum = unq_inter.groupby([strain_col]).agg(
+        dataset=('count', lambda x: 'Huber 2022'),
+        unique_sRNAs=(srna_acc_col, lambda x: len(set(x))),
+        unique_targets=(mrna_acc_col, lambda x: len(set(x))),
+        unq_pos_inter=('interaction_label', 'sum'),
+        unq_neg_inter=('interaction_label', lambda x: sum(x == 0)),
+        unq_inter=('interaction_label', 'count'),
+        all_inter=('count', 'sum')
+    ).reset_index(drop=False)
+
+    df_sum = df_sum.sort_values(by='unq_inter', ascending=False).reset_index(drop=True)
+    df_sum = df_sum.rename(columns={strain_col: 'strain'})
+    df_sum['total_sRNAs'] = len(srna_data)
+    df_sum['total_mRNAs'] = len(mrna_data)
 
     return unq_inter, df_sum, srna_data, mrna_data
 
@@ -829,3 +998,138 @@ def preprocess_salmonella_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame
                                                             inter_rna_nm_col='mRNA',
                                                             all_rna=mrna_data, all_rna_nm_col='mRNA_name')
     return mrna_data, srna_data, inter_data
+
+
+def preprocess_vibrio_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, inter_data: pd.DataFrame) -> \
+        Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+
+    """
+    Vibrio cholerae, NCBI Genomes:  NC_002505.1 and NC_002506.1
+
+    :param mrna_data:
+    :param srna_data:
+    :param inter_data:
+
+    """
+    logger.info(f"Preprocess - vibrio - interactions: {len(inter_data)}, "
+                f"unique interactions: {len(inter_data.groupby(['sRNA_accession_id', 'mRNA_accession_id']).count())}")
+
+    # --------------  all mRNAs  --------------
+    # 1 - lower
+    mrna_data['mRNA_accession_id'] = mrna_data['mRNA_accession_id'].apply(lambda x: x.lower())
+    mrna_data['mRNA_locus_tag'] = mrna_data['mRNA_locus_tag'].apply(lambda x: x.lower())
+    mrna_data['mRNA_name'] = mrna_data['mRNA_name'].apply(lambda x: x.lower())
+
+    # 2 - filter out riboswitches
+    # mrna_data = mrna_data[mrna_data['mRNA_name'].apply(lambda x: "riboswitch" not in x)].reset_index(drop=True)
+
+    # --------------  all sRNAs  --------------
+    # 1 - lower
+    srna_data['sRNA_accession_id'] = srna_data['sRNA_accession_id'].apply(lambda x: x.lower())
+    srna_data['sRNA_locus_tag'] = srna_data['sRNA_locus_tag'].apply(lambda x: x.lower())
+    srna_data['sRNA_name'] = srna_data['sRNA_name'].apply(lambda x: x.lower())
+
+    # --------------  interactions  --------------
+    # 1 - filter out invalid mRNAs
+    invalid_mrna_nms = ['QrrT']
+    inter_data = inter_data[~inter_data['mRNA_name'].isin(invalid_mrna_nms)].reset_index(drop=True)
+    
+    # 2 - lower
+    inter_data['mRNA_accession_id'] = inter_data['mRNA_accession_id'].apply(lambda x: x.lower())
+    inter_data['mRNA_name'] = inter_data['mRNA_name'].apply(lambda x: x.lower())
+    inter_data['sRNA_accession_id'] = inter_data['sRNA_accession_id'].apply(lambda x: x.lower())
+    inter_data['sRNA_name'] = inter_data['sRNA_name'].apply(lambda x: x.lower())
+
+    # 3 - PATCH: fill in mRNA names in the interactions table
+    mrna_map = dict(zip(mrna_data['mRNA_accession_id'], mrna_data['mRNA_name']))
+    inter_data['mRNA_name'] = inter_data['mRNA_accession_id'].apply(lambda x: mrna_map[x])
+
+    # 4 - filter out riboswitches
+    # inter_data = inter_data[inter_data['mRNA_name'].apply(lambda x: "riboswitch" not in x)].reset_index(drop=True)
+
+    # 5 - save 'dir' and 'file_name' columns
+    inter_data['dir'] = inter_data['Data_source']
+    inter_data['file_name'] = inter_data['Experiment']
+    inter_data['interaction_label'] = inter_data['Interaction_label'].apply(lambda x: 1 if x == 'interaction' else 0)
+
+    # --------------  assert  --------------
+    assert check_interacting_rna_names_included_in_all_rnas(inter_df=inter_data,
+                                                            inter_rna_nm_col='sRNA_name',
+                                                            all_rna=srna_data, all_rna_nm_col='sRNA_name')
+    assert check_interacting_rna_names_included_in_all_rnas(inter_df=inter_data,
+                                                            inter_rna_nm_col='mRNA_name',
+                                                            all_rna=mrna_data, all_rna_nm_col='mRNA_name')
+    assert check_accession_ids_not_nulls(df=srna_data, acc_cols=['sRNA_accession_id'])
+    assert check_accession_ids_not_nulls(df=mrna_data, acc_cols=['mRNA_accession_id'])
+    assert check_accession_ids_not_nulls(df=inter_data, acc_cols=['sRNA_accession_id', 'mRNA_accession_id'])
+
+    return mrna_data, srna_data, inter_data
+
+
+def preprocess_klebsiella_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, inter_data: pd.DataFrame) -> \
+        Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+
+    """
+    Klebsiella pneumoniae str. SGH10; KL1, ST23
+
+    :param mrna_data:
+    :param srna_data:
+    :param inter_data:
+
+    """
+    logger.info(f"Preprocess - klebsiella - interactions: {len(inter_data)}, "
+                f"unique interactions: {len(inter_data.groupby(['sRNA_accession_id', 'mRNA_accession_id']).count())}")
+
+    # --------------  all mRNAs  --------------
+    # 1 - lower
+    mrna_data['mRNA_accession_id'] = mrna_data['mRNA_accession_id'].apply(lambda x: x.lower())
+    mrna_data['mRNA_locus_tag'] = mrna_data['mRNA_locus_tag'].apply(lambda x: x.lower())
+    mrna_data['mRNA_name'] = mrna_data['mRNA_name'].apply(lambda x: x.lower())
+
+    # 2 - filter out riboswitches
+    # mrna_data = mrna_data[mrna_data['mRNA_name'].apply(lambda x: "riboswitch" not in x)].reset_index(drop=True)
+
+    # --------------  all sRNAs  --------------
+    # 1 - lower
+    srna_data['sRNA_accession_id'] = srna_data['sRNA_accession_id'].apply(lambda x: x.lower())
+    srna_data['sRNA_locus_tag'] = srna_data['sRNA_locus_tag'].apply(lambda x: x.lower())
+    srna_data['sRNA_name'] = srna_data['sRNA_name'].apply(lambda x: x.lower())
+
+    # --------------  interactions  --------------
+    # 1 - filter out invalid mRNAs
+    invalid_mrna_nms = ['QrrT']
+    inter_data = inter_data[~inter_data['mRNA_name'].isin(invalid_mrna_nms)].reset_index(drop=True)
+    
+    # 2 - lower
+    inter_data['mRNA_accession_id'] = inter_data['mRNA_accession_id'].apply(lambda x: x.lower())
+    inter_data['mRNA_name'] = inter_data['mRNA_name'].apply(lambda x: x.lower())
+    inter_data['sRNA_accession_id'] = inter_data['sRNA_accession_id'].apply(lambda x: x.lower())
+    inter_data['sRNA_name'] = inter_data['sRNA_name'].apply(lambda x: x.lower())
+
+    # 3 - PATCH: fill in mRNA names in the interactions table
+    mrna_map = dict(zip(mrna_data['mRNA_accession_id'], mrna_data['mRNA_name']))
+    inter_data['mRNA_name'] = inter_data['mRNA_accession_id'].apply(lambda x: mrna_map[x])
+
+    # 4 - filter out riboswitches
+    # inter_data = inter_data[inter_data['mRNA_name'].apply(lambda x: "riboswitch" not in x)].reset_index(drop=True)
+
+    # 5 - save 'dir' and 'file_name' columns
+    inter_data['dir'] = inter_data['Data_source']
+    inter_data['file_name'] = inter_data['Experiment']
+    inter_data['interaction_label'] = inter_data['Interaction_label'].apply(lambda x: 1 if x == 'interaction' else 0)
+
+    # --------------  assert  --------------
+    assert check_interacting_rna_names_included_in_all_rnas(inter_df=inter_data,
+                                                            inter_rna_nm_col='sRNA_name',
+                                                            all_rna=srna_data, all_rna_nm_col='sRNA_name')
+    assert check_interacting_rna_names_included_in_all_rnas(inter_df=inter_data,
+                                                            inter_rna_nm_col='mRNA_name',
+                                                            all_rna=mrna_data, all_rna_nm_col='mRNA_name')
+    assert check_accession_ids_not_nulls(df=srna_data, acc_cols=['sRNA_accession_id'])
+    assert check_accession_ids_not_nulls(df=mrna_data, acc_cols=['mRNA_accession_id'])
+    assert check_accession_ids_not_nulls(df=inter_data, acc_cols=['sRNA_accession_id', 'mRNA_accession_id'])
+
+    return mrna_data, srna_data, inter_data
+
+
+

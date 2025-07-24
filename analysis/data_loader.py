@@ -79,8 +79,7 @@ class DataLoader:
 
         k12_mrna, k12_srna, k12_inter = \
             ap.preprocess_ecoli_k12_inter(mrna_data=k12_mrna, srna_data=k12_srna, inter_data=k12_inter)
-        k12_unq_inter, k12_sum, k12_srna, k12_mrna = ap.analyze_ecoli_k12_inter(mrna_data=k12_mrna, srna_data=k12_srna,
-                                                                                inter_data=k12_inter)
+        k12_unq_inter, k12_sum, k12_srna, k12_mrna = ap.analyze_ecoli_k12_inter(mrna_data=k12_mrna, srna_data=k12_srna, inter_data=k12_inter)
         # 1.1 - update info
         if self.ecoli_k12_nm not in self.strains_data:
             self.strains_data[self.ecoli_k12_nm] = {}
@@ -126,8 +125,7 @@ class DataLoader:
         salmonella_inter = read_df(file_path=join(self.config['interactions_dir'], salmonella_dir, "matera_salmonella_interactions.csv"))
 
         salmonella_mrna, salmonella_srna, salmonella_inter = \
-            ap.preprocess_salmonella_inter(mrna_data=salmonella_mrna, srna_data=salmonella_srna,
-                                        inter_data=salmonella_inter)
+            ap.preprocess_salmonella_inter(mrna_data=salmonella_mrna, srna_data=salmonella_srna, inter_data=salmonella_inter)
         salmo_unq_inter, salmo_sum, salmo_srna, salmo_mrna = \
             ap.analyze_salmonella_inter(mrna_data=salmonella_mrna, srna_data=salmonella_srna, inter_data=salmonella_inter)
         
@@ -152,11 +150,49 @@ class DataLoader:
         vibrio_srna = read_df(file_path=join(self.config['rna_dir'], vibrio_dir, "huber_vibrio_all_sRNA_molecules.csv"))
         vibrio_inter = read_df(file_path=join(self.config['interactions_dir'], vibrio_dir, "huber_vibrio_interactions.csv"))
 
+        vibrio_mrna, vibrio_srna, vibrio_inter = \
+            ap.preprocess_vibrio_inter(mrna_data=vibrio_mrna, srna_data=vibrio_srna, inter_data=vibrio_inter)
+        vibrio_unq_inter, vibrio_sum, vibrio_srna, vibrio_mrna = \
+            ap.analyze_vibrio_inter(mrna_data=vibrio_mrna, srna_data=vibrio_srna, inter_data=vibrio_inter)
+        
+        # 4.1 - update info
+        if self.vibrio_nm not in self.strains_data:
+            self.strains_data[self.vibrio_nm] = {}
+        self.strains_data[self.vibrio_nm].update({
+            'all_mrna': vibrio_mrna,
+            'all_srna': vibrio_srna,
+            'unq_inter': vibrio_unq_inter,
+            'all_inter': vibrio_inter,
+            'all_srna_acc_col': 'sRNA_accession_id',
+            'all_mrna_acc_col': 'mRNA_accession_id',
+            'all_inter_srna_acc_col': 'sRNA_accession_id',
+            'all_inter_mrna_acc_col': 'mRNA_accession_id'
+        })
+
         # 5 - Klebsiella pneumoniae str. SGH10; KL1, ST23  (Goh 2024)
         klebsiella_dir = self.config['klebsiella_dir']
         klebsiella_mrna = read_df(file_path=join(self.config['rna_dir'], klebsiella_dir, "goh_klebsiella_all_mRNA_molecules.csv"))
         klebsiella_srna = read_df(file_path=join(self.config['rna_dir'], klebsiella_dir, "goh_klebsiella_all_sRNA_molecules.csv"))
         klebsiella_inter = read_df(file_path=join(self.config['interactions_dir'], klebsiella_dir, "goh_klebsiella_interactions.csv"))
+
+        klebsiella_mrna, klebsiella_srna, klebsiella_inter = \
+            ap.preprocess_klebsiella_inter(mrna_data=klebsiella_mrna, srna_data=klebsiella_srna, inter_data=klebsiella_inter)
+        klebsiella_unq_inter, klebsiella_sum, klebsiella_srna, klebsiella_mrna = \
+            ap.analyze_klebsiella_inter(mrna_data=klebsiella_mrna, srna_data=klebsiella_srna, inter_data=klebsiella_inter)
+        
+        # 4.1 - update info
+        if self.klebsiella_nm not in self.strains_data:
+            self.strains_data[self.klebsiella_nm] = {}
+        self.strains_data[self.klebsiella_nm].update({
+            'all_mrna': klebsiella_mrna,
+            'all_srna': klebsiella_srna,
+            'unq_inter': klebsiella_unq_inter,
+            'all_inter': klebsiella_inter,
+            'all_srna_acc_col': 'sRNA_accession_id',
+            'all_mrna_acc_col': 'mRNA_accession_id',
+            'all_inter_srna_acc_col': 'sRNA_accession_id',
+            'all_inter_mrna_acc_col': 'mRNA_accession_id'
+        })
 
         # 6 - Pseudomonas aeruginosa  (Gebhardt 2023)
         pseudomonas_dir = self.config['pseudomonas_dir']
