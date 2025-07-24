@@ -409,11 +409,12 @@ def analyze_ecoli_k12_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, in
     # 3 - check all sRNA in interactions table are included in "all sRNA"
     missing_srnas = set(inter_data['sRNA_accession_id_Eco']) - set(srna_data['EcoCyc_accession_id'])
     assert len(missing_srnas) == 0, f"sRNAs {missing_srnas} are missing in srna_data"
+    
     # 4 - check all mRNA in interactions table are included in "all mRNA"
     missing_mrnas = set(inter_data['mRNA_accession_id_Eco']) - set(mrna_data['EcoCyc_accession_id'])
     assert len(missing_mrnas) == 0, f"{len(missing_mrnas)} mRNAs {missing_mrnas} are missing in mrna_data"
 
-    # 4 - check structure of mRNA and sRNA data
+    # 5 - check structure of mRNA and sRNA data
     assert len(srna_data) == len(set(srna_data['EcoCyc_accession_id']))
     assert len(mrna_data) == len(set(mrna_data['EcoCyc_accession_id']))
 
@@ -497,11 +498,12 @@ def analyze_ecoli_epec_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, i
     # 3 - check all sRNA in interactions table are included in "all sRNA"
     missing_srnas = set(inter_data['sRNA_accession_id_Eco']) - set(srna_data['sRNA_accession_id'])
     assert len(missing_srnas) == 0, f"sRNAs {missing_srnas} are missing in srna_data"
+    
     # 4 - check all mRNA in interactions table are included in "all mRNA"
     missing_mrnas = set(inter_data['mRNA_accession_id_Eco']) - set(mrna_data['mRNA_accession_id'])
     assert len(missing_mrnas) == 0, f"{len(missing_mrnas)} mRNAs {missing_mrnas} are missing in mrna_data"
 
-    # 4 - check structure of mRNA and sRNA data
+    # 5 - check structure of mRNA and sRNA data
     assert len(srna_data) == len(set(srna_data['sRNA_accession_id']))
     assert len(mrna_data) == len(set(mrna_data['mRNA_accession_id']))
 
@@ -574,11 +576,12 @@ def analyze_salmonella_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, i
     # 3 - check all sRNA in interactions table are included in "all sRNA"
     missing_srnas = set(inter_data[srna_acc_col]) - set(srna_data['sRNA_accession_id'])
     assert len(missing_srnas) == 0, f"sRNAs {missing_srnas} are missing in srna_data"
+    
     # 4 - check all mRNA in interactions table are included in "all mRNA"
     missing_mrnas = set(inter_data[mrna_acc_col]) - set(mrna_data['mRNA_accession_id'])
     assert len(missing_mrnas) == 0, f"{len(missing_mrnas)} mRNAs {missing_mrnas} are missing in mrna_data"
 
-    # 4 - check structure of mRNA and sRNA data
+    # 5 - check structure of mRNA and sRNA data
     assert len(srna_data) == len(set(srna_data['sRNA_accession_id']))
     assert len(mrna_data) == len(set(mrna_data['mRNA_accession_id']))
 
@@ -656,11 +659,12 @@ def analyze_vibrio_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, inter
     # 3 - check all sRNA in interactions table are included in "all sRNA"
     missing_srnas = set(inter_data[srna_acc_col]) - set(srna_data['sRNA_accession_id'])
     assert len(missing_srnas) == 0, f"sRNAs {missing_srnas} are missing in srna_data"
+    
     # 4 - check all mRNA in interactions table are included in "all mRNA"
     missing_mrnas = set(inter_data[mrna_acc_col]) - set(mrna_data['mRNA_accession_id'])
     assert len(missing_mrnas) == 0, f"{len(missing_mrnas)} mRNAs {missing_mrnas} are missing in mrna_data"
 
-    # 4 - check structure of mRNA and sRNA data
+    # 5 - check structure of mRNA and sRNA data
     assert len(srna_data) == len(set(srna_data['sRNA_accession_id']))
     assert len(mrna_data) == len(set(mrna_data['mRNA_accession_id']))
 
@@ -736,11 +740,12 @@ def analyze_klebsiella_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, i
     # 3 - check all sRNA in interactions table are included in "all sRNA"
     missing_srnas = set(inter_data[srna_acc_col]) - set(srna_data['sRNA_accession_id'])
     assert len(missing_srnas) == 0, f"sRNAs {missing_srnas} are missing in srna_data"
+    
     # 4 - check all mRNA in interactions table are included in "all mRNA"
     missing_mrnas = set(inter_data[mrna_acc_col]) - set(mrna_data['mRNA_accession_id'])
     assert len(missing_mrnas) == 0, f"{len(missing_mrnas)} mRNAs {missing_mrnas} are missing in mrna_data"
 
-    # 4 - check structure of mRNA and sRNA data
+    # 5 - check structure of mRNA and sRNA data
     assert len(srna_data) == len(set(srna_data['sRNA_accession_id']))
     assert len(mrna_data) == len(set(mrna_data['mRNA_accession_id']))
 
@@ -816,13 +821,14 @@ def analyze_pseudomonas_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, 
     # 3 - check all sRNA in interactions table are included in "all sRNA"
     missing_srnas = set(inter_data[srna_acc_col]) - set(srna_data['sRNA_accession_id'])
     assert len(missing_srnas) == 0, f"sRNAs {missing_srnas} are missing in srna_data"
+    
     # 4 - check all mRNA in interactions table are included in "all mRNA"
     missing_mrnas = set(inter_data[mrna_acc_col]) - set(mrna_data['mRNA_accession_id'])
     assert len(missing_mrnas) == 0, f"{len(missing_mrnas)} mRNAs {missing_mrnas} are missing in mrna_data"
 
-    # 4 - check structure of mRNA and sRNA data
-    # assert len(srna_data) == len(set(srna_data['sRNA_accession_id']))  #TODO: fix gap for sRNA_accession_id = 'pa4421.1'
-    # assert len(mrna_data) == len(set(mrna_data['mRNA_accession_id']))  #TODO: fix gap for mRNA_accession_id = 'e'
+    # 5 - check structure of mRNA and sRNA data
+    assert len(srna_data) == len(set(srna_data['sRNA_accession_id'])) 
+    assert len(mrna_data) == len(set(mrna_data['mRNA_accession_id']))
 
     # --------------  interactions  --------------
     logger.info(f"FINAL - Pseudomonas aeruginosa - interactions: {len(inter_data)}, "
@@ -1210,29 +1216,46 @@ def preprocess_pseudomonas_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFram
                  f"unique interactions: {len(inter_data.groupby(['sRNA_accession_id', 'mRNA_accession_id']).count())}")
 
     # --------------  all mRNAs  --------------
-    # 1 - lower
+    # 1 - PATCH: fix mRNA accession id and locus tag
+    srna_nm_to_locus_acc = {
+        "PA2046": "PA2046", 
+        "pilC": "PA4527", 
+        "PA4641": "PA4641"
+    }
+    mrna_data['mRNA_accession_id'] = list(map(lambda nm, acc: srna_nm_to_locus_acc[nm] if srna_nm_to_locus_acc.get(nm) else acc, mrna_data['mRNA_name'], mrna_data['mRNA_accession_id']))
+    mrna_data['mRNA_locus_tag'] = list(map(lambda nm, locus: srna_nm_to_locus_acc[nm] if srna_nm_to_locus_acc.get(nm) else locus, mrna_data['mRNA_name'], mrna_data['mRNA_locus_tag']))
+    
+    # 2 - lower
     mrna_data['mRNA_accession_id'] = mrna_data['mRNA_accession_id'].apply(lambda x: x.lower())
     mrna_data['mRNA_locus_tag'] = mrna_data['mRNA_locus_tag'].apply(lambda x: x.lower())
     mrna_data['mRNA_name'] = mrna_data['mRNA_name'].apply(lambda x: x.lower())
 
     # --------------  all sRNAs  --------------
-    # 1 - lower
+    # 1 - filter out invalid sRNAs (acc appear twice)
+    invalid_srna_acc = ['PA4421.1'] 
+    srna_data = srna_data[~srna_data['sRNA_accession_id'].isin(invalid_srna_acc)].reset_index(drop=True)
+
+    # 2 - lower
     srna_data['sRNA_accession_id'] = srna_data['sRNA_accession_id'].apply(lambda x: x.lower())
     srna_data['sRNA_locus_tag'] = srna_data['sRNA_locus_tag'].apply(lambda x: x.lower())
     srna_data['sRNA_name'] = srna_data['sRNA_name'].apply(lambda x: x.lower())
 
+
     # --------------  interactions  --------------
-    # 1 - filter out invalid sRNAs
+    # 1 - PATCH: fix mRNA accession id and locus tag
+    inter_data['mRNA_accession_id'] = list(map(lambda nm, acc: srna_nm_to_locus_acc[nm] if srna_nm_to_locus_acc.get(nm) else acc, inter_data['mRNA_name'], inter_data['mRNA_accession_id']))
+
+    # 2 - PATCH: filter out invalid sRNAs (name is missing in the sRNA data)
     invalid_srna_nms = ['5_utr_PA2770']
     inter_data = inter_data[~inter_data['sRNA_name'].isin(invalid_srna_nms)].reset_index(drop=True)
     
-    # 2 - lower
+    # 3 - lower
     inter_data['mRNA_accession_id'] = inter_data['mRNA_accession_id'].apply(lambda x: x.lower())
     inter_data['mRNA_name'] = inter_data['mRNA_name'].apply(lambda x: x.lower())
     inter_data['sRNA_accession_id'] = inter_data['sRNA_accession_id'].apply(lambda x: x.lower())
     inter_data['sRNA_name'] = inter_data['sRNA_name'].apply(lambda x: x.lower())
     
-    # 3 - PATCH: fix sRNA and mRNA names in the interactions table
+    # 4 - PATCH: fix sRNA and mRNA names in the interactions table
     srna_map = dict(zip(srna_data['sRNA_accession_id'], srna_data['sRNA_name']))
     inter_data['sRNA_name'] = inter_data['sRNA_accession_id'].apply(lambda x: srna_map[x])
 

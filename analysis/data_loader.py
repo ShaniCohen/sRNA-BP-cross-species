@@ -300,6 +300,17 @@ class DataLoader:
         # 5 - Klebsiella pneumoniae
 
         # 6 - Pseudomonas aeruginosa
+        
+        # -------------- TODO: add patch --->  all mRNAs  --------------
+        # # 1 - PATCH: fix mRNA accession id and locus tag
+        # srna_nm_to_locus_acc = {
+        #     "PA2046": "PA2046", 
+        #     "pilC": "PA4527", 
+        #     "PA4641": "PA4641"
+        # }
+        # mrna_data['mRNA_accession_id'] = list(map(lambda nm, acc: srna_nm_to_locus_acc[nm] if srna_nm_to_locus_acc.get(nm) else acc, mrna_data['mRNA_name'], mrna_data['mRNA_accession_id']))
+        # mrna_data['mRNA_locus_tag'] = list(map(lambda nm, locus: srna_nm_to_locus_acc[nm] if srna_nm_to_locus_acc.get(nm) else locus, mrna_data['mRNA_name'], mrna_data['mRNA_locus_tag']))
+        
 
 
         print()
@@ -371,6 +382,8 @@ class DataLoader:
         # 5 - Klebsiella pneumoniae
 
         # 6 - Pseudomonas aeruginosa
+
+
 
     def _match_annotations_to_mrnas(self):
         for strain, data in self.strains_data.items():
