@@ -231,8 +231,6 @@ class DataLoader:
             'all_inter_mrna_acc_col': 'mRNA_accession_id'
         })
 
-        print()
-
     def _align_rna_and_inter_data(self) -> Dict[str, Dict[str, pd.DataFrame]]:
         self._align_accession_ids_between_rna_and_inter()
         self._assert_rna_df_columns()
@@ -271,6 +269,11 @@ class DataLoader:
          
     def _load_proteins(self) -> Dict[str, Dict[str, pd.DataFrame]]:
         # ---------------------------   per dataset preprocessing   ---------------------------
+        for strain in self.strains:
+            proteins = load_fasta(file_path=join(self.config['proteins_dir'], f"{strain}_proteins.fasta"))
+            print()
+
+
         # 1 - Escherichia coli K12 MG1655
         k12_proteins = load_fasta(file_path=join(self.config['proteins_dir'], f"{self.ecoli_k12_nm}_proteins.fasta"))
 
