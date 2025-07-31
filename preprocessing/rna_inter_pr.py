@@ -919,6 +919,9 @@ def preprocess_ecoli_k12_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame,
     assert sum([" " in x for x in mrna_data['EcoCyc_rna_name']]) == 0, "redundant spaces in K12 mRNA name"
     mrna_data['EcoCyc_rna_name'] = mrna_data['EcoCyc_rna_name'].apply(lambda x: x.lower())
 
+    # 2 - remove mRNAs without sequence
+    mrna_data = mrna_data[~(mrna_data['EcoCyc_sequence'].isnull() | (mrna_data['EcoCyc_sequence'] == ''))]
+
     # --------------  all sRNAs  --------------
     # 1 - sRNA name - use accession if sRNA name is Null
     srna_data['EcoCyc_rna_name'] = list(map(lambda nm, acc: acc if pd.isnull(nm) else nm,
@@ -953,7 +956,7 @@ def preprocess_ecoli_k12_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame,
     # 4 - filter out negative interactions
     mask_negative_interactions = inter_data['interaction_label'] == 0
     inter_data = inter_data[~mask_negative_interactions].reset_index(drop=True)
-    logger.info(f"filtered out {sum(mask_negative_interactions)} negative interactions")
+    logger.info(f"filtered out {sum(mask_negative_interactions)} negative interactions")    
 
     # --------------  assert  --------------
     assert check_interacting_rna_names_included_in_all_rnas(inter_df=inter_data, inter_rna_nm_col='sRNA',

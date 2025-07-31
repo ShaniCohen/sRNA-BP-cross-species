@@ -77,11 +77,13 @@ class DataLoader:
         self._align_rna_and_inter_data()
         # 2 - proteins
         self._load_proteins()
+        self._match_proteins_to_mrnas()
         # 3 - GO annotations
         self._load_annotations()
         self._match_annotations_to_mrnas()
         # 4 - clustering
-        self._load_clustering_data()
+        # TODO: re-run with new data
+        # self._load_clustering_data()
     
     def _load_rna_and_inter_data(self) -> Dict[str, Dict[str, pd.DataFrame]]:
         # ---------------------------   per dataset preprocessing   ---------------------------
@@ -271,11 +273,12 @@ class DataLoader:
          
     def _load_proteins(self) -> Dict[str, Dict[str, pd.DataFrame]]:
         # ---------------------------   per dataset preprocessing   ---------------------------
-        for strain in self.strains: 
+        for strain in self.strains:
+            # TODO: klebsiella - check for klebsiella when data is ready
             if strain != self.klebsiella_nm:
                 # 1 - load proteins
                 proteins = load_fasta(file_path=join(self.config['proteins_dir'], f"{strain}_proteins.fasta"))
-                proteins = proteins.rename(columns={'seq': 'protein_sequence', 'id': 'header'})
+                proteins = proteins.rename(columns={'seq': 'protein_seq', 'id': 'header'})
                 # 1.1 - PATCH to adjust Salmonella headers
                 if strain == self.salmonella_nm:
                     _lambda = lambda x: x.split("|")[0] + "|" + x.split("|")[2] + "|" + "|".join(x.split("|")[2:])
@@ -288,7 +291,7 @@ class DataLoader:
                 assert sum(pd.isnull(proteins[self.mrna_acc_col])) == 0, f"missing accession ids in {strain} proteins"
                 assert len(proteins[self.mrna_acc_col].unique()) == len(proteins), f"duplicate accession ids in {strain} proteins"
                 assert len(set(proteins[self.mrna_acc_col]) - set(self.strains_data[strain]['all_mrna'][self.mrna_acc_col])) == 0, "invalid mRNA accession ids in proteins"
-                assert sum(pd.isnull(proteins['protein_sequence'])) == 0, f"missing protein sequences in {strain} proteins"
+                assert sum(pd.isnull(proteins['protein_seq'])) == 0, f"missing protein sequences in {strain} proteins"
                 
                 # 4 - update info
                 if strain not in self.strains_data:
@@ -296,6 +299,16 @@ class DataLoader:
                 self.strains_data[strain].update({
                     'all_proteins': proteins
                 })
+    
+    def _match_proteins_to_mrnas(self):
+        for strain, data in self.strains_data.items():
+            # TODO: klebsiella - check for klebsiella when data is ready
+            if strain != self.klebsiella_nm:
+                all_mrna_w = pd.merge(data['all_mrna'], data['all_proteins'][[self.mrna_acc_col, 'protein_seq']], how='left', on=self.mrna_acc_col)
+                assert len(all_mrna_w) == len(data['all_mrna']), f"mRNA and protein data mismatch in {strain}"
+                self.logger.info(f"{strain} --> {sum(pd.notnull(all_mrna_w['protein_seq']))} out of {len(all_mrna_w)} mRNAs with protein sequences ({round(sum(pd.notnull(all_mrna_w['protein_seq'])) / len(all_mrna_w) * 100, 2)}%)")
+                
+                data['all_mrna'] = all_mrna_w
     
     def _load_annotations(self) -> Dict[str, Dict[str, pd.DataFrame]]:
         # ---------------------------   per dataset preprocessing   ---------------------------

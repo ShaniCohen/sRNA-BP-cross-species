@@ -286,16 +286,20 @@ def annotate_mrnas_w_interproscan_annt(strain_nm: str, data: dict) -> pd.DataFra
     # 1 - parse header to extract accession, locus, and name (use the same columns used data['all_mrna'])
     data['interproscan_annot'] = gp.parse_header_to_acc_locus_and_name(data['interproscan_annot'], data['interproscan_header_col'], mrna_acc_col, mrna_locus_col, mrna_name_col)
     
-    # 1 - merge GO terms with all mRNAs
+    # 2 - merge GO terms with all mRNAs
     ips_annot = data['interproscan_annot'][[mrna_acc_col, 'protein_sequence', 'BP_go_xrefs', 'MF_go_xrefs', 'CC_go_xrefs']]
     all_mrna_w_ips_annt = pd.merge(all_mrna, ips_annot, on=mrna_acc_col, how='left')
     assert len(all_mrna) == len(all_mrna_w_ips_annt), "duplicate accession numbers"
+    
+    # 3 - check protein sequences
+    s1, s2 = all_mrna_w_ips_annt['protein_seq'], all_mrna_w_ips_annt['protein_sequence']
+    assert sum(pd.notnull(s2) & (s1 != s2)) == 0, "protein sequences mismatch"
 
-    # 1.1
+    # 4 - ensure that GO xrefs are lists and not empty
     for a in ['BP_go_xrefs', 'MF_go_xrefs', 'CC_go_xrefs']:
         all_mrna_w_ips_annt[a] = all_mrna_w_ips_annt[a].apply(lambda x: x if isinstance(x, list) and len(x) > 0 else None)
 
-    # 2 - log statistics
+    # 5 - log statistics
     num_mrna = len(all_mrna)
     num_mrna_w_annt = sum(pd.notnull(all_mrna_w_ips_annt['protein_sequence']))
     num_mrna_w_bp_annt = sum(pd.notnull(all_mrna_w_ips_annt['BP_go_xrefs']))
@@ -304,6 +308,9 @@ def annotate_mrnas_w_interproscan_annt(strain_nm: str, data: dict) -> pd.DataFra
     logger.info(f"{strain_nm} - out of {num_mrna} mRNAs, {num_mrna_w_annt} have interproscan GO annotations ({(num_mrna_w_annt/num_mrna)*100:.2f}%)")
     logger.info(f"{num_mrna_w_bp_annt} have BP annotations ({(num_mrna_w_bp_annt/num_mrna)*100:.2f}%), {num_mrna_w_mf_annt} have MF annotations ({(num_mrna_w_mf_annt/num_mrna)*100:.2f}%), {num_mrna_w_cc_annt} have CC annotations ({(num_mrna_w_cc_annt/num_mrna)*100:.2f}%)") 
 
+    # 6 - remove protein_sequence column
+    all_mrna_w_ips_annt = all_mrna_w_ips_annt.drop(columns=['protein_sequence'])
+    
     return all_mrna_w_ips_annt
 
 

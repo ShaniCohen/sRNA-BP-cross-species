@@ -56,12 +56,14 @@ class GraphUtils:
         self.eggnog = "eggnog"
         self.annot_types = [self.curated, self.ips, self.eggnog]
 
-    def add_node_rna(self, G, id, type, strain, locus_tag, name, synonyms, start, end, strand, sequence, log_warning=True):
+    def add_node_rna(self, G, id, type, strain, locus_tag, name, synonyms, start, end, strand, rna_seq, protein_seq: str = None, log_warning=True):
         if not G.has_node(id):
             assert type in [self.srna, self.mrna], f"invalid RNA type: {type}"
             assert strain in self.strains, f"strain {strain} is not in the list of strains: {self.strains}"
-            G.add_node(id, type=type, 
-                       strain=strain, locus_tag=locus_tag, name=name, synonyms=synonyms, start=start, end=end, strand=strand, sequence=sequence)
+            if pd.notnull(protein_seq):
+                G.add_node(id, type=type, strain=strain, locus_tag=locus_tag, name=name, synonyms=synonyms, start=start, end=end, strand=strand, rna_seq=rna_seq, protein_seq=protein_seq)
+            else:
+                G.add_node(id, type=type, strain=strain, locus_tag=locus_tag, name=name, synonyms=synonyms, start=start, end=end, strand=strand, rna_seq=rna_seq)
         elif log_warning:
             self.logger.warning(f"{type} node {id} already in graph G")
         return G

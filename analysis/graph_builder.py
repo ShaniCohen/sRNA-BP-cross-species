@@ -119,7 +119,7 @@ class GraphBuilder:
                 srna_node_id = r[self.srna_acc_col]
                 self.G = self.U.add_node_rna(self.G, id=srna_node_id, type=self.U.srna, strain=strain, locus_tag=r['sRNA_locus_tag'], 
                                              name=r['sRNA_name'], synonyms=r['sRNA_name_synonyms'], start=r['sRNA_start'], end=r['sRNA_end'],
-                                             strand=r['sRNA_strand'], sequence=r['sRNA_sequence'])
+                                             strand=r['sRNA_strand'], rna_seq=r['sRNA_sequence'])
             
             # TODO: Decide how to use interactions data (growth cond, hfq, only pos inter, count?)
             # 2 - add sRNA-mRNA interaction edges
@@ -300,7 +300,7 @@ class GraphBuilder:
             mrna_node_id = r[self.mrna_acc_col]
             self.G = self.U.add_node_rna(self.G, id=mrna_node_id, type=self.U.mrna, strain=strain, locus_tag=r['mRNA_locus_tag'], 
                                name=r['mRNA_name'], synonyms=r['mRNA_name_synonyms'], start=r['mRNA_start'], end=r['mRNA_end'],
-                               strand=r['mRNA_strand'], sequence=r['mRNA_sequence'])
+                               strand=r['mRNA_strand'], rna_seq=r['mRNA_sequence'], protein_seq=r['protein_seq'])
             # 2 - add annotation edge between the mRNA node and its BP nodes
             go_bp_ids = r['GO_BP']
             if isinstance(go_bp_ids, list) and len(go_bp_ids) > 0:
@@ -322,7 +322,7 @@ class GraphBuilder:
             mrna_node_id = r[self.mrna_acc_col]
             self.G = self.U.add_node_rna(self.G, id=mrna_node_id, type=self.U.mrna, strain=strain, locus_tag=r['mRNA_locus_tag'], 
                                name=r['mRNA_name'], synonyms=r['mRNA_name_synonyms'], start=r['mRNA_start'], end=r['mRNA_end'],
-                               strand=r['mRNA_strand'], sequence=r['mRNA_sequence'])
+                               strand=r['mRNA_strand'], rna_seq=r['mRNA_sequence'], protein_seq=r['protein_seq'])
             # 2 - add annotation edges between the mRNA node and BP nodes
             bp_go_xrefs = r['BP_go_xrefs']
             if isinstance(bp_go_xrefs, list) and len(bp_go_xrefs) > 0:
@@ -347,7 +347,7 @@ class GraphBuilder:
             mrna_node_id = r[self.mrna_acc_col]
             self.G = self.U.add_node_rna(self.G, id=mrna_node_id, type=self.U.mrna, strain=strain, locus_tag=r['mRNA_locus_tag'], 
                                          name=r['mRNA_name'], synonyms=r['mRNA_name_synonyms'], start=r['mRNA_start'], end=r['mRNA_end'],
-                                         strand=r['mRNA_strand'], sequence=r['mRNA_sequence'], log_warning=False)
+                                         strand=r['mRNA_strand'], rna_seq=r['mRNA_sequence'], protein_seq=r['protein_seq'], log_warning=False)
             # 2 - add annotation edges between the mRNA node and GO nodes (BO, MF, CC if exist in the ontology)
             if pd.notnull(r['GOs']) and r['GOs'] != '-':
                 go_ids = [g.replace("GO:", "") for g in r['GOs'].split(',')]
