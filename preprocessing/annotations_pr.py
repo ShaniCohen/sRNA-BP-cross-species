@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import re
 from typing import Dict, List, Tuple, Set
+import preprocessing.general_pr as gp
 import logging
 from io import StringIO
 logger = logging.getLogger(__name__)
@@ -201,6 +202,7 @@ def load_and_preprocess_eggnog_annot(annot_file_path):
     # return interproscan_annot, header_col
     return eggnog_annot, header_col
 
+
 def _load_eggnog_annot_file(annot_file_path) -> Tuple[pd.DataFrame, str]:
     out_col_header = 'input_header'
 
@@ -274,30 +276,6 @@ def annotate_mrnas_w_curated_annt(strain_nm: str, data: dict) -> pd.DataFrame:
     return all_mrna_w_curated_annt
 
 
-def _parse_header_to_acc_locus_and_name(df: pd.DataFrame, df_header_col: str, acc_col: str, locus_col: str, name_col: str) -> pd.DataFrame:
-    """
-    Parse the header column in the InterProScan annotations dataframe to extract accession, locus, and name.
-    
-    Args:
-        df (pd.DataFrame): DataFrame containing the InterProScan annotations.
-        df_header_col (str): Name of the column containing the header.
-        acc_col (str): Name of the column to store the accession.
-        locus_col (str): Name of the column to store the locus.
-        name_col (str): Name of the column to store the name.
-    
-    Returns:
-        pd.DataFrame: DataFrame with the new columns added.
-    """
-    def parse_header(header: str):
-        parts = header.split('|')
-        if len(parts) == 4:
-            return parts[1], parts[2], parts[3]
-        return None, None, None
-
-    df[[acc_col, locus_col, name_col]] = df[df_header_col].apply(lambda x: pd.Series(parse_header(x)))
-    return df
-
-
 def annotate_mrnas_w_interproscan_annt(strain_nm: str, data: dict) -> pd.DataFrame:
     """
     """
@@ -306,7 +284,7 @@ def annotate_mrnas_w_interproscan_annt(strain_nm: str, data: dict) -> pd.DataFra
     mrna_acc_col = data['mrna_acc_col']
 
     # 1 - parse header to extract accession, locus, and name (use the same columns used data['all_mrna'])
-    data['interproscan_annot'] = _parse_header_to_acc_locus_and_name(data['interproscan_annot'], data['interproscan_header_col'], mrna_acc_col, mrna_locus_col, mrna_name_col)
+    data['interproscan_annot'] = gp.parse_header_to_acc_locus_and_name(data['interproscan_annot'], data['interproscan_header_col'], mrna_acc_col, mrna_locus_col, mrna_name_col)
     
     # 1 - merge GO terms with all mRNAs
     ips_annot = data['interproscan_annot'][[mrna_acc_col, 'protein_sequence', 'BP_go_xrefs', 'MF_go_xrefs', 'CC_go_xrefs']]
@@ -337,7 +315,7 @@ def annotate_mrnas_w_eggnog_annt(strain_nm: str, data: dict) -> pd.DataFrame:
     mrna_acc_col = data['mrna_acc_col']
 
     # 1 - parse header to extract accession, locus, and name (use the same columns used data['all_mrna'])
-    data['eggnog_annot'] = _parse_header_to_acc_locus_and_name(data['eggnog_annot'], data['eggnog_header_col'], mrna_acc_col, mrna_locus_col, mrna_name_col)
+    data['eggnog_annot'] = gp.parse_header_to_acc_locus_and_name(data['eggnog_annot'], data['eggnog_header_col'], mrna_acc_col, mrna_locus_col, mrna_name_col)
     
     # 2 - merge GO terms with all mRNAs
     egg_annot = data['eggnog_annot'][[mrna_acc_col, 'GOs']]

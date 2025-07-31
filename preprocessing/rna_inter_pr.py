@@ -1095,18 +1095,14 @@ def preprocess_vibrio_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, in
                  f"unique interactions: {len(inter_data.groupby(['sRNA_accession_id', 'mRNA_accession_id']).count())}")
 
     # --------------  all mRNAs  --------------
-    # 1 - lower
-    mrna_data['mRNA_accession_id'] = mrna_data['mRNA_accession_id'].apply(lambda x: x.lower())
-    mrna_data['mRNA_locus_tag'] = mrna_data['mRNA_locus_tag'].apply(lambda x: x.lower())
+    # 1 - lower names
     mrna_data['mRNA_name'] = mrna_data['mRNA_name'].apply(lambda x: x.lower())
 
     # 2 - filter out riboswitches
     # mrna_data = mrna_data[mrna_data['mRNA_name'].apply(lambda x: "riboswitch" not in x)].reset_index(drop=True)
 
     # --------------  all sRNAs  --------------
-    # 1 - lower
-    srna_data['sRNA_accession_id'] = srna_data['sRNA_accession_id'].apply(lambda x: x.lower())
-    srna_data['sRNA_locus_tag'] = srna_data['sRNA_locus_tag'].apply(lambda x: x.lower())
+    # 1 - lower names
     srna_data['sRNA_name'] = srna_data['sRNA_name'].apply(lambda x: x.lower())
 
     # --------------  interactions  --------------
@@ -1114,10 +1110,8 @@ def preprocess_vibrio_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, in
     invalid_mrna_nms = ['QrrT']
     inter_data = inter_data[~inter_data['mRNA_name'].isin(invalid_mrna_nms)].reset_index(drop=True)
     
-    # 2 - lower
-    inter_data['mRNA_accession_id'] = inter_data['mRNA_accession_id'].apply(lambda x: x.lower())
+    # 2 - lower names
     inter_data['mRNA_name'] = inter_data['mRNA_name'].apply(lambda x: x.lower())
-    inter_data['sRNA_accession_id'] = inter_data['sRNA_accession_id'].apply(lambda x: x.lower())
     inter_data['sRNA_name'] = inter_data['sRNA_name'].apply(lambda x: x.lower())
 
     # 3 - PATCH: fill in mRNA names in the interactions table
@@ -1159,22 +1153,16 @@ def preprocess_klebsiella_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame
                  f"unique interactions: {len(inter_data.groupby(['sRNA_accession_id', 'mRNA_accession_id']).count())}")
 
     # --------------  all mRNAs  --------------
-    # 1 - lower
-    mrna_data['mRNA_accession_id'] = mrna_data['mRNA_accession_id'].apply(lambda x: x.lower())
-    mrna_data['mRNA_locus_tag'] = mrna_data['mRNA_locus_tag'].apply(lambda x: x.lower())
+    # 1 - lower names
     mrna_data['mRNA_name'] = mrna_data['mRNA_name'].apply(lambda x: x.lower())
 
     # --------------  all sRNAs  --------------
-    # 1 - lower
-    srna_data['sRNA_accession_id'] = srna_data['sRNA_accession_id'].apply(lambda x: x.lower())
-    srna_data['sRNA_locus_tag'] = srna_data['sRNA_locus_tag'].apply(lambda x: x.lower())
+    # 1 - lower names
     srna_data['sRNA_name'] = srna_data['sRNA_name'].apply(lambda x: x.lower())
 
     # --------------  interactions  --------------
-    # 1 - lower
-    inter_data['mRNA_accession_id'] = inter_data['mRNA_accession_id'].apply(lambda x: x.lower())
+    # 1 - lower names
     inter_data['mRNA_name'] = inter_data['mRNA_name'].apply(lambda x: x.lower())
-    inter_data['sRNA_accession_id'] = inter_data['sRNA_accession_id'].apply(lambda x: x.lower())
     inter_data['sRNA_name'] = inter_data['sRNA_name'].apply(lambda x: x.lower())
     
     # 2 - PATCH: fix sRNA and mRNA accession ids in the interactions table
@@ -1225,9 +1213,7 @@ def preprocess_pseudomonas_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFram
     mrna_data['mRNA_accession_id'] = list(map(lambda nm, acc: srna_nm_to_locus_acc[nm] if srna_nm_to_locus_acc.get(nm) else acc, mrna_data['mRNA_name'], mrna_data['mRNA_accession_id']))
     mrna_data['mRNA_locus_tag'] = list(map(lambda nm, locus: srna_nm_to_locus_acc[nm] if srna_nm_to_locus_acc.get(nm) else locus, mrna_data['mRNA_name'], mrna_data['mRNA_locus_tag']))
     
-    # 2 - lower
-    mrna_data['mRNA_accession_id'] = mrna_data['mRNA_accession_id'].apply(lambda x: x.lower())
-    mrna_data['mRNA_locus_tag'] = mrna_data['mRNA_locus_tag'].apply(lambda x: x.lower())
+    # 2 - lower names
     mrna_data['mRNA_name'] = mrna_data['mRNA_name'].apply(lambda x: x.lower())
 
     # --------------  all sRNAs  --------------
@@ -1235,24 +1221,20 @@ def preprocess_pseudomonas_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFram
     invalid_srna_acc = ['PA4421.1'] 
     srna_data = srna_data[~srna_data['sRNA_accession_id'].isin(invalid_srna_acc)].reset_index(drop=True)
 
-    # 2 - lower
-    srna_data['sRNA_accession_id'] = srna_data['sRNA_accession_id'].apply(lambda x: x.lower())
-    srna_data['sRNA_locus_tag'] = srna_data['sRNA_locus_tag'].apply(lambda x: x.lower())
+    # 2 - lower names
     srna_data['sRNA_name'] = srna_data['sRNA_name'].apply(lambda x: x.lower())
 
 
     # --------------  interactions  --------------
-    # 1 - PATCH: fix mRNA accession id and locus tag
+    # 1 - PATCH: fix mRNA accession id
     inter_data['mRNA_accession_id'] = list(map(lambda nm, acc: srna_nm_to_locus_acc[nm] if srna_nm_to_locus_acc.get(nm) else acc, inter_data['mRNA_name'], inter_data['mRNA_accession_id']))
 
     # 2 - PATCH: filter out invalid sRNAs (name is missing in the sRNA data)
     invalid_srna_nms = ['5_utr_PA2770']
     inter_data = inter_data[~inter_data['sRNA_name'].isin(invalid_srna_nms)].reset_index(drop=True)
     
-    # 3 - lower
-    inter_data['mRNA_accession_id'] = inter_data['mRNA_accession_id'].apply(lambda x: x.lower())
+    # 3 - lower names
     inter_data['mRNA_name'] = inter_data['mRNA_name'].apply(lambda x: x.lower())
-    inter_data['sRNA_accession_id'] = inter_data['sRNA_accession_id'].apply(lambda x: x.lower())
     inter_data['sRNA_name'] = inter_data['sRNA_name'].apply(lambda x: x.lower())
     
     # 4 - PATCH: fix sRNA and mRNA names in the interactions table

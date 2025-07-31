@@ -8,6 +8,7 @@ from os.path import join
 from pathlib import Path
 from utils.general import read_df, write_df
 from goatools.anno.gaf_reader import GafReader
+
 import json
 import sys
 import os
@@ -18,6 +19,7 @@ if ROOT_PATH not in sys.path:
 
 from preprocessing import rna_inter_pr as ap
 from preprocessing import annotations_pr as ap_annot
+from preprocessing import general_pr as gp
 
 
 def load_goa(file_path):
@@ -269,54 +271,31 @@ class DataLoader:
          
     def _load_proteins(self) -> Dict[str, Dict[str, pd.DataFrame]]:
         # ---------------------------   per dataset preprocessing   ---------------------------
-        for strain in self.strains:
-            proteins = load_fasta(file_path=join(self.config['proteins_dir'], f"{strain}_proteins.fasta"))
-            print()
-
-
-        # 1 - Escherichia coli K12 MG1655
-        k12_proteins = load_fasta(file_path=join(self.config['proteins_dir'], f"{self.ecoli_k12_nm}_proteins.fasta"))
-
-        k12_mrna, k12_srna, k12_inter = \
-            ap.preprocess_ecoli_k12_inter(mrna_data=k12_mrna, srna_data=k12_srna, inter_data=k12_inter)
-        k12_unq_inter, k12_sum, k12_srna, k12_mrna = ap.analyze_ecoli_k12_inter(mrna_data=k12_mrna, srna_data=k12_srna, inter_data=k12_inter)
-        # 1.1 - update info
-        if self.ecoli_k12_nm not in self.strains_data:
-            self.strains_data[self.ecoli_k12_nm] = {}
-        self.strains_data[self.ecoli_k12_nm].update({
-            'all_mrna': k12_mrna,
-            'all_srna': k12_srna,
-            'unq_inter': k12_unq_inter,
-            'all_inter': k12_inter,
-            'all_srna_acc_col': 'EcoCyc_accession_id',
-            'all_mrna_acc_col': 'EcoCyc_accession_id',
-            'all_inter_srna_acc_col': 'sRNA_accession_id_Eco',
-            'all_inter_mrna_acc_col': 'mRNA_accession_id_Eco'
-        })
-
-        # 2 - Escherichia coli EPEC
-
-        # 3 - Salmonella enterica
-
-        # 4 - Vibrio cholerae
-
-        # 5 - Klebsiella pneumoniae
-
-        # 6 - Pseudomonas aeruginosa
-        
-        # -------------- TODO: add patch --->  all mRNAs  --------------
-        # # 1 - PATCH: fix mRNA accession id and locus tag
-        # srna_nm_to_locus_acc = {
-        #     "PA2046": "PA2046", 
-        #     "pilC": "PA4527", 
-        #     "PA4641": "PA4641"
-        # }
-        # mrna_data['mRNA_accession_id'] = list(map(lambda nm, acc: srna_nm_to_locus_acc[nm] if srna_nm_to_locus_acc.get(nm) else acc, mrna_data['mRNA_name'], mrna_data['mRNA_accession_id']))
-        # mrna_data['mRNA_locus_tag'] = list(map(lambda nm, locus: srna_nm_to_locus_acc[nm] if srna_nm_to_locus_acc.get(nm) else locus, mrna_data['mRNA_name'], mrna_data['mRNA_locus_tag']))
-        
-
-
-        print()
+        for strain in self.strains: 
+            if strain != self.klebsiella_nm:
+                # 1 - load proteins
+                proteins = load_fasta(file_path=join(self.config['proteins_dir'], f"{strain}_proteins.fasta"))
+                proteins = proteins.rename(columns={'seq': 'protein_sequence', 'id': 'header'})
+                # 1.1 - PATCH to adjust Salmonella headers
+                if strain == self.salmonella_nm:
+                    _lambda = lambda x: x.split("|")[0] + "|" + x.split("|")[2] + "|" + "|".join(x.split("|")[2:])
+                    proteins['header'] = proteins['header'].apply(_lambda)
+                
+                # 2 - preprocess
+                proteins = gp.parse_header_to_acc_locus_and_name(df=proteins, df_header_col='header', acc_col=self.mrna_acc_col, locus_col='mRNA_locus_tag', name_col='mRNA_name')
+                
+                # 3 - validate
+                assert sum(pd.isnull(proteins[self.mrna_acc_col])) == 0, f"missing accession ids in {strain} proteins"
+                assert len(proteins[self.mrna_acc_col].unique()) == len(proteins), f"duplicate accession ids in {strain} proteins"
+                assert len(set(proteins[self.mrna_acc_col]) - set(self.strains_data[strain]['all_mrna'][self.mrna_acc_col])) == 0, "invalid mRNA accession ids in proteins"
+                assert sum(pd.isnull(proteins['protein_sequence'])) == 0, f"missing protein sequences in {strain} proteins"
+                
+                # 4 - update info
+                if strain not in self.strains_data:
+                    self.strains_data[strain] = {}
+                self.strains_data[strain].update({
+                    'all_proteins': proteins
+                })
     
     def _load_annotations(self) -> Dict[str, Dict[str, pd.DataFrame]]:
         # ---------------------------   per dataset preprocessing   ---------------------------
