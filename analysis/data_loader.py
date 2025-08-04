@@ -83,6 +83,8 @@ class DataLoader:
         self.clustering_data = {}
         self.srna_seq_type = 'sRNA'
         self.protein_seq_type = 'protein'
+
+        self.generate_clean_rna_fasta = False
     
     def get_strains(self) -> List[str]:
         return self.strains
@@ -93,7 +95,8 @@ class DataLoader:
         # 1 - RNA and interactions data
         self._load_rna_and_inter_data()
         self._align_rna_and_inter_data()
-        self._generate_clean_rna_fasta_files()
+        if self.generate_clean_rna_fasta:
+            self._generate_clean_rna_fasta_files()
         # 2 - proteins
         self._load_proteins()
         self._match_proteins_to_mrnas()
