@@ -507,6 +507,10 @@ def analyze_ecoli_epec_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, i
     assert len(srna_data) == len(set(srna_data['sRNA_accession_id']))
     assert len(mrna_data) == len(set(mrna_data['mRNA_accession_id']))
 
+    # 6 - check there is no overlap between sRNA and mRNA accession ids
+    assert np.intersect1d(srna_data['sRNA_accession_id'], mrna_data['mRNA_accession_id']).size == 0, \
+        f"sRNA and mRNA accession ids overlap = {np.intersect1d(srna_data['sRNA_accession_id'], mrna_data['mRNA_accession_id'])}"
+
     # --------------  interactions  --------------
     logger.info(f"FINAL - ecoli_epec - interactions: {len(inter_data)}, "
                 f"unique interactions: {len(inter_data.groupby(['sRNA_accession_id_Eco', 'mRNA_accession_id_Eco']).count())}")
@@ -601,6 +605,10 @@ def analyze_salmonella_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, i
     # -------------- adjust sRNA acc names
     rnm = {'SL1344_0808': 'SL1344_0808_5utr'}
     srna_data[srna_acc_col] = srna_data[srna_acc_col].apply(lambda x: rnm.get(x, x))
+
+    # 6 - check there is no overlap between sRNA and mRNA accession ids
+    assert np.intersect1d(srna_data['sRNA_accession_id'], mrna_data['mRNA_accession_id']).size == 0, \
+        f"sRNA and mRNA accession ids overlap = {np.intersect1d(srna_data['sRNA_accession_id'], mrna_data['mRNA_accession_id'])}"
     
 	# -------------- convert sRNA names
 
@@ -667,6 +675,10 @@ def analyze_vibrio_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, inter
     # 5 - check structure of mRNA and sRNA data
     assert len(srna_data) == len(set(srna_data['sRNA_accession_id']))
     assert len(mrna_data) == len(set(mrna_data['mRNA_accession_id']))
+
+    # 6 - check there is no overlap between sRNA and mRNA accession ids
+    assert np.intersect1d(srna_data['sRNA_accession_id'], mrna_data['mRNA_accession_id']).size == 0, \
+        f"sRNA and mRNA accession ids overlap = {np.intersect1d(srna_data['sRNA_accession_id'], mrna_data['mRNA_accession_id'])}"
 
     # --------------  interactions  --------------
     logger.info(f"FINAL - Vibrio cholerae - interactions: {len(inter_data)}, "
@@ -749,6 +761,10 @@ def analyze_klebsiella_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, i
     assert len(srna_data) == len(set(srna_data['sRNA_accession_id']))
     assert len(mrna_data) == len(set(mrna_data['mRNA_accession_id']))
 
+    # 6 - check there is no overlap between sRNA and mRNA accession ids
+    assert np.intersect1d(srna_data['sRNA_accession_id'], mrna_data['mRNA_accession_id']).size == 0, \
+        f"sRNA and mRNA accession ids overlap = {np.intersect1d(srna_data['sRNA_accession_id'], mrna_data['mRNA_accession_id'])}"
+
     # --------------  interactions  --------------
     logger.info(f"FINAL - Klebsiella pneumoniae - interactions: {len(inter_data)}, "
                 f"unique interactions: {len(inter_data.groupby([srna_acc_col, mrna_acc_col]).count())}")
@@ -829,6 +845,10 @@ def analyze_pseudomonas_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, 
     # 5 - check structure of mRNA and sRNA data
     assert len(srna_data) == len(set(srna_data['sRNA_accession_id'])) 
     assert len(mrna_data) == len(set(mrna_data['mRNA_accession_id']))
+
+    # 6 - check there is no overlap between sRNA and mRNA accession ids
+    assert np.intersect1d(srna_data['sRNA_accession_id'], mrna_data['mRNA_accession_id']).size == 0, \
+        f"sRNA and mRNA accession ids overlap = {np.intersect1d(srna_data['sRNA_accession_id'], mrna_data['mRNA_accession_id'])}"
 
     # --------------  interactions  --------------
     logger.info(f"FINAL - Pseudomonas aeruginosa - interactions: {len(inter_data)}, "
@@ -1098,10 +1118,14 @@ def preprocess_vibrio_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, in
                  f"unique interactions: {len(inter_data.groupby(['sRNA_accession_id', 'mRNA_accession_id']).count())}")
 
     # --------------  all mRNAs  --------------
-    # 1 - lower names
+    # 1 - filter invalid mRNAs
+    invalid_mrna_nms = ['IGR2/lys riboswitch']
+    mrna_data = mrna_data[~mrna_data['mRNA_name'].isin(invalid_mrna_nms)].reset_index(drop=True)
+
+    # 2 - lower names
     mrna_data['mRNA_name'] = mrna_data['mRNA_name'].apply(lambda x: x.lower())
 
-    # 2 - filter out riboswitches
+    # 3 - filter out riboswitches
     # mrna_data = mrna_data[mrna_data['mRNA_name'].apply(lambda x: "riboswitch" not in x)].reset_index(drop=True)
 
     # --------------  all sRNAs  --------------
@@ -1216,38 +1240,57 @@ def preprocess_pseudomonas_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFram
     mrna_data['mRNA_accession_id'] = list(map(lambda nm, acc: srna_nm_to_locus_acc[nm] if srna_nm_to_locus_acc.get(nm) else acc, mrna_data['mRNA_name'], mrna_data['mRNA_accession_id']))
     mrna_data['mRNA_locus_tag'] = list(map(lambda nm, locus: srna_nm_to_locus_acc[nm] if srna_nm_to_locus_acc.get(nm) else locus, mrna_data['mRNA_name'], mrna_data['mRNA_locus_tag']))
     
-    # 2 - lower names
+    # 2 - PATCH: filter out invalid mRNA acc (appear both as sRNA and mRNA)
+    invalid_mrna_acc = ['PA2495', 'Pant72/P3', 'Spa121'] + ['PA3305.1', 'PA5429.1']
+    mrna_data = mrna_data[~mrna_data['mRNA_accession_id'].isin(invalid_mrna_acc)].reset_index(drop=True)
+    
+    # 3 - lower names
     mrna_data['mRNA_name'] = mrna_data['mRNA_name'].apply(lambda x: x.lower())
 
     # --------------  all sRNAs  --------------
-    # 1 - filter out invalid sRNAs (acc appear twice)
+    # 1 - filter out invalid sRNAs acc (appear both as sRNA and mRNA)
+    invalid_srna_acc = ['PA2495', 'Pant72/P3', 'Spa121'] + ['PA5446']
+    srna_data = srna_data[~srna_data['sRNA_accession_id'].isin(invalid_srna_acc)].reset_index(drop=True)
+
+    # 2 - filter out invalid sRNAs acc (appear twice in sRNA data)
     invalid_srna_acc = ['PA4421.1'] 
     srna_data = srna_data[~srna_data['sRNA_accession_id'].isin(invalid_srna_acc)].reset_index(drop=True)
 
-    # 2 - lower names
-    srna_data['sRNA_name'] = srna_data['sRNA_name'].apply(lambda x: x.lower())
+    # 3 - filter out invalid sRNA names (name is missing in the sRNA data)
+    invalid_srna_nms = ['5_utr_PA2770']
+    srna_data = srna_data[~srna_data['sRNA_name'].isin(invalid_srna_nms)].reset_index(drop=True)
 
+    # 4 - lower names
+    srna_data['sRNA_name'] = srna_data['sRNA_name'].apply(lambda x: x.lower())
 
     # --------------  interactions  --------------
     # 1 - PATCH: fix mRNA accession id
     inter_data['mRNA_accession_id'] = list(map(lambda nm, acc: srna_nm_to_locus_acc[nm] if srna_nm_to_locus_acc.get(nm) else acc, inter_data['mRNA_name'], inter_data['mRNA_accession_id']))
 
-    # 2 - PATCH: filter out invalid sRNAs (name is missing in the sRNA data)
+    # 2 - filter out invalid mRNA acc
+    invalid_mrna_acc = ['PA2495', 'Pant72/P3', 'Spa121'] + ['PA3305.1', 'PA5429.1']
+    inter_data = inter_data[~inter_data['mRNA_accession_id'].isin(invalid_mrna_acc)].reset_index(drop=True)
+
+    # 3 - filter out invalid sRNAs acc
+    invalid_srna_mrna_acc = ['PA2495', 'Pant72/P3', 'Spa121']  + ['PA5446']
+    inter_data = inter_data[~inter_data['sRNA_accession_id'].isin(invalid_srna_mrna_acc)].reset_index(drop=True)
+    
+    # 4 - filter out invalid sRNAs (name is missing in the sRNA data)
     invalid_srna_nms = ['5_utr_PA2770']
     inter_data = inter_data[~inter_data['sRNA_name'].isin(invalid_srna_nms)].reset_index(drop=True)
-    
-    # 3 - lower names
+
+    # 5 - lower names
     inter_data['mRNA_name'] = inter_data['mRNA_name'].apply(lambda x: x.lower())
     inter_data['sRNA_name'] = inter_data['sRNA_name'].apply(lambda x: x.lower())
     
-    # 4 - PATCH: fix sRNA and mRNA names in the interactions table
+    # 6 - PATCH: fix sRNA and mRNA names in the interactions table
     srna_map = dict(zip(srna_data['sRNA_accession_id'], srna_data['sRNA_name']))
     inter_data['sRNA_name'] = inter_data['sRNA_accession_id'].apply(lambda x: srna_map[x])
 
     mrna_map = dict(zip(mrna_data['mRNA_accession_id'], mrna_data['mRNA_name']))
     inter_data['mRNA_name'] = inter_data['mRNA_accession_id'].apply(lambda x: mrna_map[x])
 
-    # 4 - save 'dir' and 'file_name' columns
+    # 7 - save 'dir' and 'file_name' columns
     inter_data['dir'] = inter_data['Data_source']
     inter_data['file_name'] = inter_data['Experiment']
     inter_data['interaction_label'] = inter_data['Interaction_label'].apply(lambda x: 1 if x == 'interaction' else 0)

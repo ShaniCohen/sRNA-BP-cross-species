@@ -12,8 +12,8 @@
     "go_annotations_dir": "go_annotations",
     "clustering_dir": "clustering",
     
-    "k12_dir": "Escherichia_coli_K12_MG1655",
-    "epec_dir": "Mizrahi_2021_EPEC",
+    "ecoli_k12_dir": "Escherichia_coli_K12_MG1655",
+    "ecoli_epec_dir": "Mizrahi_2021_EPEC",
     "salmonella_dir": "Matera_2022_salmonella",
     "vibrio_dir": "Huber_2022_Vibrio_cholerae",
     "klebsiella_dir": "Goh_2024_Klebsiella_pneumoniae",

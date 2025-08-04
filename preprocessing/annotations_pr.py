@@ -263,6 +263,8 @@ def annotate_mrnas_w_curated_annt(strain_nm: str, data: dict) -> pd.DataFrame:
     """
     all_mrna, all_mrna_locus_col = data['all_mrna'], data['all_mrna_locus_col'], 
     curated_annot, curated_annot_locus_col = data['curated_annot'], data['curated_locus_col']
+    if not set(curated_annot[curated_annot_locus_col]) <= set(all_mrna[all_mrna_locus_col]):
+        logger.warning(f"{strain_nm} - curated annotations contain locus tags not found in all_mrna: {set(curated_annot[curated_annot_locus_col]) - set(all_mrna[all_mrna_locus_col])}")
 
     # 1 - merge GO terms with all mRNAs
     all_mrna_w_curated_annt = pd.merge(all_mrna, curated_annot, left_on=all_mrna_locus_col, right_on=curated_annot_locus_col, how='left')
@@ -285,6 +287,8 @@ def annotate_mrnas_w_interproscan_annt(strain_nm: str, data: dict) -> pd.DataFra
 
     # 1 - parse header to extract accession, locus, and name (use the same columns used data['all_mrna'])
     data['interproscan_annot'] = gp.parse_header_to_acc_locus_and_name(data['interproscan_annot'], data['interproscan_header_col'], mrna_acc_col, mrna_locus_col, mrna_name_col)
+    if not set(data['interproscan_annot'][mrna_acc_col]) <= set(all_mrna[mrna_acc_col]):
+        logger.warning(f"{strain_nm} - interproscan annotations contain accessions not found in all_mrna: {set(data['interproscan_annot'][mrna_acc_col]) - set(all_mrna[mrna_acc_col])}")
     
     # 2 - merge GO terms with all mRNAs
     ips_annot = data['interproscan_annot'][[mrna_acc_col, 'protein_sequence', 'BP_go_xrefs', 'MF_go_xrefs', 'CC_go_xrefs']]
@@ -323,7 +327,9 @@ def annotate_mrnas_w_eggnog_annt(strain_nm: str, data: dict) -> pd.DataFrame:
 
     # 1 - parse header to extract accession, locus, and name (use the same columns used data['all_mrna'])
     data['eggnog_annot'] = gp.parse_header_to_acc_locus_and_name(data['eggnog_annot'], data['eggnog_header_col'], mrna_acc_col, mrna_locus_col, mrna_name_col)
-    
+    if not set(data['eggnog_annot'][mrna_acc_col]) <= set(all_mrna[mrna_acc_col]):
+        logger.warning(f"{strain_nm} - eggnog annotations contain accessions not found in all_mrna: {set(data['eggnog_annot'][mrna_acc_col]) - set(all_mrna[mrna_acc_col])}")
+
     # 2 - merge GO terms with all mRNAs
     egg_annot = data['eggnog_annot'][[mrna_acc_col, 'GOs']]
     all_mrna_w_egg_annt = pd.merge(all_mrna, egg_annot, on=mrna_acc_col, how='left')

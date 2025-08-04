@@ -3,6 +3,8 @@ import pandas as pd
 import itertools
 import numpy as np
 from Bio import SeqIO
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
 import re
 from os.path import join
 from pathlib import Path
@@ -32,15 +34,31 @@ def load_json(file_path):
         data = json.load(f)
     return data
 
-def load_fasta(file_path) -> pd.DataFrame:
+
+def load_fasta(file_path, header_col = 'header', seq_col = 'seq') -> pd.DataFrame:
     records = []
     for rec in SeqIO.parse(file_path, "fasta"):
         records.append({
-            'id': rec.id,
-            'seq': str(rec.seq),
-            'description': rec.description
+            header_col: rec.description,
+            seq_col: str(rec.seq)
+            # id_col: rec.id,
         })
     return pd.DataFrame(records)
+
+
+def write_fasta(df: pd.DataFrame, out_path: str, header_col: str = 'header', seq_col: str = 'seq'):
+    """
+    Write a DataFrame with columns 'header' and 'seq' to a FASTA file.
+    """
+    with open(out_path, "w", encoding="utf-8") as f:
+        for _, row in df.iterrows():    
+            header = row[header_col]
+            seq = row[seq_col]
+            # seq_id = row[id_col]
+
+            header = f">{header}"
+            f.write(header + "\n")
+            f.write(seq.replace("\n", "") + "\n")
 
 class DataLoader:
     def __init__(self, config, logger):
@@ -75,6 +93,7 @@ class DataLoader:
         # 1 - RNA and interactions data
         self._load_rna_and_inter_data()
         self._align_rna_and_inter_data()
+        self._generate_clean_rna_fasta_files()
         # 2 - proteins
         self._load_proteins()
         self._match_proteins_to_mrnas()
@@ -82,13 +101,14 @@ class DataLoader:
         self._load_annotations()
         self._match_annotations_to_mrnas()
         # 4 - clustering
-        # TODO: re-run with new data
+        # TODO: re-run with new data 
+        # review: ['eco|G0-9281|nan|alab', 'eco|G26|nan|dgd']
         # self._load_clustering_data()
     
     def _load_rna_and_inter_data(self) -> Dict[str, Dict[str, pd.DataFrame]]:
         # ---------------------------   per dataset preprocessing   ---------------------------
         # 1 - Escherichia coli K12 MG1655
-        k12_dir = self.config['k12_dir']
+        k12_dir = self.config[f'{self.ecoli_k12_nm}_dir']
         k12_mrna = read_df(file_path=join(self.config['rna_dir'], k12_dir, "mrna_eco.csv"))
         k12_srna = read_df(file_path=join(self.config['rna_dir'], k12_dir, "srna_eco.csv"))
         k12_inter = read_df(file_path=join(self.config['interactions_dir'], k12_dir, 'sInterBase_interactions_post_processing.csv'))
@@ -111,7 +131,7 @@ class DataLoader:
         })
 
         # 2 - Escherichia coli EPEC E2348/69  (Mizrahi 2021)
-        epec_dir = self.config['epec_dir']
+        epec_dir = self.config[f'{self.ecoli_epec_nm}_dir']
         epec_mrna = read_df(file_path=join(self.config['rna_dir'], epec_dir, "mizrahi_epec_all_mRNA_molecules.csv"))
         epec_srna = read_df(file_path=join(self.config['rna_dir'], epec_dir, "mizrahi_epec_all_sRNA_molecules.csv"))
         epec_inter = read_df(file_path=join(self.config['interactions_dir'], epec_dir, "mizrahi_epec_interactions.csv"))
@@ -135,7 +155,7 @@ class DataLoader:
         })
 
         # 3 - Salmonella enterica serovar Typhimurium strain SL1344,  Genome: NC_016810.1  (Matera 2022)
-        salmonella_dir = self.config['salmonella_dir']
+        salmonella_dir = self.config[f'{self.salmonella_nm}_dir']
         salmonella_mrna = read_df(file_path=join(self.config['rna_dir'], salmonella_dir, "matera_salmonella_all_mRNA_molecules.csv"))
         salmonella_srna = read_df(file_path=join(self.config['rna_dir'], salmonella_dir, "matera_salmonella_all_sRNA_molecules.csv"))
         salmonella_inter = read_df(file_path=join(self.config['interactions_dir'], salmonella_dir, "matera_salmonella_interactions.csv"))
@@ -145,7 +165,6 @@ class DataLoader:
         salmo_unq_inter, salmo_sum, salmo_srna, salmo_mrna = \
             ap.analyze_salmonella_inter(mrna_data=salmonella_mrna, srna_data=salmonella_srna, inter_data=salmonella_inter)
         
-        # TODO: check sRNA SL1344_0808
         # 3.1 - update info
         if self.salmonella_nm not in self.strains_data:
             self.strains_data[self.salmonella_nm] = {}
@@ -161,7 +180,7 @@ class DataLoader:
         })
 
         # 4 - Vibrio cholerae O1 biovar El Tor str. N16961 (NC_002505.1 and NC_002506.1)  (Huber 2022)
-        vibrio_dir = self.config['vibrio_dir']
+        vibrio_dir = self.config[f'{self.vibrio_nm}_dir']
         vibrio_mrna = read_df(file_path=join(self.config['rna_dir'], vibrio_dir, "huber_vibrio_all_mRNA_molecules.csv"))
         vibrio_srna = read_df(file_path=join(self.config['rna_dir'], vibrio_dir, "huber_vibrio_all_sRNA_molecules.csv"))
         vibrio_inter = read_df(file_path=join(self.config['interactions_dir'], vibrio_dir, "huber_vibrio_interactions.csv"))
@@ -186,7 +205,7 @@ class DataLoader:
         })
 
         # 5 - Klebsiella pneumoniae str. SGH10; KL1, ST23  (Goh 2024)
-        klebsiella_dir = self.config['klebsiella_dir']
+        klebsiella_dir = self.config[f'{self.klebsiella_nm}_dir']
         klebsiella_mrna = read_df(file_path=join(self.config['rna_dir'], klebsiella_dir, "goh_klebsiella_all_mRNA_molecules.csv"))
         klebsiella_srna = read_df(file_path=join(self.config['rna_dir'], klebsiella_dir, "goh_klebsiella_all_sRNA_molecules.csv"))
         klebsiella_inter = read_df(file_path=join(self.config['interactions_dir'], klebsiella_dir, "goh_klebsiella_interactions.csv"))
@@ -211,7 +230,7 @@ class DataLoader:
         })
 
         # 6 - Pseudomonas aeruginosa PAO1  (Gebhardt 2023)
-        pseudomonas_dir = self.config['pseudomonas_dir']
+        pseudomonas_dir = self.config[f'{self.pseudomonas_nm}_dir']
         pseudomonas_mrna = read_df(file_path=join(self.config['rna_dir'], pseudomonas_dir, "gebhardt_pseudomonas_all_mRNA_molecules.csv"))
         pseudomonas_srna = read_df(file_path=join(self.config['rna_dir'], pseudomonas_dir, "gebhardt_pseudomonas_all_sRNA_molecules.csv"))
         pseudomonas_inter = read_df(file_path=join(self.config['interactions_dir'], pseudomonas_dir, "gebhardt_pseudomonas_interactions.csv"))
@@ -270,45 +289,144 @@ class DataLoader:
             data['all_mrna_locus_col'] = 'mRNA_locus_tag'
             data['all_mrna_name_col'] = 'mRNA_name'
             data['all_mrna_name_syn_col'] = 'mRNA_name_synonyms'
+    
+    def _generate_clean_rna_fasta_files(self) -> Dict[str, Dict[str, pd.DataFrame]]:
+        # ---------------------------   per dataset preprocessing   ---------------------------
+        for strain in self.strains:
+            # 1 - load RNA fasta files
+            _path = join(self.config['rna_dir'], self.config[f'{strain}_dir'], "rna_fasta")
+            srna_fasta = load_fasta(file_path=join(_path, f"{strain}_sRNAs.fasta"))
+            mrna_fasta = load_fasta(file_path=join(_path, f"{strain}_mRNAs.fasta"))
+
+            srna_fasta = srna_fasta[[c for c in srna_fasta.columns if c !='description']]
+            mrna_fasta = mrna_fasta[[c for c in mrna_fasta.columns if c !='description']]
+
+            # 2 - load processed RNA data
+            srna_df = self.strains_data[strain]['all_srna']
+            mrna_df = self.strains_data[strain]['all_mrna']
+
+            # 3 - clean
+            srna_fasta_clean = self._clean_rna_fasta(strain=strain, rna_type='sRNA', rna_df=srna_df, rna_fasta=srna_fasta)
+            mrna_fasta_clean = self._clean_rna_fasta(strain=strain, rna_type='mRNA', rna_df=mrna_df, rna_fasta=mrna_fasta)
+
+            srna_fasta_clean = srna_fasta_clean[['cleaned_header','seq']]
+            mrna_fasta_clean = mrna_fasta_clean[['cleaned_header','seq']]
+            assert not pd.isnull(srna_fasta_clean).values.any(), f"{strain} - missing sequences in sRNA fasta after cleaning"
+            assert not pd.isnull(mrna_fasta_clean).values.any(), f"{strain} - missing sequences in mRNA fasta after cleaning"
+
+            # 4 - write clean fasta files
+            write_fasta(df=srna_fasta_clean, out_path=join(_path, f"{strain}_sRNAs_clean.fasta"), header_col='cleaned_header')
+            write_fasta(df=mrna_fasta_clean, out_path=join(_path, f"{strain}_mRNAs_clean.fasta"), header_col='cleaned_header')
+    
+    def _clean_rna_fasta(self, strain: str, rna_type: str, rna_df: pd.DataFrame, rna_fasta: pd.DataFrame) -> pd.DataFrame:
+        # 1 - merge fasta with rna_df
+        merged = self._merge_rna_df_n_fasta(rna_type=rna_type, rna_df=rna_df, rna_fasta=rna_fasta)
+        assert len(merged) == len(merged[['header', 'seq']].drop_duplicates()), f"{strain} - duplications in {rna_type} fasta after merge"
+        assert (merged[f'{rna_type}_sequence'] == merged['seq']).all(), f"{strain} - sequence mismatch in {rna_type} fasta after merge"
+        
+        # 2 - generate clean header for fasta
+        merged['cleaned_header'] = list(map(lambda prev_header, acc, locus, nm: "|".join([prev_header.split('|')[0], acc, str(locus), str(nm)]), 
+                                        merged['header'], 
+                                        merged[f'{rna_type}_accession_id'],
+                                        merged[f'{rna_type}_locus_tag'],
+                                        merged[f'{rna_type}_name']
+                                        ))
+        fixed = merged[merged['cleaned_header'] != merged['header']].reset_index(drop=True)
+        self.logger.info(f"{strain} - fixed {len(fixed)} {rna_type} fasta headers out of {len(merged)}")
+
+        return merged
+
+    def _merge_rna_df_n_fasta(self,  rna_type: str, rna_df: pd.DataFrame, rna_fasta: pd.DataFrame, rna_fasta_header_col: str = 'header') -> pd.DataFrame:
+        # Parse fasta headers to extract accession, locus, name
+        rna_fasta = gp.parse_header_to_acc_locus_and_name(
+            df=rna_fasta,
+            df_header_col=rna_fasta_header_col,
+            acc_col=f'{rna_type}_accession_id_fasta',
+            locus_col=f'{rna_type}_locus_tag_fasta',
+            name_col=f'{rna_type}_name_fasta'
+        )
+
+        # Try merge by accession id
+        merged = pd.merge(
+            rna_df,
+            rna_fasta.dropna(subset=[f'{rna_type}_accession_id_fasta']),
+            how='left',
+            left_on=f'{rna_type}_accession_id',
+            right_on=f'{rna_type}_accession_id_fasta'
+        )
+
+        # For rows not matched, try locus tag
+        not_matched = merged[pd.isnull(merged[rna_fasta_header_col])]
+        if not not_matched.empty:
+            rna_df_not_matched = not_matched[[c for c in rna_df.columns]]
+            locus_merge = pd.merge(
+                rna_df_not_matched,
+                rna_fasta.dropna(subset=[f'{rna_type}_locus_tag_fasta']),
+                how='left',
+                left_on=f'{rna_type}_locus_tag',
+                right_on=f'{rna_type}_locus_tag_fasta'
+            )
+            merged = pd.concat([merged[pd.notnull(merged[rna_fasta_header_col])], locus_merge], ignore_index=True)
+
+        # For rows still not matched, try name
+        not_matched = merged[pd.isnull(merged[rna_fasta_header_col])]
+        if not not_matched.empty:
+            rna_df_not_matched = not_matched[[c for c in rna_df.columns]]
+            rna_fasta_w_lower_nm = rna_fasta.copy()
+            rna_fasta_w_lower_nm[f'{rna_type}_lower_name_fasta'] = rna_fasta_w_lower_nm[f'{rna_type}_name_fasta'].str.lower()
+            name_merge = pd.merge(
+                rna_df_not_matched,
+                rna_fasta_w_lower_nm.dropna(subset=[f'{rna_type}_lower_name_fasta']),
+                how='left',
+                left_on=f'{rna_type}_name',
+                right_on=f'{rna_type}_lower_name_fasta'
+            )
+            merged = pd.concat([merged[pd.notnull(merged[rna_fasta_header_col])], name_merge], ignore_index=True)
+    
+        assert len(merged) == len(rna_df), f"mismatch in {rna_type} fasta and data"
+        assert sum(pd.isnull(merged[rna_fasta_header_col])) == 0, f"missing sequences in {rna_type} fasta after all matching attempts"
+
+        return merged
          
     def _load_proteins(self) -> Dict[str, Dict[str, pd.DataFrame]]:
         # ---------------------------   per dataset preprocessing   ---------------------------
         for strain in self.strains:
-            # TODO: klebsiella - check for klebsiella when data is ready
-            if strain != self.klebsiella_nm:
-                # 1 - load proteins
-                proteins = load_fasta(file_path=join(self.config['proteins_dir'], f"{strain}_proteins.fasta"))
-                proteins = proteins.rename(columns={'seq': 'protein_seq', 'id': 'header'})
-                # 1.1 - PATCH to adjust Salmonella headers
-                if strain == self.salmonella_nm:
-                    _lambda = lambda x: x.split("|")[0] + "|" + x.split("|")[2] + "|" + "|".join(x.split("|")[2:])
-                    proteins['header'] = proteins['header'].apply(_lambda)
-                
-                # 2 - preprocess
-                proteins = gp.parse_header_to_acc_locus_and_name(df=proteins, df_header_col='header', acc_col=self.mrna_acc_col, locus_col='mRNA_locus_tag', name_col='mRNA_name')
-                
-                # 3 - validate
-                assert sum(pd.isnull(proteins[self.mrna_acc_col])) == 0, f"missing accession ids in {strain} proteins"
-                assert len(proteins[self.mrna_acc_col].unique()) == len(proteins), f"duplicate accession ids in {strain} proteins"
-                assert len(set(proteins[self.mrna_acc_col]) - set(self.strains_data[strain]['all_mrna'][self.mrna_acc_col])) == 0, "invalid mRNA accession ids in proteins"
-                assert sum(pd.isnull(proteins['protein_seq'])) == 0, f"missing protein sequences in {strain} proteins"
-                
-                # 4 - update info
-                if strain not in self.strains_data:
-                    self.strains_data[strain] = {}
-                self.strains_data[strain].update({
-                    'all_proteins': proteins
-                })
+            # 1 - load proteins
+            proteins = load_fasta(file_path=join(self.config['proteins_dir'], f"{strain}_proteins.fasta"))
+            proteins = proteins.rename(columns={'seq': 'protein_seq'})
+            # 1.1 - PATCH to adjust Salmonella headers
+            if strain == self.salmonella_nm:
+                _lambda = lambda x: x.split("|")[0] + "|" + x.split("|")[2] + "|" + "|".join(x.split("|")[2:])
+                proteins['header'] = proteins['header'].apply(_lambda)
+            
+            # 2 - preprocess
+            proteins = gp.parse_header_to_acc_locus_and_name(df=proteins, df_header_col='header', acc_col=self.mrna_acc_col, locus_col='mRNA_locus_tag', name_col='mRNA_name')
+            # TODO: remove when new klebsiella / pseudomonas file is ready
+            to_remove_klebsiella = ['gene-SGH10_RS00480', 'gene-SGH10_RS02315', 'gene-SGH10_RS02320', 'gene-SGH10_RS02325', 'gene-SGH10_RS03395', 'gene-SGH10_RS03775', 'gene-SGH10_RS05585', 'gene-SGH10_RS05590', 'gene-SGH10_RS05595', 'gene-SGH10_RS05600', 'gene-SGH10_RS06195', 'gene-SGH10_RS07265', 'gene-SGH10_RS07305', 'gene-SGH10_RS07310', 'gene-SGH10_RS07940', 'gene-SGH10_RS09385', 'gene-SGH10_RS09395', 'gene-SGH10_RS09525', 'gene-SGH10_RS09560', 'gene-SGH10_RS09570', 'gene-SGH10_RS09685', 'gene-SGH10_RS09690', 'gene-SGH10_RS09695', 'gene-SGH10_RS11110', 'gene-SGH10_RS11120', 'gene-SGH10_RS17190', 'gene-SGH10_RS17215', 'gene-SGH10_RS17505', 'gene-SGH10_RS18790', 'gene-SGH10_RS18795', 'gene-SGH10_RS18800', 'gene-SGH10_RS18805', 'gene-SGH10_RS18815', 'gene-SGH10_RS18825', 'gene-SGH10_RS19130', 'gene-SGH10_RS20760', 'gene-SGH10_RS21495', 'gene-SGH10_RS21745', 'gene-SGH10_RS21805', 'gene-SGH10_RS21810', 'gene-SGH10_RS21820', 'gene-SGH10_RS23100', 'gene-SGH10_RS23105', 'gene-SGH10_RS23110', 'gene-SGH10_RS23525', 'gene-SGH10_RS24060', 'gene-SGH10_RS24705', 'gene-SGH10_RS24710', 'gene-SGH10_RS24915', 'gene-SGH10_RS25630', 'gene-SGH10_RS25830', 'gene-SGH10_RS25840', 'gene-SGH10_RS25865', 'gene-SGH10_RS25875', 'gene-SGH10_RS26120', 'gene-SGH10_RS26125', 'gene-SGH10_RS26130', 'gene-SGH10_RS26135', 'gene-SGH10_RS26320', 'gene-SGH10_RS26325', 'gene-SGH10_RS26330', 'gene-SGH10_RS26340', 'gene-SGH10_RS26860']
+            to_remove_pseudomonas = ['Spa121', 'PA2495']
+            to_remove = to_remove_klebsiella + to_remove_pseudomonas
+            proteins = proteins[~proteins[self.mrna_acc_col].isin(to_remove)].reset_index(drop=True)
+
+            # 3 - validate
+            assert sum(pd.isnull(proteins[self.mrna_acc_col])) == 0, f"missing accession ids in {strain} proteins"
+            assert len(proteins[self.mrna_acc_col].unique()) == len(proteins), f"duplicate accession ids in {strain} proteins"
+            assert len(set(proteins[self.mrna_acc_col]) - set(self.strains_data[strain]['all_mrna'][self.mrna_acc_col])) == 0, "invalid mRNA accession ids in proteins"
+            assert sum(pd.isnull(proteins['protein_seq'])) == 0, f"missing protein sequences in {strain} proteins"
+            
+            # 4 - update info
+            if strain not in self.strains_data:
+                self.strains_data[strain] = {}
+            self.strains_data[strain].update({
+                'all_proteins': proteins
+            })
     
     def _match_proteins_to_mrnas(self):
         for strain, data in self.strains_data.items():
-            # TODO: klebsiella - check for klebsiella when data is ready
-            if strain != self.klebsiella_nm:
-                all_mrna_w = pd.merge(data['all_mrna'], data['all_proteins'][[self.mrna_acc_col, 'protein_seq']], how='left', on=self.mrna_acc_col)
-                assert len(all_mrna_w) == len(data['all_mrna']), f"mRNA and protein data mismatch in {strain}"
-                self.logger.info(f"{strain} --> {sum(pd.notnull(all_mrna_w['protein_seq']))} out of {len(all_mrna_w)} mRNAs with protein sequences ({round(sum(pd.notnull(all_mrna_w['protein_seq'])) / len(all_mrna_w) * 100, 2)}%)")
-                
-                data['all_mrna'] = all_mrna_w
+            all_mrna_w = pd.merge(data['all_mrna'], data['all_proteins'][[self.mrna_acc_col, 'protein_seq']], how='left', on=self.mrna_acc_col)
+            assert len(all_mrna_w) == len(data['all_mrna']), f"mRNA and protein data mismatch in {strain}"
+            self.logger.info(f"{strain} --> {sum(pd.notnull(all_mrna_w['protein_seq']))} out of {len(all_mrna_w)} mRNAs with protein sequences ({round(sum(pd.notnull(all_mrna_w['protein_seq'])) / len(all_mrna_w) * 100, 2)}%)")
+            
+            data['all_mrna'] = all_mrna_w
     
     def _load_annotations(self) -> Dict[str, Dict[str, pd.DataFrame]]:
         # ---------------------------   per dataset preprocessing   ---------------------------
@@ -373,12 +491,46 @@ class DataLoader:
         })
     
         # 4 - Vibrio cholerae
+        vibrio_dir = self.config['vibrio_dir']
+        vibrio_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], vibrio_dir, 'InterProScan', 'Cholerae_proteins.fasta.json'))
+        
+        interproscan_annot, i_header_col = ap_annot.preprocess_interproscan_annot(vibrio_annot_interproscan)
+
+        # 4.1 - update info
+        if self.vibrio_nm not in self.strains_data:
+            self.strains_data[self.vibrio_nm] = {}
+        self.strains_data[self.vibrio_nm].update({
+            "interproscan_annot": interproscan_annot,
+            "interproscan_header_col": i_header_col
+        })
 
         # 5 - Klebsiella pneumoniae
+        klebsiella_dir = self.config['klebsiella_dir']
+        klebsiella_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], klebsiella_dir, 'InterProScan', 'Klebsiella_proteins.fasta.json'))
+        
+        interproscan_annot, i_header_col = ap_annot.preprocess_interproscan_annot(klebsiella_annot_interproscan)
+
+        # 5.1 - update info
+        if self.klebsiella_nm not in self.strains_data:
+            self.strains_data[self.klebsiella_nm] = {}
+        self.strains_data[self.klebsiella_nm].update({
+            "interproscan_annot": interproscan_annot,
+            "interproscan_header_col": i_header_col
+        })
 
         # 6 - Pseudomonas aeruginosa
+        pseudomonas_dir = self.config['pseudomonas_dir']
+        pseudomonas_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], pseudomonas_dir, 'InterProScan', 'Pseudomonas_proteins.fasta.json'))
+        
+        interproscan_annot, i_header_col = ap_annot.preprocess_interproscan_annot(pseudomonas_annot_interproscan)
 
-
+        # 6.1 - update info
+        if self.pseudomonas_nm not in self.strains_data:
+            self.strains_data[self.pseudomonas_nm] = {}
+        self.strains_data[self.pseudomonas_nm].update({
+            "interproscan_annot": interproscan_annot,
+            "interproscan_header_col": i_header_col
+        })
 
     def _match_annotations_to_mrnas(self):
         for strain, data in self.strains_data.items():
@@ -439,7 +591,10 @@ class DataLoader:
         _map = {
             'eco': self.ecoli_k12_nm,
             'epec': self.ecoli_epec_nm,
-            'salmonella': self.salmonella_nm
+            'salmonella': self.salmonella_nm,
+            'cholerae': self.vibrio_nm,  #TODO: check for vibrio
+            'klebsiella': self.klebsiella_nm,  # TODO: check for klebsiella when data is ready
+            'pseudomonas': self.pseudomonas_nm  # TODO: check for pseudomonas when data is ready
         }
 
         # 2 - load the clstr file
