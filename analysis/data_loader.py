@@ -314,7 +314,7 @@ class DataLoader:
 
             srna_fasta_clean = srna_fasta_clean[['cleaned_header','seq']]
             mrna_fasta_clean = mrna_fasta_clean[['cleaned_header','seq']]
-            assert not pd.isnull(srna_fasta_clean).values.any(), f"{strain} - missing sequences in sRNA fasta after cleaning"
+            assert not pd.isnull(srna_fasta_clean).y(), f"{strain} - missing sequences in sRNA fasta after cleaning"
             assert not pd.isnull(mrna_fasta_clean).values.any(), f"{strain} - missing sequences in mRNA fasta after cleaning"
 
             # 4 - write clean fasta files
@@ -397,18 +397,9 @@ class DataLoader:
             # 1 - load proteins
             proteins = load_fasta(file_path=join(self.config['proteins_dir'], f"{strain}_proteins.fasta"))
             proteins = proteins.rename(columns={'seq': 'protein_seq'})
-            # 1.1 - PATCH to adjust Salmonella headers
-            if strain == self.salmonella_nm:
-                _lambda = lambda x: x.split("|")[0] + "|" + x.split("|")[2] + "|" + "|".join(x.split("|")[2:])
-                proteins['header'] = proteins['header'].apply(_lambda)
             
             # 2 - preprocess
             proteins = gp.parse_header_to_acc_locus_and_name(df=proteins, df_header_col='header', acc_col=self.mrna_acc_col, locus_col='mRNA_locus_tag', name_col='mRNA_name')
-            # TODO: remove when new klebsiella / pseudomonas file is ready
-            to_remove_klebsiella = ['gene-SGH10_RS00480', 'gene-SGH10_RS02315', 'gene-SGH10_RS02320', 'gene-SGH10_RS02325', 'gene-SGH10_RS03395', 'gene-SGH10_RS03775', 'gene-SGH10_RS05585', 'gene-SGH10_RS05590', 'gene-SGH10_RS05595', 'gene-SGH10_RS05600', 'gene-SGH10_RS06195', 'gene-SGH10_RS07265', 'gene-SGH10_RS07305', 'gene-SGH10_RS07310', 'gene-SGH10_RS07940', 'gene-SGH10_RS09385', 'gene-SGH10_RS09395', 'gene-SGH10_RS09525', 'gene-SGH10_RS09560', 'gene-SGH10_RS09570', 'gene-SGH10_RS09685', 'gene-SGH10_RS09690', 'gene-SGH10_RS09695', 'gene-SGH10_RS11110', 'gene-SGH10_RS11120', 'gene-SGH10_RS17190', 'gene-SGH10_RS17215', 'gene-SGH10_RS17505', 'gene-SGH10_RS18790', 'gene-SGH10_RS18795', 'gene-SGH10_RS18800', 'gene-SGH10_RS18805', 'gene-SGH10_RS18815', 'gene-SGH10_RS18825', 'gene-SGH10_RS19130', 'gene-SGH10_RS20760', 'gene-SGH10_RS21495', 'gene-SGH10_RS21745', 'gene-SGH10_RS21805', 'gene-SGH10_RS21810', 'gene-SGH10_RS21820', 'gene-SGH10_RS23100', 'gene-SGH10_RS23105', 'gene-SGH10_RS23110', 'gene-SGH10_RS23525', 'gene-SGH10_RS24060', 'gene-SGH10_RS24705', 'gene-SGH10_RS24710', 'gene-SGH10_RS24915', 'gene-SGH10_RS25630', 'gene-SGH10_RS25830', 'gene-SGH10_RS25840', 'gene-SGH10_RS25865', 'gene-SGH10_RS25875', 'gene-SGH10_RS26120', 'gene-SGH10_RS26125', 'gene-SGH10_RS26130', 'gene-SGH10_RS26135', 'gene-SGH10_RS26320', 'gene-SGH10_RS26325', 'gene-SGH10_RS26330', 'gene-SGH10_RS26340', 'gene-SGH10_RS26860']
-            to_remove_pseudomonas = ['Spa121', 'PA2495']
-            to_remove = to_remove_klebsiella + to_remove_pseudomonas
-            proteins = proteins[~proteins[self.mrna_acc_col].isin(to_remove)].reset_index(drop=True)
 
             # 3 - validate
             assert sum(pd.isnull(proteins[self.mrna_acc_col])) == 0, f"missing accession ids in {strain} proteins"
@@ -434,7 +425,7 @@ class DataLoader:
     def _load_annotations(self) -> Dict[str, Dict[str, pd.DataFrame]]:
         # ---------------------------   per dataset preprocessing   ---------------------------
         # 1 - Escherichia coli K12
-        k12_dir = self.config['k12_dir']
+        k12_dir = self.config[f'{self.ecoli_k12_nm}_dir']
         k12_annot_uniport = load_goa(file_path=join(self.config['go_annotations_dir'], k12_dir, 'e_coli_MG1655.goa'))
         k12_annot_map_uniport_to_locus = read_df(file_path=join(self.config['go_annotations_dir'], k12_dir, 'ECOLI_83333_idmapping.dat'))
         k12_annot_map_uniport_to_locus.columns = ['UniProt_ID', 'Database', 'Mapped_ID']
@@ -454,7 +445,7 @@ class DataLoader:
         })
         
         # 2 - Escherichia coli EPEC
-        epec_dir = self.config['epec_dir']
+        epec_dir = self.config[f'{self.ecoli_epec_nm}_dir']
         epec_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], epec_dir, 'InterProScan', 'EPEC_proteins.fasta.json'))
         eggnog_annot_file=join(self.config['go_annotations_dir'], epec_dir, 'EggNog', 'EPEC.annotations')
 
@@ -472,16 +463,16 @@ class DataLoader:
         })
     
         # 3 - Salmonella enterica
-        salmonella_dir = self.config['salmonella_dir']
+        salmonella_dir = self.config[f'{self.salmonella_nm}_dir']
         salmonella_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], salmonella_dir, 'InterProScan', 'Salmonella_proteins.fasta.json'))
         eggnog_annot_file=join(self.config['go_annotations_dir'], salmonella_dir, 'EggNog', 'Salmonella.annotations')
         
         interproscan_annot, i_header_col = ap_annot.preprocess_interproscan_annot(salmonella_annot_interproscan)
         eggnog_annot, e_header_col = ap_annot.load_and_preprocess_eggnog_annot(eggnog_annot_file)
-        # patch to adjust Salmonella headers
-        _lambda = lambda x: x.split("|")[0] + "|" + x.split("|")[2] + "|" + "|".join(x.split("|")[2:])
-        interproscan_annot[i_header_col] = interproscan_annot[i_header_col].apply(_lambda)
-        eggnog_annot[e_header_col] = eggnog_annot[e_header_col].apply(_lambda)
+        # # patch to adjust Salmonella headers
+        # _lambda = lambda x: x.split("|")[0] + "|" + x.split("|")[2] + "|" + "|".join(x.split("|")[2:])
+        # interproscan_annot[i_header_col] = interproscan_annot[i_header_col].apply(_lambda)
+        # eggnog_annot[e_header_col] = eggnog_annot[e_header_col].apply(_lambda)
         
         # 3.1 - update info
         if self.salmonella_nm not in self.strains_data:
@@ -494,7 +485,7 @@ class DataLoader:
         })
     
         # 4 - Vibrio cholerae
-        vibrio_dir = self.config['vibrio_dir']
+        vibrio_dir = self.config[f'{self.vibrio_nm}_dir']
         vibrio_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], vibrio_dir, 'InterProScan', 'Cholerae_proteins.fasta.json'))
         
         interproscan_annot, i_header_col = ap_annot.preprocess_interproscan_annot(vibrio_annot_interproscan)
@@ -508,7 +499,7 @@ class DataLoader:
         })
 
         # 5 - Klebsiella pneumoniae
-        klebsiella_dir = self.config['klebsiella_dir']
+        klebsiella_dir = self.config[f'{self.klebsiella_nm}_dir']
         klebsiella_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], klebsiella_dir, 'InterProScan', 'Klebsiella_proteins.fasta.json'))
         
         interproscan_annot, i_header_col = ap_annot.preprocess_interproscan_annot(klebsiella_annot_interproscan)
@@ -522,7 +513,7 @@ class DataLoader:
         })
 
         # 6 - Pseudomonas aeruginosa
-        pseudomonas_dir = self.config['pseudomonas_dir']
+        pseudomonas_dir = self.config[f'{self.pseudomonas_nm}_dir']
         pseudomonas_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], pseudomonas_dir, 'InterProScan', 'Pseudomonas_proteins.fasta.json'))
         
         interproscan_annot, i_header_col = ap_annot.preprocess_interproscan_annot(pseudomonas_annot_interproscan)
