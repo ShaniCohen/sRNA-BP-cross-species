@@ -1072,11 +1072,6 @@ def preprocess_salmonella_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame
     assert sum([" " in x for x in srna_data['sRNA_name']]) == 0, "redundant spaces in  sRNA_name"
     srna_data['sRNA_name'] = srna_data['sRNA_name'].apply(lambda x: x.lower())
 
-    # 2 - align sRNA names of Salmonella (to match, e.g. e.coli K12)
-    # todo  ---------- check if names alignment is needed
-    # srna_nm_to_nm = get_ecoli_srna_to_nm()
-    # srna_data['sRNA_name'] = srna_data['sRNA_name'].apply(lambda x: srna_nm_to_nm.get(x, x))
-
     # --------------  interactions  --------------
     # 1 - no redundant spaces in names + lower
     assert sum([" " in x for x in inter_data['sRNA_name']]) == 0, "redundant spaces in Salmonella inter sRNA name"
@@ -1085,12 +1080,7 @@ def preprocess_salmonella_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame
     inter_data['sRNA'] = inter_data['sRNA_name'].apply(lambda x: x.lower())
     inter_data['mRNA'] = inter_data['mRNA_name'].apply(lambda x: x.lower())
 
-    # 2 - align sRNA names of e.coli (to match, e.g. e.coli K12)
-    # todo  ---------- check if names alignment is needed
-    # srna_nm_to_nm = get_ecoli_srna_to_nm()
-    # inter_data['sRNA'] = inter_data['sRNA'].apply(lambda x: srna_nm_to_nm.get(x, x))
-
-    # 3 - save 'dir' and 'file_name' columns
+    # 2 - save 'dir' and 'file_name' columns
     inter_data['dir'] = inter_data['Data_source']
     inter_data['file_name'] = inter_data['Experiment']
     inter_data['interaction_label'] = inter_data['Interaction_label'].apply(lambda x: 1 if x == 'interaction' else 0)

@@ -20,7 +20,7 @@
     "pseudomonas_dir": "Gebhardt_2023_Pseudomonas_aeruginosa",
 
     "clustering_config": {
-      "srna_dir": "CD-HIT-EST-2D-sRNAs",
+      "srna_dir": "CDHIT-EST-2D-sRNA",
       "protein_dir": "CDHIT-2D-protein-50"
     }
   },

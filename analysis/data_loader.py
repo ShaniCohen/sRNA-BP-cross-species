@@ -104,9 +104,7 @@ class DataLoader:
         self._load_annotations()
         self._match_annotations_to_mrnas()
         # 4 - clustering
-        # TODO: re-run with new data 
-        # review: ['eco|G0-9281|nan|alab', 'eco|G26|nan|dgd']
-        # self._load_clustering_data()
+        self._load_clustering_data()
     
     def _load_rna_and_inter_data(self) -> Dict[str, Dict[str, pd.DataFrame]]:
         # ---------------------------   per dataset preprocessing   ---------------------------
@@ -424,6 +422,61 @@ class DataLoader:
     
     def _load_annotations(self) -> Dict[str, Dict[str, pd.DataFrame]]:
         # ---------------------------   per dataset preprocessing   ---------------------------
+        for strain in self.strains:
+            self._load_curated_annotations(strain=strain)
+            self._load_interproscan_annotations(strain=strain)
+            # TODO: re-run with clean protein files
+            # self._load_eggnog_annotations(strain=strain)
+    
+    def _load_curated_annotations(self, strain: str):
+        _path = join(self.config['go_annotations_dir'], 'Curated')
+        if os.path.exists(join(_path, f'{strain}.goa')):
+            self.logger.info(f"loading curated annotations for {strain}")
+            # 1 - load and preprocess
+            annot_uniport = load_goa(file_path=join(_path, f'{strain}.goa'))
+            annot_map_uniport_to_locus = read_df(file_path=join(_path, f'{strain}_idmapping.dat'))
+            annot_map_uniport_to_locus.columns = ['UniProt_ID', 'Database', 'Mapped_ID']
+            curated_annot, c_locus_col = ap_annot.preprocess_curated_annot(strain, annot_uniport, annot_map_uniport_to_locus)
+            # 2 - update info
+            if strain not in self.strains_data:
+                self.strains_data[strain] = {}
+            self.strains_data[strain].update({
+                "curated_annot": curated_annot,
+                "curated_locus_col": c_locus_col
+            })
+    
+    def _load_interproscan_annotations(self, strain: str):
+        _path = join(self.config['go_annotations_dir'], 'InterProScan')
+        if os.path.exists(join(_path, f'{strain}_proteins.fasta.json')):
+            self.logger.info(f"loading InterProScan annotations for {strain}")
+            # 1 - load and preprocess
+            annot_interproscan = load_json(file_path=join(_path, f'{strain}_proteins.fasta.json'))
+            interproscan_annot, i_header_col = ap_annot.preprocess_interproscan_annot(annot_interproscan)
+            # 2 - update info
+            if strain not in self.strains_data:
+                self.strains_data[strain] = {}
+            self.strains_data[strain].update({
+                "interproscan_annot": interproscan_annot,
+                "interproscan_header_col": i_header_col,
+            })
+    
+    def _load_eggnog_annotations(self, strain: str):
+        _path = join(self.config['go_annotations_dir'], 'EggNog')
+        if os.path.exists(join(_path, f'{strain}.annotations')):
+            self.logger.info(f"loading EggNog annotations for {strain}")
+            # 1 - load and preprocess
+            eggnog_annot_file=join(_path, f'{strain}.annotations')
+            eggnog_annot, e_header_col = ap_annot.load_and_preprocess_eggnog_annot(eggnog_annot_file)
+            # 2 - update info
+            if strain not in self.strains_data:
+                self.strains_data[strain] = {}
+            self.strains_data[strain].update({
+                "eggnog_annot": eggnog_annot,
+                "eggnog_header_col": e_header_col
+            })
+    
+    def _load_annotations_prev(self) -> Dict[str, Dict[str, pd.DataFrame]]:
+        # ---------------------------   per dataset preprocessing   ---------------------------
         # 1 - Escherichia coli K12
         k12_dir = self.config[f'{self.ecoli_k12_nm}_dir']
         k12_annot_uniport = load_goa(file_path=join(self.config['go_annotations_dir'], k12_dir, 'e_coli_MG1655.goa'))
@@ -553,8 +606,8 @@ class DataLoader:
         pairs_clustering = {}
         for b1, b2 in itertools.combinations(self.strains, 2):
             # 1 - identify clustering files
-            file_1_to_2 = [f for f in os.listdir(dir_path) if re.match(f"(.*?){b1}-{b2}.clstr$", f)][0]
-            file_2_to_1 = [f for f in os.listdir(dir_path) if re.match(f"(.*?){b2}-{b1}.clstr$", f)][0]
+            file_1_to_2 = [f for f in os.listdir(dir_path) if re.match(f"(.*?){b1}-{b2}.fasta.clstr$", f)][0]
+            file_2_to_1 = [f for f in os.listdir(dir_path) if re.match(f"(.*?){b2}-{b1}.fasta.clstr$", f)][0]
 
             # 2 - load and parse the clustering files
             clstr_df_1_to_2 = self._load_n_parse_clstr_file(clstr_file_path=join(dir_path, file_1_to_2), seq_type=seq_type)
@@ -586,7 +639,7 @@ class DataLoader:
             'eco': self.ecoli_k12_nm,
             'epec': self.ecoli_epec_nm,
             'salmonella': self.salmonella_nm,
-            'cholerae': self.vibrio_nm,  #TODO: check for vibrio
+            'cholerae': self.vibrio_nm,
             'klebsiella': self.klebsiella_nm,  # TODO: check for klebsiella when data is ready
             'pseudomonas': self.pseudomonas_nm  # TODO: check for pseudomonas when data is ready
         }
@@ -606,8 +659,13 @@ class DataLoader:
                 clusters.append({col_cluster_id: cluster_id, "entry": line})
         clstr_df = pd.DataFrame(clusters)
 
-        # 4 - split the entries into columns and preprocess
-        clstr_df[['counter_len', 'header', col_is_rep, 'footer']] = pd.DataFrame(list(map(lambda x: x.split(" "), clstr_df['entry'])))
+        # 4 - parse each entry
+        _df = pd.DataFrame(list(map(lambda x: x.split(" "), clstr_df['entry'])))
+        if _df.shape[1] == 3:  # case of no matches (i.e.,  no footer)
+            _df[3] = None
+
+        # 5 - split the entries into columns and preprocess
+        clstr_df[['counter_len', 'header', col_is_rep, 'footer']] = _df
         clstr_df[[col_counter, col_seq_length]] = pd.DataFrame(list(map(lambda x: x.split('nt,')[0].split('aa,')[0].split("\t"), clstr_df['counter_len'])))
         clstr_df[[col_strain_str, col_acc, col_locus, col_name]] = pd.DataFrame(list(map(lambda x: x.split('...')[0].split('>')[1].split('|'), clstr_df['header'])))
         clstr_df[col_strain_str] =  clstr_df[col_strain_str].apply(lambda x: _map[x])
@@ -627,12 +685,12 @@ class DataLoader:
         clstr_df[col_similarity_score] =  pd.DataFrame(list(map(lambda x: float(re.findall(f"(.*?)%$", x)[0]) if pd.notnull(x) else x, clstr_df['similarity_score_str'])))
         clstr_df = clstr_df[out_cols]
 
-        # patch to adjust salmonella's accession id
-        clstr_df[col_acc] = list(map(lambda strain, acc, locus: locus if strain==self.salmonella_nm else acc, clstr_df[col_strain_str], clstr_df[col_acc], clstr_df[col_locus]))
+        # # patch to adjust salmonella's accession id
+        # clstr_df[col_acc] = list(map(lambda strain, acc, locus: locus if strain==self.salmonella_nm else acc, clstr_df[col_strain_str], clstr_df[col_acc], clstr_df[col_locus]))
         
         return clstr_df
     
-    def _filter_invalid_matches(self, clstr_df: pd.DataFrame, clstr_nm: str, seq_type: str, debug: bool = False,
+    def _filter_invalid_matches(self, clstr_df: pd.DataFrame, clstr_nm: str, seq_type: str, debug: bool = True,
                                 col_cluster_id: str = 'cluster_id', col_name: str = 'rna_name', col_seq_length: str = 'seq_length', col_is_rep: str = 'is_representative', col_similarity_score: str = 'similarity_score') -> pd.DataFrame:
         """Filter invalid matches from the clustering df.
         Keep representatives. For matches, keep only if sequence length ratio (match/rep) >= 0.5.
@@ -657,7 +715,7 @@ class DataLoader:
                     self.logger.debug(f"{prfx}{clstr_nm}: invalid match (seq ratio: {round(match_seq_length / rep_seq_length, 2)}, similarity: {match_row[col_similarity_score]}) {match_row[col_name]} to {rep_row[col_name]} in cluster id {cluster_id}")
             
         filtered_df = pd.DataFrame(filtered_rows, columns=clstr_df.columns)
-        self.logger.info(f"{seq_type} clustering {clstr_nm} ---> filtered {len(clstr_df) - len(filtered_df)} invalid matches\n")
+        self.logger.info(f"{seq_type} clustering {clstr_nm} ---> filtered {len(clstr_df) - len(filtered_df)} invalid matches")
         return filtered_df
     
     def _is_valid_match(self, seq_type: str, match_seq_length: float, rep_seq_length: float, similarity_score: float):
