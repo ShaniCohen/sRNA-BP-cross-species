@@ -690,7 +690,7 @@ class DataLoader:
         
         return clstr_df
     
-    def _filter_invalid_matches(self, clstr_df: pd.DataFrame, clstr_nm: str, seq_type: str, debug: bool = True,
+    def _filter_invalid_matches(self, clstr_df: pd.DataFrame, clstr_nm: str, seq_type: str, debug: bool = False,
                                 col_cluster_id: str = 'cluster_id', col_name: str = 'rna_name', col_seq_length: str = 'seq_length', col_is_rep: str = 'is_representative', col_similarity_score: str = 'similarity_score') -> pd.DataFrame:
         """Filter invalid matches from the clustering df.
         Keep representatives. For matches, keep only if sequence length ratio (match/rep) >= 0.5.

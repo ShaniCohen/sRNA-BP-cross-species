@@ -65,6 +65,8 @@ class Analyzer:
     
     def _analyze_rna_clustering(self):
         self._analyze_paralogs()
+        self._analyze_orthologs('sRNA', self.U.srna)
+        self._analyze_orthologs('mRNA', self.U.mrna)
     
     def _analyze_paralogs(self):
         out_path = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "paralogs"))
@@ -88,7 +90,32 @@ class Analyzer:
                     f"  Number of {rna_str} with paralogs: {sum(len(c) for c in rna_paralogs_clusters)} \n"
                     f"  Number of {rna_str} paralogs clusters: {len(rna_paralogs_clusters)}"
                 )
-                self._dump_paralogs(strain, rna_str, rna_paralogs_clusters, out_path) # K12 mRNAs:  EG11272 (too short)  |  EG10085 (ascb), EG10114 (bglb) different strands
+                self._dump_paralogs(strain, rna_str, rna_paralogs_clusters, out_path)
+    
+    def _analyze_orthologs(self, rna_str, rna_type):
+        out_path = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "orthologs"))
+        self.logger.info(f"Analyzing {rna_str} orthologs")
+        
+        for strain in self.U.strains:
+            self.logger.info(f"Strain: {strain}")
+            rna_nodes =  [n for n, d in self.G.nodes(data=True) if d['type'] == rna_type and d['strain'] == strain]
+            rna_orthologs_clusters = set()
+            for rna in rna_nodes:
+                rna_orthologs = self.U.get_orthologs_cluster(self.G, rna)
+                if rna_orthologs: # TODO: check if this works correctly
+                    rna_orthologs_clusters.append(rna_orthologs)
+                    print()
+                    # cluster = set([rna] + rna_paralogs)
+                    # if cluster not in rna_paralogs_clusters:
+                    #     rna_paralogs_clusters.append(cluster)
+
+            # self.logger.info(
+            #     f"  ----------------   \n"
+            #     f"  Number of {rna_str}: {len(rna_nodes)} \n"
+            #     f"  Number of {rna_str} with paralogs: {sum(len(c) for c in rna_paralogs_clusters)} \n"
+            #     f"  Number of {rna_str} paralogs clusters: {len(rna_paralogs_clusters)}"
+            # )
+            # self._dump_paralogs(strain, rna_str, rna_paralogs_clusters, out_path)
     
     def _dump_paralogs(self, strain: str, rna_type: str, rna_paralogs_clusters: List[Set[str]], out_path):
         out_file = join(out_path, f"{strain}_{rna_type}_paralogs_clusters.txt")
