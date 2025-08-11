@@ -2,6 +2,7 @@ from typing import Tuple, Set, List
 import pandas as pd
 import numpy as np
 from os.path import join
+import itertools
 from pathlib import Path
 from utils.general import read_df, write_df, create_dir_if_not_exists
 import networkx as nx
@@ -51,12 +52,14 @@ class Analyzer:
         """
         self.logger.info(f"running analysis")
 
-        self._analyze_rna_clustering()
         # --------------   run analysis   --------------        
+        self._analyze_rna_clustering()
         # 1 - Generate a mapping of sRNA to biological processes (BPs)
+        self.logger.info("----- Before enrichment:")
         bp_mapping = self._generate_srna_bp_mapping()
         self._log_mapping(bp_mapping)
         # 2 - Enrichment (per strain): per sRNA, find and keep only significant biological processes (BPs) that its targets invovlved in.
+        self.logger.info("----- After enrichment:")
         bp_mapping_post_en, meta = self._apply_enrichment(bp_mapping)
         self._log_mapping(bp_mapping_post_en)
         # 3 - dump metadata
@@ -93,30 +96,79 @@ class Analyzer:
                 self._dump_paralogs(strain, rna_str, rna_paralogs_clusters, out_path)
     
     def _analyze_orthologs(self, rna_str, rna_type):
-        out_path = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "orthologs"))
         self.logger.info(f"Analyzing {rna_str} orthologs")
-        
+        # 1 - get all orthologs clusters
+        all_orthologs_clusters = set()
         for strain in self.U.strains:
-            self.logger.info(f"Strain: {strain}")
-            rna_nodes =  [n for n, d in self.G.nodes(data=True) if d['type'] == rna_type and d['strain'] == strain]
-            rna_orthologs_clusters = set()
-            for rna in rna_nodes:
-                rna_orthologs = self.U.get_orthologs_cluster(self.G, rna)
-                if rna_orthologs: # TODO: check if this works correctly
-                    rna_orthologs_clusters.append(rna_orthologs)
-                    print()
-                    # cluster = set([rna] + rna_paralogs)
-                    # if cluster not in rna_paralogs_clusters:
-                    #     rna_paralogs_clusters.append(cluster)
-
-            # self.logger.info(
-            #     f"  ----------------   \n"
-            #     f"  Number of {rna_str}: {len(rna_nodes)} \n"
-            #     f"  Number of {rna_str} with paralogs: {sum(len(c) for c in rna_paralogs_clusters)} \n"
-            #     f"  Number of {rna_str} paralogs clusters: {len(rna_paralogs_clusters)}"
-            # )
-            # self._dump_paralogs(strain, rna_str, rna_paralogs_clusters, out_path)
+            orthologs_clusters = self._get_orthologs_clusters_of_strain(rna_type, strain)
+            all_orthologs_clusters = all_orthologs_clusters.union(orthologs_clusters)
+        # 2 - validate
+        all_orthologs_df = self._validate_orthologs_clusters(rna_type, all_orthologs_clusters)
+        # 3 - log and dump
+        self._log_n_dump_orthologs(rna_str, all_orthologs_df)
     
+    def _get_orthologs_clusters_of_strain(self, rna_type: str, strain: str):
+        rna_nodes =  [n for n, d in self.G.nodes(data=True) if d['type'] == rna_type and d['strain'] == strain]
+        # 1 - all clusters
+        all_clusters = set()
+        clusters_items = []
+        for rna in rna_nodes:
+            if rna not in clusters_items:
+                cluster = set()
+                cluster = self.U.get_orthologs_cluster(self.G, rna, cluster)
+                if cluster:
+                    all_clusters.add(tuple(sorted(cluster)))
+                    clusters_items = clusters_items + sorted(cluster)
+        assert set(rna_nodes) <= set(clusters_items), "some RNA nodes are missing in the clusters"
+        # 2 - orthologs clusters
+        orthologs_clusters = {c for c in all_clusters if len(c) > 1}
+        if not orthologs_clusters:
+            self.logger.warning(f"#### no {rna_type} orthologs clusters for {strain}")
+        
+        return orthologs_clusters
+    
+    def _validate_orthologs_clusters(self, rna_type: str, orthologs_clusters: Set[Tuple[str]]) -> pd.DataFrame:
+        # 1 - general validation
+        nodes = [item for tpl in orthologs_clusters for item in tpl]
+        assert len(set(nodes)) == len(nodes), f"some {rna_type} nodes are duplicated in the orthologs clusters"
+        
+        # 2 - per cluster validation
+        records = []
+        for cluster in orthologs_clusters:
+            # 2.1 - get ortholog pairs and strains
+            ortholog_pairs, strains = list(), set()
+            ortholog_pairs_w_meta = list()
+            for n1, n2 in itertools.combinations(list(cluster), 2):
+                s1, s2 = self.G.nodes[n1]['strain'], self.G.nodes[n2]['strain']
+                if self.U.are_orthologs(self.G, n1, n2, s1, s2):
+                    ortholog_pairs.append((n1, n2))
+                    strains = strains.union({s1, s2})
+                    ortholog_pairs_w_meta.append((f"{s1}__{n1}__{self.G.nodes[n1]['name']}", f"{s2}__{n2}__{self.G.nodes[n2]['name']}"))
+            # 2.2 - validate
+            assert set(cluster) == set([n for tpl in ortholog_pairs for n in tpl]), f"some {rna_type} cluster nodes are missing in the orthologs pairs"
+            # 2.3 - add record
+            records.append({
+                'cluster': cluster,
+                'cluster_size': len(cluster),
+                'strains': sorted(strains),
+                'num_strains': len(strains),
+                'ortholog_pairs': sorted(ortholog_pairs_w_meta),
+                'num_ortholog_pairs': len(ortholog_pairs_w_meta)
+            })
+        orthologs_df = pd.DataFrame(records)
+
+        return orthologs_df
+
+    def _log_n_dump_orthologs(self, rna_str: str, all_orthologs_df: pd.DataFrame):
+        out_path = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "orthologs"))
+        # self.logger.info(
+        #     f"  ----------------   \n"
+        #     f"  Number of {rna_str}: {len(rna_nodes)} \n"
+        #     f"  Number of {rna_str} with paralogs: {sum(len(c) for c in rna_paralogs_clusters)} \n"
+        #     f"  Number of {rna_str} paralogs clusters: {len(rna_paralogs_clusters)}"
+        # )
+        write_df(all_orthologs_df, join(out_path, f"{rna_str}_orthologs.csv"))
+
     def _dump_paralogs(self, strain: str, rna_type: str, rna_paralogs_clusters: List[Set[str]], out_path):
         out_file = join(out_path, f"{strain}_{rna_type}_paralogs_clusters.txt")
 
