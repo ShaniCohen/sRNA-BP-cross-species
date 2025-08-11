@@ -105,7 +105,7 @@ class Analyzer:
         # 2 - validate
         all_orthologs_df = self._validate_orthologs_clusters(rna_type, all_orthologs_clusters)
         # 3 - log and dump
-        self._log_n_dump_orthologs(rna_str, all_orthologs_df)
+        self._log_n_dump_orthologs(rna_str, rna_type, all_orthologs_df)
     
     def _get_orthologs_clusters_of_strain(self, rna_type: str, strain: str):
         rna_nodes =  [n for n, d in self.G.nodes(data=True) if d['type'] == rna_type and d['strain'] == strain]
@@ -150,7 +150,7 @@ class Analyzer:
             records.append({
                 'cluster': cluster,
                 'cluster_size': len(cluster),
-                'strains': sorted(strains),
+                'strains': tuple(sorted(strains)),
                 'num_strains': len(strains),
                 'ortholog_pairs': sorted(ortholog_pairs_w_meta),
                 'num_ortholog_pairs': len(ortholog_pairs_w_meta)
@@ -159,14 +159,44 @@ class Analyzer:
 
         return orthologs_df
 
-    def _log_n_dump_orthologs(self, rna_str: str, all_orthologs_df: pd.DataFrame):
+    def _log_n_dump_orthologs(self, rna_str: str, rna_type: str, all_orthologs_df: pd.DataFrame):
         out_path = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "orthologs"))
-        # self.logger.info(
-        #     f"  ----------------   \n"
-        #     f"  Number of {rna_str}: {len(rna_nodes)} \n"
-        #     f"  Number of {rna_str} with paralogs: {sum(len(c) for c in rna_paralogs_clusters)} \n"
-        #     f"  Number of {rna_str} paralogs clusters: {len(rna_paralogs_clusters)}"
-        # )
+        
+        # 1 - general analysis
+        num_clusters = len(all_orthologs_df)
+        # cluster size distribution
+        unq, counts = np.unique(all_orthologs_df['cluster_size'], return_counts=True)
+        size_dist = " | ".join([f"{counts[i]} of size {unq[i]} ({int(round(counts[i]/num_clusters, 2)*100)} %)" for i in range(len(unq))])
+        # strains distribution
+        unq, counts = np.unique([s for clu in all_orthologs_df['strains'] for s in clu], return_counts=True)
+        strain_2_num_orthologs = dict(zip(unq, counts))
+        strain_dist = " | ".join([f"{counts[i]} includes {unq[i]} ({int(round(counts[i]/num_clusters, 2)*100)} %)" for i in range(len(unq))])
+        # strains composition distribution
+        unq, counts = np.unique(all_orthologs_df['strains'], return_counts=True)
+        strain_comp_dist = "\n   ".join([f"{counts[i]} of composition {unq[i]} ({int(round(counts[i]/num_clusters, 2)*100)} %)" for i in range(len(unq))])
+
+        # 2 - per strain analysis
+        per_strain_analysis = ""
+        for strain, data in self.strains_data.items():
+            num_rna = len(data[f'all_{rna_type}'])
+            num_orthologs = strain_2_num_orthologs.get(strain, 0)
+            per_strain_analysis = per_strain_analysis + f"\n  {strain}: {int(round(num_orthologs/num_rna, 2)*100)} % of {rna_str}s ({num_orthologs} out of {num_rna}) have orthologs "
+
+        # 3 - log
+        self.logger.info(
+            f"----------------   {rna_str} \n"
+            f"-------   General analysis \n"
+            f"Number of clusters: {len(all_orthologs_df)} \n"
+            f"Cluster size distribution: \n"
+            f"  {size_dist} \n"
+            f"Strains distribution: \n"
+            f"  {strain_dist} \n"
+            f"Strains composition distribution: \n"
+            f"   {strain_comp_dist} \n"
+            f"-------   Per strain analysis"
+            f"{per_strain_analysis}"
+        )
+        # 4 - dump
         write_df(all_orthologs_df, join(out_path, f"{rna_str}_orthologs.csv"))
 
     def _dump_paralogs(self, strain: str, rna_type: str, rna_paralogs_clusters: List[Set[str]], out_path):
