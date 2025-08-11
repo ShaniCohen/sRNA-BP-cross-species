@@ -6,6 +6,7 @@ from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 import re
+import pickle
 from os.path import join
 from pathlib import Path
 from utils.general import read_df, write_df
@@ -104,7 +105,7 @@ class DataLoader:
         self._load_annotations()
         self._match_annotations_to_mrnas()
         # 4 - clustering
-        self._load_clustering_data()
+        self._load_clustering_data(load_from_pickle=True)
     
     def _load_rna_and_inter_data(self) -> Dict[str, Dict[str, pd.DataFrame]]:
         # ---------------------------   per dataset preprocessing   ---------------------------
@@ -588,30 +589,46 @@ class DataLoader:
             if 'eggnog_annot' in data:
                 data['all_mrna_w_eggnog_annot'] = ap_annot.annotate_mrnas_w_eggnog_annt(strain, data)
 
-    def _load_clustering_data(self):
+    def _load_clustering_data(self, load_from_pickle: bool = False):
         # 1 - load sRNA and mRNA clustering
-        srna_clstr_dict = self._load_n_preprocess_bacteria_pairs_clustering(seq_type=self.srna_seq_type)
-        mrna_clstr_dict = self._load_n_preprocess_bacteria_pairs_clustering(seq_type=self.protein_seq_type)
+        if load_from_pickle:
+            srna_clstr_dict = self._load_clustering_pickle(seq_type=self.srna_seq_type)
+            mrna_clstr_dict = self._load_clustering_pickle(seq_type=self.protein_seq_type)
+        else:
+            srna_clstr_dict = self._load_n_preprocess_bacteria_pairs_clustering(seq_type=self.srna_seq_type)
+            mrna_clstr_dict = self._load_n_preprocess_bacteria_pairs_clustering(seq_type=self.protein_seq_type)
 
         # 2 - save clustering
         self.clustering_data['srna'] = srna_clstr_dict
         self.clustering_data['mrna'] = mrna_clstr_dict
-
-    def _load_n_preprocess_bacteria_pairs_clustering(self, seq_type: str) -> pd.DataFrame:
+    
+    def _get_clustering_path_n_nm(self, seq_type: str) -> tuple:
         _dir = self.clustering_config[f'{seq_type.lower()}_dir']
-        dir_path = join(self.config['clustering_dir'], seq_type, _dir)
+        _path = join(self.config['clustering_dir'], seq_type, _dir)
+        f_name = f"{seq_type}_pairs_clustering"
+        return _path, _dir, f_name
+    
+    def _load_clustering_pickle(self, seq_type: str) -> Dict[tuple, pd.DataFrame]:
+        _path, _dir, f_name = self._get_clustering_path_n_nm(seq_type=seq_type)
+        self.logger.info(f"loading {seq_type} clustering pickle ({_dir})")
+        with open(join(_path, f'{f_name}.pickle'), 'rb') as handle:
+            pairs_clustering = pickle.load(handle)
+        return pairs_clustering
+
+    def _load_n_preprocess_bacteria_pairs_clustering(self, seq_type: str) -> Dict[tuple, pd.DataFrame]:
+        _path, _dir, f_name = self._get_clustering_path_n_nm(seq_type=seq_type)
         
         # ---------------------------   PAIRS preprocessing   ---------------------------
         self.logger.info(f"PAIRS preprocessing --> loading {seq_type} clustering data from {_dir}")
         pairs_clustering = {}
         for b1, b2 in itertools.combinations(self.strains, 2):
             # 1 - identify clustering files
-            file_1_to_2 = [f for f in os.listdir(dir_path) if re.match(f"(.*?){b1}-{b2}.fasta.clstr$", f)][0]
-            file_2_to_1 = [f for f in os.listdir(dir_path) if re.match(f"(.*?){b2}-{b1}.fasta.clstr$", f)][0]
+            file_1_to_2 = [f for f in os.listdir(_path) if re.match(f"(.*?){b1}-{b2}.fasta.clstr$", f)][0]
+            file_2_to_1 = [f for f in os.listdir(_path) if re.match(f"(.*?){b2}-{b1}.fasta.clstr$", f)][0]
 
             # 2 - load and parse the clustering files
-            clstr_df_1_to_2 = self._load_n_parse_clstr_file(clstr_file_path=join(dir_path, file_1_to_2), seq_type=seq_type)
-            clstr_df_2_to_1 = self._load_n_parse_clstr_file(clstr_file_path=join(dir_path, file_2_to_1), seq_type=seq_type)
+            clstr_df_1_to_2 = self._load_n_parse_clstr_file(clstr_file_path=join(_path, file_1_to_2), seq_type=seq_type)
+            clstr_df_2_to_1 = self._load_n_parse_clstr_file(clstr_file_path=join(_path, file_2_to_1), seq_type=seq_type)
             
             # 3 - filter invalid matches from the clustering data 
             clstr_df_1_to_2 = self._filter_invalid_matches(clstr_df_1_to_2, f"{b1} to {b2}", seq_type)
@@ -620,6 +637,10 @@ class DataLoader:
             # 4 - add to the pairs_clustering dictionary
             pairs_clustering[(b1, b2)] = clstr_df_1_to_2
             pairs_clustering[(b2, b1)] = clstr_df_2_to_1
+        
+        # 5 - save the pairs_clustering data
+        with open(join(_path, f'{f_name}.pickle'), 'wb') as handle:
+            pickle.dump(pairs_clustering, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
         return pairs_clustering
 
