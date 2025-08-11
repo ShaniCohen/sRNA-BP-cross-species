@@ -173,7 +173,8 @@ class Analyzer:
         strain_dist = " | ".join([f"{counts[i]} includes {unq[i]} ({int(round(counts[i]/num_clusters, 2)*100)} %)" for i in range(len(unq))])
         # strains composition distribution
         unq, counts = np.unique(all_orthologs_df['strains'], return_counts=True)
-        strain_comp_dist = "\n   ".join([f"{counts[i]} of composition {unq[i]} ({int(round(counts[i]/num_clusters, 2)*100)} %)" for i in range(len(unq))])
+        sorted_dict = dict(sorted(dict(zip(unq, counts)).items(), key=lambda item: item[1], reverse=True))
+        strain_comp_dist = "\n   ".join([f"{counts} of composition {unq} ({int(round(counts/num_clusters, 2)*100)} %)" for unq, counts in sorted_dict.items()])
 
         # 2 - per strain analysis
         per_strain_analysis = ""
