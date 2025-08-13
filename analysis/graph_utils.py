@@ -23,6 +23,7 @@ class GraphUtils:
         # strains
         self.strains = data_loader.get_strains()
 
+        # ----- Graph properties
         # node types
         # GO
         self.bp = ontology.type_bp
@@ -55,6 +56,10 @@ class GraphUtils:
         self.ips = "interproscan"
         self.eggnog = "eggnog"
         self.annot_types = [self.curated, self.ips, self.eggnog]
+
+        # ----- Methods
+        # BP similarity methods
+        self.exact_bp = 'exact_bp'
 
     def add_node_rna(self, G, id, type, strain, locus_tag, name, synonyms, start, end, strand, rna_seq, protein_seq: str = None, log_warning=True):
         if not G.has_node(id):
@@ -226,6 +231,12 @@ class GraphUtils:
                 cluster = self.get_orthologs_cluster(G, o, cluster)
         
         return cluster
+    
+    def is_the_same_bp(self, bp1, bp2, similiarity_method) -> bool:
+        if similiarity_method == self.exact_bp:
+            return bp1 == bp2
+        else:
+            raise ValueError(f"invalid BP similiarity method -> {similiarity_method}")
        
     def _create_3D_visualization(self, G):
         # nx_graph = nx.Graph()

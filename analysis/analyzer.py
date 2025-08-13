@@ -9,6 +9,7 @@ import networkx as nx
 from pyvis.network import Network
 from scipy.stats import hypergeom, false_discovery_control
 import json
+import ast
 import sys
 import os
 
@@ -53,49 +54,87 @@ class Analyzer:
         self.logger.info(f"running analysis")
 
         # --------------   run analysis   --------------        
-        self._analyze_rna_clustering()
+        # self._analyze_rna_clustering()
         # 1 - Generate a mapping of sRNA to biological processes (BPs)
         self.logger.info("----- Before enrichment:")
-        bp_mapping = self._generate_srna_bp_mapping()
-        self._log_mapping(bp_mapping)
+        srna_bp_mapping = self._generate_srna_bp_mapping()
+        self._log_mapping(srna_bp_mapping)
         # 2 - Enrichment (per strain): per sRNA, find and keep only significant biological processes (BPs) that its targets invovlved in.
-        self.logger.info("----- After enrichment:")
-        bp_mapping_post_en, meta = self._apply_enrichment(bp_mapping)
-        self._log_mapping(bp_mapping_post_en)
-        # 3 - dump metadata
-        if dump_meta:
-            self._dump_metadata(meta)
+        # self.logger.info("----- After enrichment:")
+        # srna_bp_mapping_post_en, meta = self._apply_enrichment(srna_bp_mapping)
+        # self._log_mapping(srna_bp_mapping_post_en)
+        # # 2.1 - dump metadata
+        # if dump_meta:
+        #     self._dump_metadata(meta)
+        # 3 - BPs of sRNA orthologs
+        # 3.1 - BP similarity = exact
+        self._analyze_bps_of_orthologs('sRNA', self.U.srna, srna_bp_mapping, self.U.exact_bp)
     
     def _analyze_rna_clustering(self):
-        self._analyze_paralogs()
+        # 1 - paralogs
+        self._analyze_paralogs('sRNA', self.U.srna)
+        self._analyze_paralogs('mRNA', self.U.mrna)
+        # 2 - orthologs
         self._analyze_orthologs('sRNA', self.U.srna)
         self._analyze_orthologs('mRNA', self.U.mrna)
+
+    def _analyze_bps_of_orthologs(self, rna_str: str, rna_type: str, srna_bp_mapping: dict, bp_similarity_method: str):
+        self.logger.info(f"Analyzing BPs of {rna_str} orthologs")
+        # 1 - load RNA orthologs
+        _path = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "orthologs"))
+        all_orthologs_df = read_df(join(_path, f"{rna_str}_orthologs.csv"))
+        # 2 - 
+        for cluster in all_orthologs_df['cluster'].apply(ast.literal_eval):
+            all_common_bps, num_common_bps, max_common_bps, all_bps = self._get_common_bps_of_srna_orthologs(cluster, srna_bp_mapping, bp_similarity_method)
+            print()
+        # all_orthologs_df[['all_common_BPs', 'num_common_BPs', 'max_common_BPs', 'all_BPs']] = pd.DataFrame(list(map(self._get_common_bps_of_orthologs, all_orthologs_df['cluster'])))
+        # self.U.is_the_same_bp()
     
-    def _analyze_paralogs(self):
-        out_path = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "paralogs"))
+    def _get_common_bps_of_srna_orthologs(self, orthologs_cluster: Tuple[str], srna_bp_mapping: dict, bp_similarity_method: str) -> Tuple[dict, int, int, dict]:
+        # 1 - update all BPs
+        all_bps = {}
+        for srna in orthologs_cluster:
+            strain = self.G.nodes[srna]['strain']
+            srna_targets = srna_bp_mapping[strain].get(srna)
+            unq_bps = sorted({bp for bps in srna_targets.values() for bp in bps})
+            all_bps[f'{strain}__{srna}'] = unq_bps
+
+        all_common_bps = {}
+        for size in range(2, len(all_bps.keys()) + 1):
+            for srnas in itertools.combinations(all_bps.keys(), size):
+                # TODO: get the common BPs the srnas in srnas 
+                print()
+
+        all_common_bps = {}
+        num_common_bps = 0
+        max_common_bps = 0 
+        all_bps = {}
+        return all_common_bps, num_common_bps, max_common_bps, all_bps
+    
+    def _analyze_paralogs(self, rna_str: str, rna_type: str):
+        self.logger.info(f"Analyzing {rna_str} paralogs")
         for strain in self.U.strains:
             self.logger.info(f"Strain: {strain}")
-            for (rna_str, rna_type) in [('sRNA', self.U.srna), ('mRNA', self.U.mrna)]:
-                # all RNAs
-                rna_nodes =  [n for n, d in self.G.nodes(data=True) if d['type'] == rna_type and d['strain'] == strain]
-                # RNAs that are paralogs
-                rna_paralogs_clusters = []
-                for rna in rna_nodes:
-                    rna_paralogs = [n for n in self.G.neighbors(rna) if self.G.nodes[n]['type'] == rna_type and self.U.are_paralogs(self.G, rna, n, strain)]
-                    if rna_paralogs:
-                        cluster = set([rna] + rna_paralogs)
-                        if cluster not in rna_paralogs_clusters:
-                            rna_paralogs_clusters.append(cluster)
-
-                self.logger.info(
-                    f"  ----------------   \n"
-                    f"  Number of {rna_str}: {len(rna_nodes)} \n"
-                    f"  Number of {rna_str} with paralogs: {sum(len(c) for c in rna_paralogs_clusters)} \n"
-                    f"  Number of {rna_str} paralogs clusters: {len(rna_paralogs_clusters)}"
-                )
-                self._dump_paralogs(strain, rna_str, rna_paralogs_clusters, out_path)
+            # 1 - all RNAs
+            rna_nodes =  [n for n, d in self.G.nodes(data=True) if d['type'] == rna_type and d['strain'] == strain]
+            # 2 - RNAs that are paralogs
+            rna_paralogs_clusters = []
+            for rna in rna_nodes:
+                rna_paralogs = [n for n in self.G.neighbors(rna) if self.G.nodes[n]['type'] == rna_type and self.U.are_paralogs(self.G, rna, n, strain)]
+                if rna_paralogs:
+                    cluster = set([rna] + rna_paralogs)
+                    if cluster not in rna_paralogs_clusters:
+                        rna_paralogs_clusters.append(cluster)
+            # 3 - log and dump
+            self.logger.info(
+                f"  ----------------   \n"
+                f"  Number of {rna_str}: {len(rna_nodes)} \n"
+                f"  Number of {rna_str} with paralogs: {sum(len(c) for c in rna_paralogs_clusters)} \n"
+                f"  Number of {rna_str} paralogs clusters: {len(rna_paralogs_clusters)}"
+            )
+            self._dump_paralogs(strain, rna_str, rna_paralogs_clusters)
     
-    def _analyze_orthologs(self, rna_str, rna_type):
+    def _analyze_orthologs(self, rna_str: str, rna_type: str):
         self.logger.info(f"Analyzing {rna_str} orthologs")
         # 1 - get all orthologs clusters
         all_orthologs_clusters = set()
@@ -200,7 +239,8 @@ class Analyzer:
         # 4 - dump
         write_df(all_orthologs_df, join(out_path, f"{rna_str}_orthologs.csv"))
 
-    def _dump_paralogs(self, strain: str, rna_type: str, rna_paralogs_clusters: List[Set[str]], out_path):
+    def _dump_paralogs(self, strain: str, rna_type: str, rna_paralogs_clusters: List[Set[str]]):
+        out_path = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "paralogs"))
         out_file = join(out_path, f"{strain}_{rna_type}_paralogs_clusters.txt")
 
         with open(out_file, 'w', encoding='utf-8') as f:
@@ -334,7 +374,7 @@ class Analyzer:
             df = pd.DataFrame(rows)
             file_path = os.path.join(out_path, f"metadata_per_srna_{strain}.csv")
             df.to_csv(file_path, index=False)
-            self.logger.info(f"Metadata for strain {strain} dumped to {file_path}")
+            # self.logger.debug(f"Metadata for strain {strain} dumped to {file_path}")
     
     def compare_bp_to_accociated_mrnas(self, bp_to_accociated_mrnas, bp_to_accociated_mrnas_g):
         # Check if keys are the same
