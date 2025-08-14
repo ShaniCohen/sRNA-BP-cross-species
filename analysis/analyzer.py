@@ -1,4 +1,4 @@
-from typing import Tuple, Set, List
+from typing import Tuple, Set, List, Dict
 import pandas as pd
 import numpy as np
 from os.path import join
@@ -68,7 +68,7 @@ class Analyzer:
         #     self._dump_metadata(meta)
         # 3 - BPs of sRNA orthologs
         # 3.1 - BP similarity = exact
-        self._analyze_bps_of_orthologs('sRNA', self.U.srna, srna_bp_mapping, self.U.exact_bp)
+        self._analyze_bps_of_srna_orthologs(srna_bp_mapping, self.U.exact_bp)
     
     def _analyze_rna_clustering(self):
         # 1 - paralogs
@@ -78,39 +78,65 @@ class Analyzer:
         self._analyze_orthologs('sRNA', self.U.srna)
         self._analyze_orthologs('mRNA', self.U.mrna)
 
-    def _analyze_bps_of_orthologs(self, rna_str: str, rna_type: str, srna_bp_mapping: dict, bp_similarity_method: str):
-        self.logger.info(f"Analyzing BPs of {rna_str} orthologs")
-        # 1 - load RNA orthologs
+    def _analyze_bps_of_srna_orthologs(self, srna_bp_mapping: dict, bp_similarity_method: str):
+        self.logger.info(f"Analyzing BPs of sRNA orthologs")
+        # 1 - load sRNA orthologs
         _path = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "orthologs"))
-        all_orthologs_df = read_df(join(_path, f"{rna_str}_orthologs.csv"))
-        # 2 - 
+        all_orthologs_df = read_df(join(_path, f"sRNA_orthologs.csv"))
+        # 2 - analyze common BPs of sRNA orthologs
+        records = []
         for cluster in all_orthologs_df['cluster'].apply(ast.literal_eval):
-            all_common_bps, num_common_bps, max_common_bps, all_bps = self._get_common_bps_of_srna_orthologs(cluster, srna_bp_mapping, bp_similarity_method)
-            print()
-        # all_orthologs_df[['all_common_BPs', 'num_common_BPs', 'max_common_BPs', 'all_BPs']] = pd.DataFrame(list(map(self._get_common_bps_of_orthologs, all_orthologs_df['cluster'])))
-        # self.U.is_the_same_bp()
+            all_common_bps, num_common_bps, max_common_bps, all_bps, num_all_bps = self._get_common_bps_of_srna_orthologs(cluster, srna_bp_mapping, bp_similarity_method)
+            records.append({'all_common_BPs': all_common_bps, 'num_common_BPs': num_common_bps, 'max_common_BPs': max_common_bps, 'all_BPs': all_bps, 'num_all_BPs': num_all_bps})
+        all_orthologs_df[list(records[0].keys())] = pd.DataFrame(records)
+        # 3 - log and dump
+        num_clusters = len(all_orthologs_df)
+        # 3.1 - max common BPs distribution
+        unq, counts = np.unique(all_orthologs_df['max_common_BPs'], return_counts=True)
+        sorted_dict = dict(sorted(dict(zip(unq, counts)).items(), key=lambda item: item[1], reverse=True))
+        max_common_bps_dist = "\n   ".join([f"{counts} with max common BPs = {unq} ({int(round(counts/num_clusters, 2)*100)} %)" for unq, counts in sorted_dict.items()])
+        
+        self.logger.info(
+            f"----------------   sRNA orthologs \n"
+            f"-------   BP similarity method = {bp_similarity_method} \n"
+            f"Number of clusters: {len(all_orthologs_df)} \n"
+            f"max common BPs distribution: \n"
+            f"   {max_common_bps_dist}"
+        )
+        write_df(all_orthologs_df, join(_path, f"sRNA_orthologs_w_BPs.csv"))
     
-    def _get_common_bps_of_srna_orthologs(self, orthologs_cluster: Tuple[str], srna_bp_mapping: dict, bp_similarity_method: str) -> Tuple[dict, int, int, dict]:
-        # 1 - update all BPs
-        all_bps = {}
+    def _get_common_bps_of_srna_orthologs(self, orthologs_cluster: Tuple[str], srna_bp_mapping: dict, bp_similarity_method: str) -> Tuple[Dict[tuple, list], Dict[tuple, int], int, Dict[str, list], Dict[str, int]]:
+        # 1 - all BPs
+        all_bps, num_bps = {}, {}
         for srna in orthologs_cluster:
             strain = self.G.nodes[srna]['strain']
             srna_targets = srna_bp_mapping[strain].get(srna)
-            unq_bps = sorted({bp for bps in srna_targets.values() for bp in bps})
-            all_bps[f'{strain}__{srna}'] = unq_bps
+            if srna_targets:
+                unq_bps = sorted({bp for bps in srna_targets.values() for bp in bps})
+                all_bps[f'{strain}__{srna}'] = unq_bps
+                num_bps[f'{strain}__{srna}'] = len(unq_bps)
+        # 2 - common BPs
+        all_common_bps, num_common_bps, max_common_bps = self._calc_common_bps(all_bps, bp_similarity_method)
 
-        all_common_bps = {}
-        for size in range(2, len(all_bps.keys()) + 1):
-            for srnas in itertools.combinations(all_bps.keys(), size):
-                # TODO: get the common BPs the srnas in srnas 
-                print()
-
-        all_common_bps = {}
-        num_common_bps = 0
-        max_common_bps = 0 
-        all_bps = {}
-        return all_common_bps, num_common_bps, max_common_bps, all_bps
+        return all_common_bps, num_common_bps, max_common_bps, all_bps, num_bps
     
+    def _calc_common_bps(self, all_bps: Dict[str, list], bp_similarity_method: str) -> Tuple[Dict[tuple, list], Dict[tuple, int], int]:
+        all_common_bps, num_common_bps = {}, {}
+        max_common_bps = 0
+        for size in range(2, len(all_bps.keys()) + 1):
+            for rnas in itertools.combinations(all_bps.keys(), size):
+                rnas_bps = list(map(all_bps.get, rnas))
+                # 1 - common BPs of rnas
+                common_bps: List[str] = rnas_bps[0]
+                for l in rnas_bps[1:]:
+                    common_bps: List[str] = self.U.get_common_bps(common_bps, l, bp_similarity_method)
+                all_common_bps[rnas] = common_bps
+                # 2 - num common BPs
+                num_common_bps[rnas] = len(common_bps)
+                # 3 - max common BPs
+                max_common_bps = max(max_common_bps, len(common_bps))
+        return all_common_bps, num_common_bps, max_common_bps
+
     def _analyze_paralogs(self, rna_str: str, rna_type: str):
         self.logger.info(f"Analyzing {rna_str} paralogs")
         for strain in self.U.strains:
