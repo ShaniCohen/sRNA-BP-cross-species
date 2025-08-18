@@ -58,7 +58,10 @@ class Analyzer:
         # 1 - Generate a mapping of sRNA to biological processes (BPs)
         self.logger.info("----- Before enrichment:")
         srna_bp_mapping = self._generate_srna_bp_mapping()
-        self._log_mapping(srna_bp_mapping)
+        self._log_srna_bp_mapping(srna_bp_mapping)
+        bp_rna_mapping = self._generate_bp_rna_mapping(srna_bp_mapping)
+        #TODO: log BP to RNAs mapping
+        self._log_bp_rna_mapping(bp_rna_mapping)
         # 2 - Enrichment (per strain): per sRNA, find and keep only significant biological processes (BPs) that its targets invovlved in.
         # self.logger.info("----- After enrichment:")
         # srna_bp_mapping_post_en, meta = self._apply_enrichment(srna_bp_mapping)
@@ -77,6 +80,102 @@ class Analyzer:
         # 2 - orthologs
         self._analyze_orthologs('sRNA', self.U.srna)
         self._analyze_orthologs('mRNA', self.U.mrna)
+
+    def _generate_srna_bp_mapping(self) -> dict:
+        """
+        Generate a mapping of sRNA to biological processes (BPs) based on the edges in the graph.
+        
+        Returns:
+            dict: A dictionary in the following format:
+            {
+                <strain_id>: {
+                        <sRNA_id>: {
+                            <mRNA_target_id>: [<bp_id1>, <bp_id2>, ...],
+                            ...
+                        },
+                        ...
+                },
+                ...
+            }               
+        """
+        bp_mapping = {}  
+        for strain in self.U.strains:
+            unq_targets_without_bp = set()
+            # Filter sRNA nodes for the current strain
+            # d = self.strains_data[strain]['unq_inter'][self.strains_data[strain]['unq_inter']['sRNA_accession_id'] == 'G0-16636']
+            srna_bp_mapping = {}
+            srna_nodes = [n for n, d in self.G.nodes(data=True) if d['type'] == self.U.srna and d['strain'] == strain]
+            for srna in srna_nodes:
+                targets_to_bp = {}
+                srna_targets = [n for n in self.G.neighbors(srna) if self.G.nodes[n]['type'] == self.U.mrna and self.U.is_target(self.G, srna, n)]
+                for target in srna_targets:
+                    # Find the biological processes associated with the target
+                    bp_nodes = [n for n in self.G.neighbors(target) if self.U.is_annotated(self.G, target, n, self.U.bp)]
+                    if bp_nodes:
+                        targets_to_bp[target] = bp_nodes
+                    else:
+                        unq_targets_without_bp.add(target)
+                if targets_to_bp:
+                    srna_bp_mapping[srna] = targets_to_bp
+            
+            bp_mapping[strain] = srna_bp_mapping
+            self._log_mrna_with_bp(strain, unq_targets_without_bp)
+
+        return bp_mapping
+    
+    def _generate_bp_rna_mapping(self, srna_bp_mapping: dict):
+        """Generate a mapping of BP to mRNAs and sRNAs based on the srna_bp_mapping.
+
+        Args:
+            srna_bp_mapping (dict): A dictionary in the following format:
+            {
+                <strain_id>: {
+                        <sRNA_id>: {
+                            <mRNA_target_id>: [<bp_id1>, <bp_id2>, ...],
+                            ...
+                        },
+                        ...
+                },
+                ...
+            }      
+
+        Returns:
+            dict: A dictionary in the following format:
+            {
+                <bp_id>: {
+                        <strain_id>: {
+                            <mRNA_target_id>: [<sRNA_id1>, <sRNA_id2>, ...],
+                            ...
+                        },
+                        ...
+                },
+                ...
+            }   
+        """
+        # 1 - get all unique BP ids
+        unq_bps = set()
+        for strain_dict in srna_bp_mapping.values():
+            for srna_targets in strain_dict.values():
+                for mrna_bps in srna_targets.values():
+                    unq_bps.update(mrna_bps)
+        unq_bps = sorted(unq_bps)
+
+        # 2 - build mapping
+        bp_rna_mapping = {}
+        for bp in unq_bps:
+            bp_rna_mapping[bp] = {}
+            for strain, srna_dict in srna_bp_mapping.items():
+                # per strain, find all interacting mRNAs that relate to curr BP
+                strain_mrna_to_srnas = {}
+                for srna_id, mrna_to_bps in srna_dict.items():
+                    for mrna_id, bps in mrna_to_bps.items():
+                        if bp in bps:
+                            if mrna_id not in strain_mrna_to_srnas:
+                                strain_mrna_to_srnas[mrna_id] = []
+                            strain_mrna_to_srnas[mrna_id].append(srna_id)
+                if strain_mrna_to_srnas:
+                    bp_rna_mapping[bp][strain] = strain_mrna_to_srnas
+        return bp_rna_mapping
 
     def _analyze_bps_of_srna_orthologs(self, srna_bp_mapping: dict, bp_similarity_method: str):
         self.logger.info(f"Analyzing BPs of sRNA orthologs")
@@ -104,7 +203,7 @@ class Analyzer:
             f"   {max_common_bps_dist}"
         )
         write_df(all_orthologs_df, join(_path, f"sRNA_orthologs_w_BPs.csv"))
-    
+
     def _get_common_bps_of_srna_orthologs(self, orthologs_cluster: Tuple[str], srna_bp_mapping: dict, bp_similarity_method: str) -> Tuple[Dict[tuple, list], Dict[tuple, int], int, Dict[str, list], Dict[str, int]]:
         # 1 - all BPs
         all_bps, num_bps = {}, {}
@@ -278,48 +377,6 @@ class Analyzer:
                     node_info = self.G.nodes[rna_node_id]
                     f.write(f"  {rna_node_id}: {json.dumps(node_info, ensure_ascii=False)}\n")
 
-    def _generate_srna_bp_mapping(self) -> dict:
-        """
-        Generate a mapping of sRNA to biological processes (BPs) based on the edges in the graph.
-        
-        Returns:
-            dict: A dictionary in the following format:
-            {
-                <strain_id>: {
-                        <sRNA_id>: {
-                            <mRNA_target_id>: [<bp_id1>, <bp_id2>, ...],
-                            ...
-                        },
-                        ...
-                },
-                ...
-            }               
-        """
-        bp_mapping = {}  
-        for strain in self.U.strains:
-            unq_targets_without_bp = set()
-            # Filter sRNA nodes for the current strain
-            # d = self.strains_data[strain]['unq_inter'][self.strains_data[strain]['unq_inter']['sRNA_accession_id'] == 'G0-16636']
-            srna_bp_mapping = {}
-            srna_nodes = [n for n, d in self.G.nodes(data=True) if d['type'] == self.U.srna and d['strain'] == strain]
-            for srna in srna_nodes:
-                targets_to_bp = {}
-                srna_targets = [n for n in self.G.neighbors(srna) if self.G.nodes[n]['type'] == self.U.mrna and self.U.is_target(self.G, srna, n)]
-                for target in srna_targets:
-                    # Find the biological processes associated with the target
-                    bp_nodes = [n for n in self.G.neighbors(target) if self.U.is_annotated(self.G, target, n, self.U.bp)]
-                    if bp_nodes:
-                        targets_to_bp[target] = bp_nodes
-                    else:
-                        unq_targets_without_bp.add(target)
-                if targets_to_bp:
-                    srna_bp_mapping[srna] = targets_to_bp
-            
-            bp_mapping[strain] = srna_bp_mapping
-            self._log_mrna_with_bp(strain, unq_targets_without_bp)
-
-        return bp_mapping
-
     def _log_mrna_with_bp(self, strain: str, unq_targets_without_bp: Set[str]):
             ips_annot = self.ips_go_annotations.get(strain, None)
             if ips_annot is not None:
@@ -329,7 +386,25 @@ class Analyzer:
                 cc_count = np.intersect1d(unq_targets_without_bp, mrna_w_cc).size
             self.logger.info(f"Strain: {strain}, Number of unique mRNAs targets without BPs: {len(unq_targets_without_bp)} (where {mf_count} have ips MF annotation, {cc_count} have ips CC annotation)")
 
-    def _log_mapping(self, mapping: dict):
+    def _log_srna_bp_mapping(self, mapping: dict):
+        for strain, srna_bp_mapping in mapping.items():
+            srna_count = len(srna_bp_mapping)
+            mrna_targets = [mrna for srna_targets in srna_bp_mapping.values() for mrna in srna_targets.keys()]
+            unique_mrna_targets = set(mrna_targets)
+            bp_list = [bp for srna_targets in srna_bp_mapping.values() for bps in srna_targets.values() for bp in bps]
+            unique_bps = set(bp_list)
+
+            self.logger.info(
+                f"Strain: {strain} \n"
+                f"  Number of sRNA keys: {srna_count} \n"
+                f"  Number of mRNA targets (with BP): {len(mrna_targets)} \n"
+                f"  Number of unique mRNA targets (with BP): {len(unique_mrna_targets)} \n"
+                f"  Number of BPs: {len(bp_list)} \n"
+                f"  Number of unique BPs: {len(unique_bps)}"
+            )
+    
+    def _log_bp_rna_mapping(self, mapping: dict):
+        #TODO
         for strain, srna_bp_mapping in mapping.items():
             srna_count = len(srna_bp_mapping)
             mrna_targets = [mrna for srna_targets in srna_bp_mapping.values() for mrna in srna_targets.keys()]

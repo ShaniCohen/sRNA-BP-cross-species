@@ -232,12 +232,12 @@ class GraphUtils:
         
         return cluster
     
-    def get_common_bps(self, bps1: List[str], bps2: List[str], similiarity_method: str) -> List[str]:
-        if similiarity_method == self.exact_bp:
+    def get_common_bps(self, bps1: List[str], bps2: List[str], bp_similiarity_method: str) -> List[str]:
+        if bp_similiarity_method == self.exact_bp:
             return np.intersect1d(bps1, bps2).tolist()
         else:
-            raise ValueError(f"invalid BP similiarity method -> {similiarity_method}")
-       
+            raise ValueError(f"invalid BP similiarity method -> {bp_similiarity_method}")
+        
     def _create_3D_visualization(self, G):
         # nx_graph = nx.Graph()
 
