@@ -53,26 +53,32 @@ class Analyzer:
         """
         self.logger.info(f"running analysis")
 
-        # --------------   run analysis   --------------        
+        # --------------   run analysis   --------------
+         # 1 - Analyze RNA clustering (orthologs and paralogs)      
         self._analyze_rna_clustering()
-        # 1 - Generate a mapping of sRNA to biological processes (BPs)
+
+        # 2 - Generate a mapping of sRNA to biological processes (BPs)
         self.logger.info("----- Before enrichment:")
         srna_bp_mapping = self._generate_srna_bp_mapping()
         self._log_srna_bp_mapping(srna_bp_mapping)
+        
+        # 3 - generate mapping of BP to mRNAs and sRNAs
         bp_rna_mapping = self._generate_bp_rna_mapping(srna_bp_mapping)
         #TODO: log BP to RNAs mapping
         # self._log_bp_rna_mapping(bp_rna_mapping)
-        
-        # 2 - Enrichment (per strain): per sRNA, find and keep only significant biological processes (BPs) that its targets invovlved in.
+
+        # 4 - Enrichment (per strain): per sRNA, find and keep only significant biological processes (BPs) that its targets invovlved in.
         # self.logger.info("----- After enrichment:")
         # srna_bp_mapping_post_en, meta = self._apply_enrichment(srna_bp_mapping)
         # self._log_mapping(srna_bp_mapping_post_en)
-        # # 2.1 - dump metadata
+        # # 4.1 - dump metadata
         # if dump_meta:
         #     self._dump_metadata(meta)
-        # 3 - BPs of sRNA orthologs
-        # 3.1 - BP similarity = exact
+
+        # 5 - BPs of sRNA orthologs
+        # 5.1 - BP similarity = exact
         self._analyze_bps_of_srna_orthologs(srna_bp_mapping, self.U.exact_bp)
+        print()
     
     def _analyze_rna_clustering(self):
         # 1 - paralogs
@@ -120,7 +126,7 @@ class Analyzer:
                     srna_bp_mapping[srna] = targets_to_bp
             
             bp_mapping[strain] = srna_bp_mapping
-            self._log_mrna_with_bp(strain, unq_targets_without_bp)
+            # self._log_mrna_without_bp(strain, unq_targets_without_bp)  # check if they have IPS MF/CC annotations
 
         return bp_mapping
     
@@ -378,7 +384,7 @@ class Analyzer:
                     node_info = self.G.nodes[rna_node_id]
                     f.write(f"  {rna_node_id}: {json.dumps(node_info, ensure_ascii=False)}\n")
 
-    def _log_mrna_with_bp(self, strain: str, unq_targets_without_bp: Set[str]):
+    def _log_mrna_without_bp(self, strain: str, unq_targets_without_bp: Set[str]):
             ips_annot = self.ips_go_annotations.get(strain, None)
             if ips_annot is not None:
                 mrna_w_mf = set(ips_annot[pd.notnull(ips_annot['MF_go_xrefs'])]['mRNA_accession_id'])
@@ -388,6 +394,7 @@ class Analyzer:
             self.logger.info(f"Strain: {strain}, Number of unique mRNAs targets without BPs: {len(unq_targets_without_bp)} (where {mf_count} have ips MF annotation, {cc_count} have ips CC annotation)")
 
     def _log_srna_bp_mapping(self, mapping: dict):
+        self.logger.info(f"--------- sRNA to BP mapping")
         for strain, srna_bp_mapping in mapping.items():
             srna_count = len(srna_bp_mapping)
             mrna_targets = [mrna for srna_targets in srna_bp_mapping.values() for mrna in srna_targets.keys()]
@@ -398,9 +405,8 @@ class Analyzer:
             self.logger.info(
                 f"Strain: {strain} \n"
                 f"  Number of sRNA keys: {srna_count} \n"
-                f"  Number of mRNA targets (with BP): {len(mrna_targets)} \n"
-                f" {len(unique_mrna_targets)} \n"
-                f"  Number of BPs: {len(bp_list)} \n"
+                f"  Number of unique mRNA targets with BPs: {len(unique_mrna_targets)} \n"
+                f"  Number of BP annotations: {len(bp_list)} \n"
                 f"  Number of unique BPs: {len(unique_bps)}"
             )
     
