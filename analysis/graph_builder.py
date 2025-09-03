@@ -46,7 +46,7 @@ class GraphBuilder:
         self.U = graph_utils
         # define annotation types to add (curated are always added)
         self.add_ips_annot = True
-        self.add_eggnog_annot = True
+        self.add_eggnog_annot = False
     
     def get_graph(self) -> nx.Graph:
         if not self.graph_is_built:
@@ -95,7 +95,7 @@ class GraphBuilder:
                 has_bp = sum(cu_annot['GO_BP'].apply(lambda x: len(x) > 0))
                 has_mf = sum(cu_annot['GO_MF'].apply(lambda x: len(x) > 0))
                 has_cc = sum(cu_annot['GO_CC'].apply(lambda x: len(x) > 0))
-                self.logger.info(f"{strain}: out of {has_go} currated annotations, BP = {has_bp} ({(has_bp/has_go)*100:.2f}%), MF = {has_mf} ({(has_mf/has_go)*100:.2f}%), CC = {has_cc} ({(has_cc/has_go)*100:.2f}%)")
+                self.logger.info(f"{strain}: out of {has_go} mRNAs with curated annotations, has BP = {has_bp} ({(has_bp/has_go)*100:.2f}%), has MF = {has_mf} ({(has_mf/has_go)*100:.2f}%), has CC = {has_cc} ({(has_cc/has_go)*100:.2f}%)")
 
     def _add_mrna_nodes_and_annotation_edges(self):
         for strain, data in self.strains_data.items():
@@ -208,7 +208,7 @@ class GraphBuilder:
 
             # Count sRNA nodes with interactions (sRNA-mRNA)
             srna_with_interactions = [
-                srna for srna in srna_nodes if any(self.U.is_target(self.G, srna, neighbor) for neighbor in self.G.neighbors(n) if self.G.nodes[neighbor]['type'] == self.U.mrna)
+                srna for srna in srna_nodes if any(self.U.is_target(self.G, srna, neighbor) for neighbor in self.G.neighbors(srna) if self.G.nodes[neighbor]['type'] == self.U.mrna)
             ]
             srna_with_interactions_count = len(srna_with_interactions)
 

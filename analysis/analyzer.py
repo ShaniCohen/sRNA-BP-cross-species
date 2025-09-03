@@ -54,14 +54,15 @@ class Analyzer:
         self.logger.info(f"running analysis")
 
         # --------------   run analysis   --------------        
-        # self._analyze_rna_clustering()
+        self._analyze_rna_clustering()
         # 1 - Generate a mapping of sRNA to biological processes (BPs)
         self.logger.info("----- Before enrichment:")
         srna_bp_mapping = self._generate_srna_bp_mapping()
         self._log_srna_bp_mapping(srna_bp_mapping)
         bp_rna_mapping = self._generate_bp_rna_mapping(srna_bp_mapping)
         #TODO: log BP to RNAs mapping
-        self._log_bp_rna_mapping(bp_rna_mapping)
+        # self._log_bp_rna_mapping(bp_rna_mapping)
+        
         # 2 - Enrichment (per strain): per sRNA, find and keep only significant biological processes (BPs) that its targets invovlved in.
         # self.logger.info("----- After enrichment:")
         # srna_bp_mapping_post_en, meta = self._apply_enrichment(srna_bp_mapping)
@@ -398,7 +399,7 @@ class Analyzer:
                 f"Strain: {strain} \n"
                 f"  Number of sRNA keys: {srna_count} \n"
                 f"  Number of mRNA targets (with BP): {len(mrna_targets)} \n"
-                f"  Number of unique mRNA targets (with BP): {len(unique_mrna_targets)} \n"
+                f" {len(unique_mrna_targets)} \n"
                 f"  Number of BPs: {len(bp_list)} \n"
                 f"  Number of unique BPs: {len(unique_bps)}"
             )
