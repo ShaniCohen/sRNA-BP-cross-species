@@ -54,8 +54,9 @@ class Analyzer:
         self.logger.info(f"running analysis")
 
         # --------------   run analysis   --------------
-         # 1 - Analyze RNA clustering (orthologs and paralogs)      
-        self._analyze_rna_clustering()
+         # 1 - Analyze RNA clustering (orthologs and paralogs)
+         # #TODO: un comment    
+        # self._analyze_rna_clustering()
 
         # 2 - Generate a mapping of sRNA to biological processes (BPs)
         self.logger.info("----- Before enrichment:")
@@ -65,7 +66,7 @@ class Analyzer:
         # 3 - generate mapping of BP to mRNAs and sRNAs
         bp_rna_mapping = self._generate_bp_rna_mapping(srna_bp_mapping)
         #TODO: log BP to RNAs mapping
-        # self._log_bp_rna_mapping(bp_rna_mapping)
+        self._log_bp_rna_mapping(bp_rna_mapping)
 
         # 4 - Enrichment (per strain): per sRNA, find and keep only significant biological processes (BPs) that its targets invovlved in.
         # self.logger.info("----- After enrichment:")
@@ -410,23 +411,66 @@ class Analyzer:
                 f"  Number of unique BPs: {len(unique_bps)}"
             )
     
-    def _log_bp_rna_mapping(self, mapping: dict):
-        #TODO
-        for strain, srna_bp_mapping in mapping.items():
-            srna_count = len(srna_bp_mapping)
-            mrna_targets = [mrna for srna_targets in srna_bp_mapping.values() for mrna in srna_targets.keys()]
-            unique_mrna_targets = set(mrna_targets)
-            bp_list = [bp for srna_targets in srna_bp_mapping.values() for bps in srna_targets.values() for bp in bps]
-            unique_bps = set(bp_list)
+    def _find_orthologs(self, strain_to_rna_list: Dict[str, List[str]]):
+        print()
+        return
 
-            self.logger.info(
-                f"Strain: {strain} \n"
-                f"  Number of sRNA keys: {srna_count} \n"
-                f"  Number of mRNA targets (with BP): {len(mrna_targets)} \n"
-                f"  Number of unique mRNA targets (with BP): {len(unique_mrna_targets)} \n"
-                f"  Number of BPs: {len(bp_list)} \n"
-                f"  Number of unique BPs: {len(unique_bps)}"
-            )
+    def _log_bp_rna_mapping(self, mapping: dict):
+        """
+        Generate a DataFrame with information about BPs and their related mRNAs and sRNAs
+
+        Args:
+            mapping (dict): A dictionary in the following format:
+            {
+                <bp_id>: {
+                        <strain_id>: {
+                            <mRNA_target_id>: [<sRNA_id1>, <sRNA_id2>, ...],
+                            ...
+                        },
+                        ...
+                },
+                ...
+            }   
+        """
+        # 1 - generate df
+        records = []
+        for bp_id, strain_dict in mapping.items():
+            strains = sorted(strain_dict.keys())
+            num_strains = len(strains)
+            related_mRNAs = {}
+            num_related_mRNAs = {}
+            related_sRNAs = {}
+            num_related_sRNAs = {}
+            for strain, mrna_to_srnas in strain_dict.items():
+                related_mRNAs[strain] = sorted(mrna_to_srnas.keys())
+                num_related_mRNAs[strain] = len(mrna_to_srnas)
+                # flatten sRNA lists for all mRNAs in this strain
+                srna_set = set()
+                for srna_list in mrna_to_srnas.values():
+                    srna_set.update(srna_list)
+                related_sRNAs[strain] = sorted(srna_set)
+                num_related_sRNAs[strain] = len(srna_set)
+            records.append({
+                'bp_id': bp_id,
+                'strains': strains,
+                'num_strains': num_strains,
+                'related_mRNAs_and_sRNAs': strain_dict,
+                'related_mRNAs': related_mRNAs,
+                'num_related_mRNAs': num_related_mRNAs,
+                'related_sRNAs': related_sRNAs,
+                'num_related_sRNAs': num_related_sRNAs
+            })
+        df = pd.DataFrame(records)
+
+        # 2 - identify orthologs
+        df['related_sRNA_orthologs'] = list(map(self._find_orthologs, df['related_sRNAs']))
+        df['related_mRNA_orthologs'] = list(map(self._find_orthologs, df['related_mRNAs']))
+
+        # 3 - log
+        self.logger.info(f"--------- BP to RNAs mapping\n{df.head()}")
+        # Optionally, dump to file if needed
+        # out_path = self.config['analysis_output_dir']
+        # df.to_csv(os.path.join(out_path, "bp_to_rnas_mapping.csv"), index=False)
     
     def _dump_metadata(self, metadata: dict):
         """
