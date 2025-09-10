@@ -35,6 +35,11 @@ class Analyzer:
         self.G = graph_builder.get_graph()
         self.U = graph_utils
 
+        # clustering_analysis
+        self.run_clustering_analysis = False
+        self.srna_orthologs = read_df(join(self.config['analysis_output_dir'], "orthologs", f"sRNA_orthologs.csv"))
+        self.mrna_orthologs = read_df(join(self.config['analysis_output_dir'], "orthologs", f"mRNA_orthologs.csv"))
+
         # TODO: remove after testing
         self.strains_data = graph_builder.strains_data
         self.ips_go_annotations = graph_builder.get_ips_go_annotations()
@@ -55,8 +60,8 @@ class Analyzer:
 
         # --------------   run analysis   --------------
          # 1 - Analyze RNA clustering (orthologs and paralogs)
-         # #TODO: un comment    
-        # self._analyze_rna_clustering()
+        if self.run_clustering_analysis:   
+            self._analyze_rna_clustering()
 
         # 2 - Generate a mapping of sRNA to biological processes (BPs)
         self.logger.info("----- Before enrichment:")
@@ -86,8 +91,12 @@ class Analyzer:
         self._analyze_paralogs('sRNA', self.U.srna)
         self._analyze_paralogs('mRNA', self.U.mrna)
         # 2 - orthologs
-        self._analyze_orthologs('sRNA', self.U.srna)
-        self._analyze_orthologs('mRNA', self.U.mrna)
+        # 2.1 - analyze
+        srna_orthologs = self._analyze_orthologs('sRNA', self.U.srna)
+        mrna_orthologs = self._analyze_orthologs('mRNA', self.U.mrna)
+        # 2.2 - save
+        self.srna_orthologs = srna_orthologs
+        self.mrna_orthologs = mrna_orthologs
 
     def _generate_srna_bp_mapping(self) -> dict:
         """
@@ -267,7 +276,7 @@ class Analyzer:
             )
             self._dump_paralogs(strain, rna_str, rna_paralogs_clusters)
     
-    def _analyze_orthologs(self, rna_str: str, rna_type: str):
+    def _analyze_orthologs(self, rna_str: str, rna_type: str) -> pd.DataFrame:
         self.logger.info(f"Analyzing {rna_str} orthologs")
         # 1 - get all orthologs clusters
         all_orthologs_clusters = set()
@@ -278,6 +287,8 @@ class Analyzer:
         all_orthologs_df = self._validate_orthologs_clusters(rna_type, all_orthologs_clusters)
         # 3 - log and dump
         self._log_n_dump_orthologs(rna_str, rna_type, all_orthologs_df)
+
+        return all_orthologs_df
     
     def _get_orthologs_clusters_of_strain(self, rna_type: str, strain: str):
         rna_nodes =  [n for n, d in self.G.nodes(data=True) if d['type'] == rna_type and d['strain'] == strain]
@@ -411,9 +422,31 @@ class Analyzer:
                 f"  Number of unique BPs: {len(unique_bps)}"
             )
     
-    def _find_orthologs(self, strain_to_rna_list: Dict[str, List[str]]):
-        print()
-        return
+    def _find_orthologs(self, strain_to_rna_list: Dict[str, List[str]], rna_str: str) -> List[Tuple[str]]:
+        """
+        For each cluster in orthologs_df['cluster'], find which RNAs from strain_to_rna_list are othologs, i.e., belong to the same cluster.
+        Return a set of tuples, each tuple contains the RNAs from strain_to_rna_list that belong to the same cluster.
+
+        Args:
+            strain_to_rna_list (dict): A dictionary in the following format:
+            {
+                <strain_id>: [<RNA_id1>, <RNA_id2>, ...],
+                ...
+            }
+        """
+        orthologs_df = self.srna_orthologs if rna_str == 'sRNA' else self.mrna_orthologs
+        all_rna_orthologs = set()
+        # Flatten all RNAs from strain_to_rna_list
+        all_rnas = set()
+        for rna_list in strain_to_rna_list.values():
+            all_rnas.update(rna_list)
+        # Iterate over clusters
+        for cluster in orthologs_df['cluster']:
+            # Find intersection with all_rnas
+            rna_orthologs = tuple(sorted(set(ast.literal_eval(cluster)).intersection(all_rnas)))
+            if len(rna_orthologs) > 1:
+                all_rna_orthologs.update(rna_orthologs)
+        return sorted(all_rna_orthologs)
 
     def _log_bp_rna_mapping(self, mapping: dict):
         """
@@ -463,8 +496,8 @@ class Analyzer:
         df = pd.DataFrame(records)
 
         # 2 - identify orthologs
-        df['related_sRNA_orthologs'] = list(map(self._find_orthologs, df['related_sRNAs']))
-        df['related_mRNA_orthologs'] = list(map(self._find_orthologs, df['related_mRNAs']))
+        for rna_str in ['sRNA', 'mRNA']:
+            df[f'related_{rna_str}_orthologs'] = list(map(self._find_orthologs, df[f'related_{rna_str}s'], np.repeat(rna_str, len(df))))
 
         # 3 - log
         self.logger.info(f"--------- BP to RNAs mapping\n{df.head()}")
