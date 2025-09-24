@@ -388,6 +388,8 @@ def analyze_ecoli_k12_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, in
     :param srna_data:
     :param inter_data:
     """
+    strain_short_name = 'Escherichia coli K12 MG1655'
+
     # --------------  validations  --------------
     # 1 - check sRNA acc is mapped to a single sRNA name
     srna_map = inter_data[['sRNA_accession_id_Eco', 'sRNA']].groupby(['sRNA_accession_id_Eco']).agg(
@@ -446,6 +448,7 @@ def analyze_ecoli_k12_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, in
     df_sum = df_sum.rename(columns={strain_col: 'strain'})
     df_sum['total_sRNAs'] = len(srna_data)
     df_sum['total_mRNAs'] = len(mrna_data)
+    df_sum['strain_short'] = strain_short_name
 
     # -------------- align columns
     for rna in ['sRNA', 'mRNA']:
@@ -477,6 +480,8 @@ def analyze_ecoli_epec_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, i
     :param inter_data:
     :return:
     """
+    strain_short_name = 'Enteropathogenic E.coli (EPEC) E2348/69'
+
     # --------------  validations  --------------
     # 1 - check sRNA acc is mapped to a single sRNA name
     srna_map = inter_data[['sRNA_accession_id_Eco', 'sRNA']].groupby(['sRNA_accession_id_Eco']).agg(
@@ -541,6 +546,7 @@ def analyze_ecoli_epec_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, i
     df_sum = df_sum.rename(columns={strain_col: 'strain'})
     df_sum['total_sRNAs'] = len(srna_data)
     df_sum['total_mRNAs'] = len(mrna_data)
+    df_sum['strain_short'] = strain_short_name
 
     return unq_inter, df_sum, srna_data, mrna_data
 
@@ -555,6 +561,8 @@ def analyze_salmonella_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, i
     :param inter_data:
     :return:
     """
+    strain_short_name = 'Salmonella enterica serovar Typhimurium SL1344'
+
     srna_acc_col = 'sRNA_accession_id'
     srna_nm_col = 'sRNA'
     mrna_acc_col = 'mRNA_accession_id'
@@ -628,6 +636,7 @@ def analyze_salmonella_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, i
     df_sum = df_sum.rename(columns={strain_col: 'strain'})
     df_sum['total_sRNAs'] = len(srna_data)
     df_sum['total_mRNAs'] = len(mrna_data)
+    df_sum['strain_short'] = strain_short_name
 
     return unq_inter, df_sum, srna_data, mrna_data
 
@@ -642,6 +651,8 @@ def analyze_vibrio_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, inter
     :param inter_data:
     :return:
     """
+    strain_short_name = 'Vibrio cholerae O1 biovar El Tor N16961'
+
     srna_acc_col = 'sRNA_accession_id'
     srna_nm_col = 'sRNA_name'
     mrna_acc_col = 'mRNA_accession_id'
@@ -713,6 +724,7 @@ def analyze_vibrio_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, inter
     df_sum = df_sum.rename(columns={strain_col: 'strain'})
     df_sum['total_sRNAs'] = len(srna_data)
     df_sum['total_mRNAs'] = len(mrna_data)
+    df_sum['strain_short'] = strain_short_name
 
     return unq_inter, df_sum, srna_data, mrna_data
 
@@ -727,6 +739,8 @@ def analyze_klebsiella_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, i
     :param inter_data:
     :return:
     """
+    strain_short_name = 'Klebsiella pneumoniae SGH10; KL1, ST23'
+
     srna_acc_col = 'sRNA_accession_id'
     srna_nm_col = 'sRNA_name'
     mrna_acc_col = 'mRNA_accession_id'
@@ -798,6 +812,7 @@ def analyze_klebsiella_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, i
     df_sum = df_sum.rename(columns={strain_col: 'strain'})
     df_sum['total_sRNAs'] = len(srna_data)
     df_sum['total_mRNAs'] = len(mrna_data)
+    df_sum['strain_short'] = strain_short_name
 
     return unq_inter, df_sum, srna_data, mrna_data
 
@@ -812,6 +827,8 @@ def analyze_pseudomonas_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, 
     :param inter_data:
     :return:
     """
+    strain_short_name = 'Pseudomonas aeruginosa PAO1'
+
     srna_acc_col = 'sRNA_accession_id'
     srna_nm_col = 'sRNA_name'
     mrna_acc_col = 'mRNA_accession_id'
@@ -883,6 +900,7 @@ def analyze_pseudomonas_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, 
     df_sum = df_sum.rename(columns={strain_col: 'strain'})
     df_sum['total_sRNAs'] = len(srna_data)
     df_sum['total_mRNAs'] = len(mrna_data)
+    df_sum['strain_short'] = strain_short_name
 
     return unq_inter, df_sum, srna_data, mrna_data
 

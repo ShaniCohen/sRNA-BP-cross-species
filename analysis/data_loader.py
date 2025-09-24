@@ -85,6 +85,7 @@ class DataLoader:
         self.srna_seq_type = 'sRNA'
         self.protein_seq_type = 'protein'
 
+        self.dump_rna_and_inter_data_summary = True
         self.generate_clean_rna_fasta = False
     
     def get_strains(self) -> List[str]:
@@ -255,6 +256,23 @@ class DataLoader:
             'all_inter_srna_acc_col': 'sRNA_accession_id',
             'all_inter_mrna_acc_col': 'mRNA_accession_id'
         })
+
+        # ---------------------------   create and dump a summary table of interaction and RNA data   ---------------------------
+
+        if self.dump_rna_and_inter_data_summary:
+            self.logger.info(f"Dumping a summary table of all strains data")
+            summary_df = pd.concat([k12_sum, epec_sum, salmo_sum, vibrio_sum, klebsiella_sum, pseudomonas_sum], ignore_index=True)
+            summary_df['No.'] = list(range(1, len(summary_df) + 1))
+            _rename = {
+                'strain_short': 'Bacterial Strain', 
+                'unq_pos_inter': 'Unique sRNA-mRNA Interactions', 
+                'unique_sRNAs': 'Interacting sRNA', 
+                'unique_targets': 'Interacting mRNA', 
+                'total_sRNAs': 'All sRNA', 
+                'total_mRNAs': 'All mRNA'
+            }
+            summary_df = summary_df.rename(columns=_rename)[['No.'] + list(_rename.values())]
+            write_df(df=summary_df, file_path=join(self.config['interactions_dir'], 'inter_and_rna_data_summary.csv'))
 
     def _align_rna_and_inter_data(self) -> Dict[str, Dict[str, pd.DataFrame]]:
         self._align_accession_ids_between_rna_and_inter()
