@@ -269,7 +269,8 @@ class DataLoader:
                 'unique_sRNAs': 'Interacting sRNA', 
                 'unique_targets': 'Interacting mRNA', 
                 'total_sRNAs': 'All sRNA', 
-                'total_mRNAs': 'All mRNA'
+                'total_mRNAs': 'All mRNA',
+                'strain': 'Full Strain Name'
             }
             summary_df = summary_df.rename(columns=_rename)[['No.'] + list(_rename.values())]
             write_df(df=summary_df, file_path=join(self.config['interactions_dir'], 'inter_and_rna_data_summary.csv'))
