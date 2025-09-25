@@ -224,15 +224,36 @@ class Analyzer:
     def _get_common_bps_of_srna_orthologs(self, orthologs_cluster: Tuple[str], srna_bp_mapping: dict, bp_similarity_method: str) -> Tuple[Dict[tuple, list], Dict[tuple, int], int, Dict[str, list], Dict[str, int]]:
         # 1 - all BPs
         all_bps, num_bps = {}, {}
-        for srna in orthologs_cluster:
-            strain = self.G.nodes[srna]['strain']
-            srna_targets = srna_bp_mapping[strain].get(srna)
+        # 2 - strain to sRNAs to targets to BPs (complete)
+        strain_to_srnas_to_targets_to_bps_complete = {}  
+         # for orthologs clusters of targets
+        strain_to_mrna_list = {}
+
+        for srna_id in orthologs_cluster:
+            strain = self.G.nodes[srna_id]['strain']
+            srna_targets = srna_bp_mapping[strain].get(srna_id)
             if srna_targets:
                 unq_bps = sorted({bp for bps in srna_targets.values() for bp in bps})
-                all_bps[f'{strain}__{srna}'] = unq_bps
-                num_bps[f'{strain}__{srna}'] = len(unq_bps)
-        # 2 - common BPs
+                all_bps[f'{strain}__{srna_id}'] = unq_bps
+                num_bps[f'{strain}__{srna_id}'] = len(unq_bps)
+                
+                # strain to sRNAs to targets to BPs (complete)
+                if strain not in strain_to_srnas_to_targets_to_bps_complete.keys():
+                    strain_to_srnas_to_targets_to_bps_complete[strain] = {}
+                srna_complete = f"{strain}__{srna_id}__{self.G.nodes[srna_id]['name']}" 
+                targets_to_bps_complete = {f"{target_id}__{self.G.nodes[target_id]['name']}": bps for target_id, bps in srna_targets.items()}
+                strain_to_srnas_to_targets_to_bps_complete[strain][srna_complete] = targets_to_bps_complete
+                
+                # for orthologs clusters of targets
+                if strain not in strain_to_mrna_list.keys():
+                    strain_to_mrna_list[strain] = []
+                strain_to_mrna_list[strain].extend(list(srna_targets.keys()))
+
+        # 3 - common BPs
         all_common_bps, num_common_bps, max_common_bps = self._calc_common_bps(all_bps, bp_similarity_method)
+
+        # 4 - orthologs clusters of all targets (cross-strains)
+        orthologs_clusters_of_all_targets = self._find_orthologs(strain_to_mrna_list, 'mRNA')
 
         return all_common_bps, num_common_bps, max_common_bps, all_bps, num_bps
     
@@ -435,7 +456,7 @@ class Analyzer:
             }
         """
         orthologs_df = self.srna_orthologs if rna_str == 'sRNA' else self.mrna_orthologs
-        all_rna_orthologs = set()
+        all_rna_orthologs = []
         # Flatten all RNAs from strain_to_rna_list
         all_rnas = set()
         for rna_list in strain_to_rna_list.values():
@@ -445,8 +466,8 @@ class Analyzer:
             # Find intersection with all_rnas
             rna_orthologs = tuple(sorted(set(ast.literal_eval(cluster)).intersection(all_rnas)))
             if len(rna_orthologs) > 1:
-                all_rna_orthologs.update(rna_orthologs)
-        return sorted(all_rna_orthologs)
+                all_rna_orthologs.append(rna_orthologs)
+        return sorted(set(all_rna_orthologs))
 
     def _log_bp_rna_mapping(self, mapping: dict):
         """
