@@ -262,7 +262,7 @@ class Analyzer:
             all_strain_bps.update(bp_list)
         # 5.2 - Get descriptions for all BPs
         bp_descriptions = {bp: {'lbl': self.G.nodes[bp]['lbl'], 'definition': self.G.nodes[bp]['meta']['definition']} for bp in all_strain_bps}
-
+        bp_descriptions = dict(sorted(bp_descriptions.items()))
 
         return all_common_bps, num_common_bps, max_common_bps, all_bps, num_bps, srnas_to_targets_to_bps_complete, orthologs_clusters_of_all_targets, bp_descriptions
     
