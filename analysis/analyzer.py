@@ -221,11 +221,11 @@ class Analyzer:
         )
         write_df(all_orthologs_df, join(_path, f"sRNA_orthologs_w_BPs.csv"))
 
-    def _get_common_bps_of_srna_orthologs(self, orthologs_cluster: Tuple[str], srna_bp_mapping: dict, bp_similarity_method: str) -> Tuple[Dict[tuple, list], Dict[tuple, int], int, Dict[str, list], Dict[str, int]]:
+    def _get_common_bps_of_srna_orthologs(self, orthologs_cluster: Tuple[str], srna_bp_mapping: dict, bp_similarity_method: str) -> Tuple[Dict[tuple, list], Dict[tuple, int], int, Dict[str, list], Dict[str, int], Dict[str, Dict[str, list]], Dict[str, List[Set[str]]], Dict[str, Dict[str, str]]]:
         # 1 - all BPs
         all_bps, num_bps = {}, {}
-        # 2 - strain to sRNAs to targets to BPs (complete)
-        strain_to_srnas_to_targets_to_bps_complete = {}  
+        # 2 - sRNAs to targets to BPs (complete)
+        srnas_to_targets_to_bps_complete = {}  
          # for orthologs clusters of targets
         strain_to_mrna_list = {}
 
@@ -237,25 +237,34 @@ class Analyzer:
                 all_bps[f'{strain}__{srna_id}'] = unq_bps
                 num_bps[f'{strain}__{srna_id}'] = len(unq_bps)
                 
-                # strain to sRNAs to targets to BPs (complete)
-                if strain not in strain_to_srnas_to_targets_to_bps_complete.keys():
-                    strain_to_srnas_to_targets_to_bps_complete[strain] = {}
+                # sRNAs to targets to BPs (complete)
                 srna_complete = f"{strain}__{srna_id}__{self.G.nodes[srna_id]['name']}" 
                 targets_to_bps_complete = {f"{target_id}__{self.G.nodes[target_id]['name']}": bps for target_id, bps in srna_targets.items()}
-                strain_to_srnas_to_targets_to_bps_complete[strain][srna_complete] = targets_to_bps_complete
+                srnas_to_targets_to_bps_complete[srna_complete] = targets_to_bps_complete
                 
                 # for orthologs clusters of targets
                 if strain not in strain_to_mrna_list.keys():
                     strain_to_mrna_list[strain] = []
                 strain_to_mrna_list[strain].extend(list(srna_targets.keys()))
 
+        srnas_to_targets_to_bps_complete = dict(sorted(srnas_to_targets_to_bps_complete.items()))
+        
         # 3 - common BPs
         all_common_bps, num_common_bps, max_common_bps = self._calc_common_bps(all_bps, bp_similarity_method)
 
         # 4 - orthologs clusters of all targets (cross-strains)
         orthologs_clusters_of_all_targets = self._find_orthologs(strain_to_mrna_list, 'mRNA')
 
-        return all_common_bps, num_common_bps, max_common_bps, all_bps, num_bps
+        # 5 - description for all strains BPs
+        # 5.1 - Flatten all BPs from all strains
+        all_strain_bps = set()
+        for bp_list in all_bps.values():
+            all_strain_bps.update(bp_list)
+        # 5.2 - Get descriptions for all BPs
+        bp_descriptions = {bp: {'lbl': self.G.nodes[bp]['lbl'], 'definition': self.G.nodes[bp]['meta']['definition']} for bp in all_strain_bps}
+
+
+        return all_common_bps, num_common_bps, max_common_bps, all_bps, num_bps, srnas_to_targets_to_bps_complete, orthologs_clusters_of_all_targets, bp_descriptions
     
     def _calc_common_bps(self, all_bps: Dict[str, list], bp_similarity_method: str) -> Tuple[Dict[tuple, list], Dict[tuple, int], int]:
         all_common_bps, num_common_bps = {}, {}
