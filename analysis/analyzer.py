@@ -70,9 +70,10 @@ class Analyzer:
         
         # 3 - generate mapping of BP to mRNAs and sRNAs
         bp_rna_mapping = self._generate_bp_rna_mapping(srna_bp_mapping)
+        self._dump_bps_of_annotated_mrnas()
         #TODO: log BP to RNAs mapping
         self._log_bp_rna_mapping(bp_rna_mapping)
-
+        
         # 4 - Enrichment (per strain): per sRNA, find and keep only significant biological processes (BPs) that its targets invovlved in.
         # self.logger.info("----- After enrichment:")
         # srna_bp_mapping_post_en, meta = self._apply_enrichment(srna_bp_mapping)
@@ -202,8 +203,11 @@ class Analyzer:
         # 2 - analyze common BPs of sRNA orthologs
         records = []
         for cluster in all_orthologs_df['cluster'].apply(ast.literal_eval):
-            all_common_bps, num_common_bps, max_common_bps, all_bps, num_all_bps = self._get_common_bps_of_srna_orthologs(cluster, srna_bp_mapping, bp_similarity_method)
-            records.append({'all_common_BPs': all_common_bps, 'num_common_BPs': num_common_bps, 'max_common_BPs': max_common_bps, 'all_BPs': all_bps, 'num_all_BPs': num_all_bps})
+            all_common_bps, num_common_bps, max_common_bps, all_bps, num_all_bps, srnas_to_targets_to_bps_complete, orthologs_clusters_of_all_targets, bp_descriptions = \
+                self._get_common_bps_of_srna_orthologs(cluster, srna_bp_mapping, bp_similarity_method)
+            bp_descriptions = str(bp_descriptions).replace(',', ';')
+            records.append({'all_common_BPs': all_common_bps, 'num_common_BPs': num_common_bps, 'max_common_BPs': max_common_bps, 'all_BPs': all_bps, 'num_all_BPs': num_all_bps,
+                            'srnas_to_targets_to_bps_complete': srnas_to_targets_to_bps_complete, 'orthologs_clusters_of_all_targets': orthologs_clusters_of_all_targets, 'bp_descriptions': bp_descriptions})
         all_orthologs_df[list(records[0].keys())] = pd.DataFrame(records)
         # 3 - log and dump
         num_clusters = len(all_orthologs_df)
@@ -219,7 +223,7 @@ class Analyzer:
             f"max common BPs distribution: \n"
             f"   {max_common_bps_dist}"
         )
-        write_df(all_orthologs_df, join(_path, f"sRNA_orthologs_w_BPs.csv"))
+        write_df(all_orthologs_df, join(_path, f"sRNA_orthologs_w_BPs_extended.csv"))
 
     def _get_common_bps_of_srna_orthologs(self, orthologs_cluster: Tuple[str], srna_bp_mapping: dict, bp_similarity_method: str) -> Tuple[Dict[tuple, list], Dict[tuple, int], int, Dict[str, list], Dict[str, int], Dict[str, Dict[str, list]], Dict[str, List[Set[str]]], Dict[str, Dict[str, str]]]:
         # 1 - all BPs
@@ -261,7 +265,7 @@ class Analyzer:
         for bp_list in all_bps.values():
             all_strain_bps.update(bp_list)
         # 5.2 - Get descriptions for all BPs
-        bp_descriptions = {bp: {'lbl': self.G.nodes[bp]['lbl'], 'definition': self.G.nodes[bp]['meta']['definition']} for bp in all_strain_bps}
+        bp_descriptions = {bp: self.G.nodes[bp]['lbl'] for bp in all_strain_bps}  # self.G.nodes[bp]['meta']['definition']['val']
         bp_descriptions = dict(sorted(bp_descriptions.items()))
 
         return all_common_bps, num_common_bps, max_common_bps, all_bps, num_bps, srnas_to_targets_to_bps_complete, orthologs_clusters_of_all_targets, bp_descriptions
@@ -534,6 +538,26 @@ class Analyzer:
         # Optionally, dump to file if needed
         # out_path = self.config['analysis_output_dir']
         # df.to_csv(os.path.join(out_path, "bp_to_rnas_mapping.csv"), index=False)
+    
+    def _dump_bps_of_annotated_mrnas(self):
+        bp_nodes_with_annotation = [
+            node for node, data in self.G.nodes(data=True)
+            if data.get('type') == self.U.bp and any(
+                self.G.has_edge(mrna, node) and
+                any(
+                    edge_data.get('type') == self.U.annotated
+                    for edge_data in self.G[mrna][node].values()
+                )
+                for mrna in self.G.predecessors(node)
+            )
+        ]
+        
+        records = []
+        for bp in sorted(bp_nodes_with_annotation):
+            records.append({'bp_id': bp, 'lbl': self.G.nodes[bp]['lbl'], 'definition': self.G.nodes[bp]['meta']['definition']['val']})
+        bps_of_annotated_mrnas = pd.DataFrame(records)
+        write_df(bps_of_annotated_mrnas, join(self.config['analysis_output_dir'], "bps_of_annotated_mrnas.csv"))
+        return
     
     def _dump_metadata(self, metadata: dict):
         """
