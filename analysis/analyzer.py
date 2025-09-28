@@ -221,10 +221,10 @@ class Analyzer:
         # 2 - analyze common BPs of sRNA orthologs
         records = []
         for cluster in all_orthologs_df['cluster'].apply(ast.literal_eval):
-            all_common_bps, num_common_bps, max_common_bps, all_bps, num_all_bps, srnas_to_targets_to_bps_complete, orthologs_clusters_of_all_targets, bp_descriptions = \
+            num_srna_w_bps, all_common_bps, num_common_bps, max_common_bps, all_bps, num_all_bps, srnas_to_targets_to_bps_complete, orthologs_clusters_of_all_targets, bp_descriptions = \
                 self._get_common_bps_of_srna_orthologs(cluster, srna_bp_mapping, bp_similarity_method)
             bp_descriptions = str(bp_descriptions).replace(',', ';')
-            records.append({'all_common_BPs': all_common_bps, 'num_common_BPs': num_common_bps, 'max_common_BPs': max_common_bps, 'all_BPs': all_bps, 'num_all_BPs': num_all_bps,
+            records.append({'num_srna_w_bps': num_srna_w_bps, 'all_common_BPs': all_common_bps, 'num_common_BPs': num_common_bps, 'max_common_BPs': max_common_bps, 'all_BPs': all_bps, 'num_all_BPs': num_all_bps,
                             'srnas_to_targets_to_bps_complete': srnas_to_targets_to_bps_complete, 'orthologs_clusters_of_all_targets': orthologs_clusters_of_all_targets, 'bp_descriptions': bp_descriptions})
         all_orthologs_df[list(records[0].keys())] = pd.DataFrame(records)
         # 3 - log and dump
@@ -241,9 +241,9 @@ class Analyzer:
             f"max common BPs distribution: \n"
             f"   {max_common_bps_dist}"
         )
-        write_df(all_orthologs_df, join(_path, f"sRNA_orthologs_w_BPs_extended.csv"))
+        write_df(all_orthologs_df, join(_path, f"Analysis_1__sRNA_orthologs_w_BPs_extended.csv"))
 
-    def _get_common_bps_of_srna_orthologs(self, orthologs_cluster: Tuple[str], srna_bp_mapping: dict, bp_similarity_method: str) -> Tuple[Dict[tuple, list], Dict[tuple, int], int, Dict[str, list], Dict[str, int], Dict[str, Dict[str, list]], Dict[str, List[Set[str]]], Dict[str, Dict[str, str]]]:
+    def _get_common_bps_of_srna_orthologs(self, orthologs_cluster: Tuple[str], srna_bp_mapping: dict, bp_similarity_method: str) -> Tuple[int, Dict[tuple, list], Dict[tuple, int], int, Dict[str, list], Dict[str, int], Dict[str, Dict[str, list]], Dict[str, List[Set[str]]], Dict[str, Dict[str, str]]]:
         # 1 - all BPs
         all_bps, num_bps = {}, {}
         # 2 - sRNAs to targets to BPs (complete)
@@ -269,6 +269,7 @@ class Analyzer:
                     strain_to_mrna_list[strain] = []
                 strain_to_mrna_list[strain].extend(list(srna_targets.keys()))
 
+        num_srna_w_bps = len(all_bps)
         srnas_to_targets_to_bps_complete = dict(sorted(srnas_to_targets_to_bps_complete.items()))
         
         # 3 - common BPs
@@ -286,7 +287,7 @@ class Analyzer:
         bp_descriptions = {bp: self.G.nodes[bp]['lbl'] for bp in all_strain_bps}  # self.G.nodes[bp]['meta']['definition']['val']
         bp_descriptions = dict(sorted(bp_descriptions.items()))
 
-        return all_common_bps, num_common_bps, max_common_bps, all_bps, num_bps, srnas_to_targets_to_bps_complete, orthologs_clusters_of_all_targets, bp_descriptions
+        return num_srna_w_bps, all_common_bps, num_common_bps, max_common_bps, all_bps, num_bps, srnas_to_targets_to_bps_complete, orthologs_clusters_of_all_targets, bp_descriptions
     
     def _calc_common_bps(self, all_bps: Dict[str, list], bp_similarity_method: str) -> Tuple[Dict[tuple, list], Dict[tuple, int], int]:
         all_common_bps, num_common_bps = {}, {}
@@ -303,6 +304,9 @@ class Analyzer:
                 num_common_bps[rnas] = len(common_bps)
                 # 3 - max common BPs
                 max_common_bps = max(max_common_bps, len(common_bps))
+        # all common bps complete
+        for pair, bp_lst in all_common_bps.items():
+            all_common_bps[pair] = [f"{bp}__{self.G.nodes[bp]['lbl'].replace(" ", "_")}" for bp in sorted(bp_lst)]
         return all_common_bps, num_common_bps, max_common_bps
 
     def _analyze_paralogs(self, rna_str: str, rna_type: str):
@@ -520,6 +524,9 @@ class Analyzer:
         # 1 - generate df
         records = []
         for bp_id, strain_dict in bp_rna_mapping.items():
+            bp_lbl = self.G.nodes[bp_id]['lbl']
+            bp_definition = self.G.nodes[bp_id]['meta']['definition']['val']
+            
             strains = sorted(strain_dict.keys())
             num_strains = len(strains)
             related_mRNAs_and_sRNAs_complete = {}
@@ -545,6 +552,8 @@ class Analyzer:
                 num_related_sRNAs[strain] = len(srna_set)
             records.append({
                 'bp_id': bp_id,
+                'bp_lbl': bp_lbl,
+                'bp_definition': bp_definition,
                 'strains': strains,
                 'num_strains': num_strains,
                 'related_mRNAs_and_sRNAs': related_mRNAs_and_sRNAs_complete,
@@ -566,7 +575,7 @@ class Analyzer:
 
         # 4 - dump
         _path = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "summary_tables"))
-        write_df(df, join(_path, f"BP_to_related_mRNAs_and_sRNAs.csv"))
+        write_df(df, join(_path, f"Analysis_2__BP_to_related_mRNAs_and_sRNAs.csv"))
 
         # 5 - log
         self.logger.info(f"--------- BP to RNAs mapping\n{df.head()}")
