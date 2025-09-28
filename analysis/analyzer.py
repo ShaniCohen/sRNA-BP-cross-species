@@ -67,12 +67,13 @@ class Analyzer:
         self.logger.info("----- Before enrichment:")
         srna_bp_mapping = self._generate_srna_bp_mapping()
         self._log_srna_bp_mapping(srna_bp_mapping)
+
+        # 6 - dump BPs of annotated mRNAs
+        self._dump_bps_of_annotated_mrnas()
         
         # 3 - generate mapping of BP to mRNAs and sRNAs
         bp_rna_mapping = self._generate_bp_rna_mapping(srna_bp_mapping)
-        self._dump_bps_of_annotated_mrnas()
-        #TODO: log BP to RNAs mapping
-        self._log_bp_rna_mapping(bp_rna_mapping)
+        self._dump_n_log_bp_rna_mapping(bp_rna_mapping)
         
         # 4 - Enrichment (per strain): per sRNA, find and keep only significant biological processes (BPs) that its targets invovlved in.
         # self.logger.info("----- After enrichment:")
@@ -85,7 +86,10 @@ class Analyzer:
         # 5 - BPs of sRNA orthologs
         # 5.1 - BP similarity = exact
         self._analyze_bps_of_srna_orthologs(srna_bp_mapping, self.U.exact_bp)
-        print()
+
+        # 6 - dump BPs of annotated mRNAs
+        self._dump_bps_of_annotated_mrnas()
+
     
     def _analyze_rna_clustering(self):
         # 1 - paralogs
@@ -162,7 +166,8 @@ class Analyzer:
             {
                 <bp_id>: {
                         <strain_id>: {
-                            <mRNA_target_id>: [<sRNA_id1>, <sRNA_id2>, ...],
+                            <mRNA_target_id>: [<sRNA_id1>, <sRNA_id2>, ...],   # if the mRNA target has sRNA interactions
+                            <mRNA_target_id>: []                               # if the mRNA target has no sRNA interactions but is annotated with the BP
                             ...
                         },
                         ...
@@ -183,7 +188,8 @@ class Analyzer:
         for bp in unq_bps:
             bp_rna_mapping[bp] = {}
             for strain, srna_dict in srna_bp_mapping.items():
-                # per strain, find all interacting mRNAs that relate to curr BP
+                # per strain: 
+                # (2.1) find all interacting mRNAs that relate to curr BP
                 strain_mrna_to_srnas = {}
                 for srna_id, mrna_to_bps in srna_dict.items():
                     for mrna_id, bps in mrna_to_bps.items():
@@ -193,6 +199,18 @@ class Analyzer:
                             strain_mrna_to_srnas[mrna_id].append(srna_id)
                 if strain_mrna_to_srnas:
                     bp_rna_mapping[bp][strain] = strain_mrna_to_srnas
+                # (2.2) add also strain's annotated mRNAs that do not interact with sRNAs
+                strain_annotated_mrnas = [
+                    n for n, d in self.G.nodes(data=True) 
+                    if d['type'] == self.U.mrna and d['strain'] == strain 
+                    and self.G.has_edge(n, bp) and any(edge_data.get('type') == self.U.annotated for edge_data in self.G[n][bp].values())
+                ]
+                for mrna_id in strain_annotated_mrnas:
+                    if strain not in bp_rna_mapping[bp].keys():
+                        bp_rna_mapping[bp][strain] = {}
+                    if mrna_id not in bp_rna_mapping[bp][strain].keys():
+                        bp_rna_mapping[bp][strain][mrna_id] = []
+
         return bp_rna_mapping
 
     def _analyze_bps_of_srna_orthologs(self, srna_bp_mapping: dict, bp_similarity_method: str):
@@ -482,12 +500,12 @@ class Analyzer:
                 all_rna_orthologs.append(rna_orthologs)
         return sorted(set(all_rna_orthologs))
 
-    def _log_bp_rna_mapping(self, mapping: dict):
+    def _dump_n_log_bp_rna_mapping(self, bp_rna_mapping: dict):
         """
         Generate a DataFrame with information about BPs and their related mRNAs and sRNAs
 
         Args:
-            mapping (dict): A dictionary in the following format:
+            bp_rna_mapping (dict): A dictionary in the following format:
             {
                 <bp_id>: {
                         <strain_id>: {
@@ -501,27 +519,35 @@ class Analyzer:
         """
         # 1 - generate df
         records = []
-        for bp_id, strain_dict in mapping.items():
+        for bp_id, strain_dict in bp_rna_mapping.items():
             strains = sorted(strain_dict.keys())
             num_strains = len(strains)
+            related_mRNAs_and_sRNAs_complete = {}
             related_mRNAs = {}
             num_related_mRNAs = {}
             related_sRNAs = {}
             num_related_sRNAs = {}
             for strain, mrna_to_srnas in strain_dict.items():
+                # related_mRNAs_and_sRNAs
+                if not strain in related_mRNAs_and_sRNAs_complete:
+                    related_mRNAs_and_sRNAs_complete[strain] = {}
+                for mrna, srnas in mrna_to_srnas.items():
+                    related_mRNAs_and_sRNAs_complete[strain][f"{mrna}__{self.G.nodes[mrna]['name']}"] = [f"{srna}__{self.G.nodes[srna]['name']}" for srna in srnas]
+                # related mRNAs
                 related_mRNAs[strain] = sorted(mrna_to_srnas.keys())
                 num_related_mRNAs[strain] = len(mrna_to_srnas)
-                # flatten sRNA lists for all mRNAs in this strain
+                #   flatten sRNA lists for all mRNAs in this strain
                 srna_set = set()
                 for srna_list in mrna_to_srnas.values():
                     srna_set.update(srna_list)
+                # related mRNAs
                 related_sRNAs[strain] = sorted(srna_set)
                 num_related_sRNAs[strain] = len(srna_set)
             records.append({
                 'bp_id': bp_id,
                 'strains': strains,
                 'num_strains': num_strains,
-                'related_mRNAs_and_sRNAs': strain_dict,
+                'related_mRNAs_and_sRNAs': related_mRNAs_and_sRNAs_complete,
                 'related_mRNAs': related_mRNAs,
                 'num_related_mRNAs': num_related_mRNAs,
                 'related_sRNAs': related_sRNAs,
@@ -533,13 +559,30 @@ class Analyzer:
         for rna_str in ['sRNA', 'mRNA']:
             df[f'related_{rna_str}_orthologs'] = list(map(self._find_orthologs, df[f'related_{rna_str}s'], np.repeat(rna_str, len(df))))
 
-        # 3 - log
+        # 3 - complete info
+        for rna_str in ['sRNA', 'mRNA']:
+            df[f'related_{rna_str}s'] = df[f'related_{rna_str}s'].apply(lambda x: {strain: [f"{rna}__{self.G.nodes[rna]['name']}" for rna in rnas] for strain, rnas in x.items()})
+            df[f'related_{rna_str}_orthologs'] = df[f'related_{rna_str}_orthologs'].apply(lambda x: [tuple(f"{rna}__{self.G.nodes[rna]['name']}" for rna in rnas) for rnas in x])
+
+        # 4 - dump
+        _path = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "summary_tables"))
+        write_df(df, join(_path, f"BP_to_related_mRNAs_and_sRNAs.csv"))
+
+        # 5 - log
         self.logger.info(f"--------- BP to RNAs mapping\n{df.head()}")
+        # self.logger.info(
+        #     f"Strain: {strain} \n"
+        #     f"  Number of sRNA keys: {srna_count} \n"
+        #     f"  Number of unique mRNA targets with BPs: {len(unique_mrna_targets)} \n"
+        #     f"  Number of BP annotations: {len(bp_list)} \n"
+        #     f"  Number of unique BPs: {len(unique_bps)}"
+        #     )
         # Optionally, dump to file if needed
         # out_path = self.config['analysis_output_dir']
         # df.to_csv(os.path.join(out_path, "bp_to_rnas_mapping.csv"), index=False)
     
     def _dump_bps_of_annotated_mrnas(self):
+        # 1 - Find all BP nodes that are annotated to at least one mRNA
         bp_nodes_with_annotation = [
             node for node, data in self.G.nodes(data=True)
             if data.get('type') == self.U.bp and any(
@@ -551,12 +594,14 @@ class Analyzer:
                 for mrna in self.G.predecessors(node)
             )
         ]
-        
+        # 2 - Create a DataFrame with the BP IDs, labels, and definitions
         records = []
         for bp in sorted(bp_nodes_with_annotation):
             records.append({'bp_id': bp, 'lbl': self.G.nodes[bp]['lbl'], 'definition': self.G.nodes[bp]['meta']['definition']['val']})
         bps_of_annotated_mrnas = pd.DataFrame(records)
-        write_df(bps_of_annotated_mrnas, join(self.config['analysis_output_dir'], "bps_of_annotated_mrnas.csv"))
+        # 3 - Dump the DataFrame to a CSV file
+        _path = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "summary_tables"))
+        write_df(bps_of_annotated_mrnas, join(_path, "BPs_of_annotated_mrnas.csv"))
         return
     
     def _dump_metadata(self, metadata: dict):
