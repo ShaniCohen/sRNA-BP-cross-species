@@ -32,13 +32,14 @@ class Analyzer:
         self.config = config
         
         # graph and utils
+        self.graph_version = graph_builder.get_version()
         self.G = graph_builder.get_graph()
         self.U = graph_utils
 
         # clustering_analysis
         self.run_clustering_analysis = False
-        self.srna_orthologs = read_df(join(self.config['analysis_output_dir'], "orthologs", f"sRNA_orthologs.csv"))
-        self.mrna_orthologs = read_df(join(self.config['analysis_output_dir'], "orthologs", f"mRNA_orthologs.csv"))
+        self.srna_orthologs = read_df(join(self.config['analysis_output_dir'], "orthologs", f"sRNA_orthologs__v_{self.graph_version}.csv"))
+        self.mrna_orthologs = read_df(join(self.config['analysis_output_dir'], "orthologs", f"mRNA_orthologs__v_{self.graph_version}.csv"))
 
         # TODO: remove after testing
         self.strains_data = graph_builder.strains_data
@@ -217,7 +218,7 @@ class Analyzer:
         self.logger.info(f"Analyzing BPs of sRNA orthologs")
         # 1 - load sRNA orthologs
         _path = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "orthologs"))
-        all_orthologs_df = read_df(join(_path, f"sRNA_orthologs.csv"))
+        all_orthologs_df = read_df(join(_path, f"sRNA_orthologs__v_{self.graph_version}.csv"))
         # 2 - analyze common BPs of sRNA orthologs
         records = []
         for cluster in all_orthologs_df['cluster'].apply(ast.literal_eval):
@@ -241,7 +242,7 @@ class Analyzer:
             f"max common BPs distribution: \n"
             f"   {max_common_bps_dist}"
         )
-        write_df(all_orthologs_df, join(_path, f"Analysis_1__sRNA_orthologs_w_BPs_extended.csv"))
+        write_df(all_orthologs_df, join(_path, f"Analysis_1__sRNA_orthologs_w_BPs_extended__v_{self.graph_version}.csv"))
 
     def _get_common_bps_of_srna_orthologs(self, orthologs_cluster: Tuple[str], srna_bp_mapping: dict, bp_similarity_method: str) -> Tuple[int, Dict[tuple, list], Dict[tuple, int], int, Dict[str, list], Dict[str, int], Dict[str, Dict[str, list]], Dict[str, List[Set[str]]], Dict[str, Dict[str, str]]]:
         # 1 - all BPs
@@ -437,7 +438,7 @@ class Analyzer:
             f"{per_strain_analysis}"
         )
         # 4 - dump
-        write_df(all_orthologs_df, join(out_path, f"{rna_str}_orthologs.csv"))
+        write_df(all_orthologs_df, join(out_path, f"{rna_str}_orthologs__v_{self.graph_version}.csv"))
 
     def _dump_paralogs(self, strain: str, rna_type: str, rna_paralogs_clusters: List[Set[str]]):
         out_path = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "paralogs"))
@@ -575,7 +576,7 @@ class Analyzer:
 
         # 4 - dump
         _path = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "summary_tables"))
-        write_df(df, join(_path, f"Analysis_2__BP_to_related_mRNAs_and_sRNAs.csv"))
+        write_df(df, join(_path, f"Analysis_2__BP_to_related_mRNAs_and_sRNAs__v_{self.graph_version}.csv"))
 
         # 5 - log
         self.logger.info(f"--------- BP to RNAs mapping\n{df.head()}")
@@ -610,7 +611,7 @@ class Analyzer:
         bps_of_annotated_mrnas = pd.DataFrame(records)
         # 3 - Dump the DataFrame to a CSV file
         _path = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "summary_tables"))
-        write_df(bps_of_annotated_mrnas, join(_path, "BPs_of_annotated_mrnas.csv"))
+        write_df(bps_of_annotated_mrnas, join(_path, f"BPs_of_annotated_mrnas__v_{self.graph_version}.csv"))
         return
     
     def _dump_metadata(self, metadata: dict):

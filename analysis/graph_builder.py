@@ -3,9 +3,10 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 import itertools
-from utils.general import read_df, write_df
+from utils.general import write_df, create_dir_if_not_exists
 import networkx as nx
 from pyvis.network import Network
+from os.path import join
 import json
 import sys
 import os
@@ -19,7 +20,9 @@ class GraphBuilder:
         self.logger = logger
         self.logger.info(f"initializing GraphBuilder")
         self.config = config
+        self.version = self.config['version']  # "k12_curated_and_ips", "k12_curated", "k12_ips"
 
+        self.ecoli_k12_nm = data_loader.ecoli_k12_nm
         self.strains_data = data_loader.strains_data
         self.srna_acc_col = data_loader.srna_acc_col
         self.mrna_acc_col = data_loader.mrna_acc_col
@@ -47,6 +50,9 @@ class GraphBuilder:
         # define annotation types to add (curated are always added)
         self.add_ips_annot = True
         self.add_eggnog_annot = False
+    
+    def get_version(self) -> str:
+        return self.config.get('version')
     
     def get_graph(self) -> nx.Graph:
         if not self.graph_is_built:
@@ -98,17 +104,21 @@ class GraphBuilder:
                 self.logger.info(f"{strain}: out of {has_go} mRNAs with curated annotations, has BP = {has_bp} ({(has_bp/has_go)*100:.2f}%), has MF = {has_mf} ({(has_mf/has_go)*100:.2f}%), has CC = {has_cc} ({(has_cc/has_go)*100:.2f}%)")
 
     def _add_mrna_nodes_and_annotation_edges(self):
-        for strain, data in self.strains_data.items():
-            if 'all_mrna_w_curated_annot' in data.keys():
-                self._add_all_mrna_and_curated_bp_annot(strain, data['all_mrna_w_curated_annot'])
-                # Example mRNA = 'EG10001', GO BP = ['0006522', '0030632', '0071555', '0009252', '0008360']
+        for strain, data in self.strains_data.items():  # describe proprocessing in the latex paper
+            # E.coli K12
+            if strain == self.ecoli_k12_nm:
+                if self.version in ["k12_curated", "k12_curated_and_ips"]:
+                    self._add_all_mrna_and_curated_bp_annot(strain, data['all_mrna_w_curated_annot'])
+                    # Example mRNA = 'EG10001', GO BP = ['0006522', '0030632', '0071555', '0009252', '0008360']
+                if self.version in ["k12_ips", "k12_curated_and_ips"]:
+                    self._add_all_mrna_and_ips_bp_annot(strain, data['all_mrna_w_ips_annot'])
+            # Other strains
             else:
                 if self.add_ips_annot and 'all_mrna_w_ips_annot' in data.keys():
                     self._add_all_mrna_and_ips_bp_annot(strain, data['all_mrna_w_ips_annot'])
                 if self.add_eggnog_annot and 'all_mrna_w_eggnog_annot' in data.keys():
                     self._add_all_mrna_and_eggnog_annot(strain, data['all_mrna_w_eggnog_annot'])
-            # describe proprocessing in the latex paper
-
+            
             self._assert_mrna_nodes_addition(strain)
             
     def _add_srna_nodes_and_interaction_edges(self):
@@ -287,7 +297,7 @@ class GraphBuilder:
                     'BP_eggnog_only_name': BP_eggnog_only_name
                 })
         df = pd.DataFrame(data)
-        output_path = os.path.join(self.config['builder_output_dir'], f"{strain}_mrna_bp_annotations.csv")
+        output_path = create_dir_if_not_exists(join(self.config['builder_output_dir'], f"v_{self.version}_{strain}_mrna_bp_annotations.csv"))
         write_df(df, output_path)
     
     def _add_all_mrna_and_curated_bp_annot(self, strain, all_mrna_w_curated_annot):

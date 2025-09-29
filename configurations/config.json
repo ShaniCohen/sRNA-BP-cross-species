@@ -33,6 +33,8 @@
   "graph_utils": {
   },
   "graph_builder":{
+    "all_versions": ["k12_curated_and_ips", "k12_curated", "k12_ips"],
+    "version": "k12_curated_and_ips",
     "builder_output_dir": "graph_builder_output"
   },
   "analyzer":{
