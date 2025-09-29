@@ -37,9 +37,10 @@ class Analyzer:
         self.U = graph_utils
 
         # clustering_analysis
-        self.run_clustering_analysis = False
-        self.srna_orthologs = read_df(join(self.config['analysis_output_dir'], "orthologs", f"sRNA_orthologs__v_{self.graph_version}.csv"))
-        self.mrna_orthologs = read_df(join(self.config['analysis_output_dir'], "orthologs", f"mRNA_orthologs__v_{self.graph_version}.csv"))
+        self.run_clustering_analysis = True
+        if not self.run_clustering_analysis:
+            self.srna_orthologs = read_df(join(self.config['analysis_output_dir'], "orthologs", f"sRNA_orthologs__v_{self.graph_version}.csv"))
+            self.mrna_orthologs = read_df(join(self.config['analysis_output_dir'], "orthologs", f"mRNA_orthologs__v_{self.graph_version}.csv"))
 
         # TODO: remove after testing
         self.strains_data = graph_builder.strains_data
@@ -499,8 +500,9 @@ class Analyzer:
             all_rnas.update(rna_list)
         # Iterate over clusters
         for cluster in orthologs_df['cluster']:
+            cluster = cluster if type(cluster) == tuple else ast.literal_eval(cluster)
             # Find intersection with all_rnas
-            rna_orthologs = tuple(sorted(set(ast.literal_eval(cluster)).intersection(all_rnas)))
+            rna_orthologs = tuple(sorted(set(cluster).intersection(all_rnas)))
             if len(rna_orthologs) > 1:
                 all_rna_orthologs.append(rna_orthologs)
         return sorted(set(all_rna_orthologs))

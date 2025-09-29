@@ -35,7 +35,7 @@
   "graph_builder":{
     "all_versions": ["k12_curated_and_ips", "k12_curated", "k12_ips"],
     "version": "k12_curated_and_ips",
-    "builder_output_dir": "graph_builder_output"
+    "builder_output_dir": "builder_output"
   },
   "analyzer":{
     "analysis_output_dir": "analysis_output"

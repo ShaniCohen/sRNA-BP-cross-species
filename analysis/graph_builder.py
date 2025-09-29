@@ -297,7 +297,7 @@ class GraphBuilder:
                     'BP_eggnog_only_name': BP_eggnog_only_name
                 })
         df = pd.DataFrame(data)
-        output_path = create_dir_if_not_exists(join(self.config['builder_output_dir'], f"v_{self.version}_{strain}_mrna_bp_annotations.csv"))
+        output_path = join(self.config['builder_output_dir'], f"{self.version}_{strain}_mrna_bp_annot.csv")
         write_df(df, output_path)
     
     def _add_all_mrna_and_curated_bp_annot(self, strain, all_mrna_w_curated_annot):
@@ -325,6 +325,7 @@ class GraphBuilder:
     def _add_all_mrna_and_ips_bp_annot(self, strain, all_mrna_w_ips_annot):
         self.logger.info(f"adding mRNA nodes and InterProScan mRNA-GO annotations for {strain}")
         assert sum(pd.isnull(all_mrna_w_ips_annot['mRNA_accession_id'])) == 0
+        log_warning = False if strain == self.ecoli_k12_nm and self.version == 'k12_curated_and_ips' else True
         bp_count, missing_bp_dicts = 0, []
 
         for _, r in all_mrna_w_ips_annot.iterrows():
@@ -332,7 +333,7 @@ class GraphBuilder:
             mrna_node_id = r[self.mrna_acc_col]
             self.G = self.U.add_node_rna(self.G, id=mrna_node_id, type=self.U.mrna, strain=strain, locus_tag=r['mRNA_locus_tag'], 
                                name=r['mRNA_name'], synonyms=r['mRNA_name_synonyms'], start=r['mRNA_start'], end=r['mRNA_end'],
-                               strand=r['mRNA_strand'], rna_seq=r['mRNA_sequence'], protein_seq=r['protein_seq'])
+                               strand=r['mRNA_strand'], rna_seq=r['mRNA_sequence'], protein_seq=r['protein_seq'], log_warning=log_warning)
             # 2 - add annotation edges between the mRNA node and BP nodes
             bp_go_xrefs = r['BP_go_xrefs']
             if isinstance(bp_go_xrefs, list) and len(bp_go_xrefs) > 0:
