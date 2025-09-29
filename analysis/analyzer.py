@@ -37,7 +37,7 @@ class Analyzer:
         self.U = graph_utils
 
         # clustering_analysis
-        self.run_clustering_analysis = True
+        self.run_clustering_analysis = False
         if not self.run_clustering_analysis:
             self.srna_orthologs = read_df(join(self.config['analysis_output_dir'], "orthologs", f"sRNA_orthologs__v_{self.graph_version}.csv"))
             self.mrna_orthologs = read_df(join(self.config['analysis_output_dir'], "orthologs", f"mRNA_orthologs__v_{self.graph_version}.csv"))
