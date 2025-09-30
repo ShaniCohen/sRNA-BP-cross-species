@@ -635,18 +635,25 @@ class Analyzer:
         # 3.1 - Focus sRNAs: find all sRNAs that have num orthologs <= 0
         srna_max_orthologs = 0
         focus_srnas = self._find_rnas_with_max_orthologs('sRNA', max_orthologs=srna_max_orthologs)
-        # 3.2 - per BP, get the strains with focus sRNAs
+        # 3.2 - Per BP tree (row), get info about sRNAs
+        # map of strains to their focus sRNAs
         df['strain_to_focus_sRNAs'] = df['related_sRNAs'].apply(lambda x: {strain: sorted(set(rnas).intersection(focus_srnas)) for strain, rnas in x.items() if set(rnas).intersection(focus_srnas)})
-        #   --- first criterion
-        df['num_strains_w_focus_sRNAs'] = df['strain_to_focus_sRNAs'].apply(lambda x: len(x))
+        df['num_strains_w_focus_sRNAs'] = df['strain_to_focus_sRNAs'].apply(lambda x: len(x))  #   --- first criterion
         df[f'focus_sRNAs_{srna_max_orthologs}_orthologs'] = df['strain_to_focus_sRNAs'].apply(lambda x: sorted(set([srna for srna_lst in x.values() for srna in srna_lst])))
-        #   --- second criterion
-        df['num_focus_sRNAs'] = df[f'focus_sRNAs_{srna_max_orthologs}_orthologs'].apply(lambda x: len(x))
-        # 3.3 - per BP, get the mRNA targets that interact with focus sRNAs
+        df['num_focus_sRNAs'] = df[f'focus_sRNAs_{srna_max_orthologs}_orthologs'].apply(lambda x: len(x))  #   --- second criterion
+        # 3.3 - Per BP tree (row), get info about mRNAs
+        # the list of mRNA targets that interact with focus sRNAs
         df['targets_of_focus_sRNAs'] = list(map(self._get_targets_of_focus_sRNAs, df['strain_dict'], df[f'focus_sRNAs_{srna_max_orthologs}_orthologs']))
-        df['ortholog_clusters_of_targets'] = list(map(self._get_orthologs_clusters, df['targets_of_focus_sRNAs'], np.repeat('mRNA', len(df))))
-        df['ortholog_clusters_of_targets_of_focus_sRNAs'] = list(map(lambda clusters_lst, targets_lst: [tuple(set(tpl).intersection(targets_lst)) for tpl in clusters_lst if len(set(tpl).intersection(targets_lst)) > 1], df['ortholog_clusters_of_targets'], df['targets_of_focus_sRNAs']))
-        df['num_ortholog_clusters_of_targets_of_focus_sRNAs'] = df['ortholog_clusters_of_targets_of_focus_sRNAs'].apply(lambda x: len(x))
+        df = df.drop(columns=['strain_dict'])  # remove 'strain_dict'
+        df['complete_ortholog_clusters_of_targets'] = list(map(self._get_orthologs_clusters, df['targets_of_focus_sRNAs'], np.repeat('mRNA', len(df))))
+        df['filtered_ortholog_clusters_of_targets'] = list(map(lambda clusters_lst, targets_lst: [tuple(set(tpl).intersection(targets_lst)) for tpl in clusters_lst if len(set(tpl).intersection(targets_lst)) > 1], df['ortholog_clusters_of_targets'], df['targets_of_focus_sRNAs']))
+        df['num_filtered_ortholog_clusters_of_targets'] = df['filtered_ortholog_clusters_of_targets'].apply(lambda x: len(x))
+        df['strains_of_filtered_ortholog_clusters'] = df['filtered_ortholog_clusters_of_targets'].apply(lambda x: sorted(set([self.G.nodes[rna]['strain'] for tpl in x for rna in tpl])))
+        df['num_strains_of_filtered_ortholog_clusters'] = df['strains_of_filtered_ortholog_clusters'].apply(lambda x: len(x))
+        # 3.4 - score
+        max_num_focus_srnas = df['num_focus_sRNAs'].max() if df['num_focus_sRNAs'].max() > 0 else 1
+        df['score'] = 100 * df['num_strains_w_focus_sRNAs'] + 10 * (df['num_focus_sRNAs'] / max_num_focus_srnas)
+        df = df.sort_values(by=['score'], ascending=False).reset_index(drop=True)
 
         # 4 - complete info
         for rna_str in ['sRNA', 'mRNA']:
@@ -658,8 +665,7 @@ class Analyzer:
         # 'ortholog_clusters_of_targets'
         # 'num_ortholog_clusters_of_targets_of_focus_sRNAs'
 
-        # remove 'strain_dict'
-        df = df.drop(columns=['strain_dict'])
+
 
 
         # 5 - dump
