@@ -75,7 +75,7 @@ class Analyzer:
         
         # 3 - generate mapping of BP to mRNAs and sRNAs
         bp_rna_mapping = self._generate_bp_rna_mapping(srna_bp_mapping)
-        self._dump_n_log_bp_rna_mapping(bp_rna_mapping)
+        self._analysis_2_bp_rna_mapping(bp_rna_mapping)
         
         # 4 - Enrichment (per strain): per sRNA, find and keep only significant biological processes (BPs) that its targets invovlved in.
         # self.logger.info("----- After enrichment:")
@@ -87,7 +87,7 @@ class Analyzer:
 
         # 5 - BPs of sRNA orthologs
         # 5.1 - BP similarity = exact
-        self._analyze_bps_of_srna_orthologs(srna_bp_mapping, self.U.exact_bp)
+        self._analysis_1_bps_of_srna_orthologs(srna_bp_mapping, self.U.exact_bp)
 
         # 6 - dump BPs of annotated mRNAs
         self._dump_bps_of_annotated_mrnas()
@@ -215,7 +215,7 @@ class Analyzer:
 
         return bp_rna_mapping
 
-    def _analyze_bps_of_srna_orthologs(self, srna_bp_mapping: dict, bp_similarity_method: str):
+    def _analysis_1_bps_of_srna_orthologs(self, srna_bp_mapping: dict, bp_similarity_method: str):
         self.logger.info(f"Analyzing BPs of sRNA orthologs")
         # 1 - load sRNA orthologs
         _path = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "orthologs"))
@@ -506,8 +506,67 @@ class Analyzer:
             if len(rna_orthologs) > 1:
                 all_rna_orthologs.append(rna_orthologs)
         return sorted(set(all_rna_orthologs))
+    
+    def _get_orthologs_clusters(self, rna_list: List[str], rna_str: str) -> List[Tuple[str]]:
+        """
+        for each RNA in rna_list, find its orthologs cluster from orthologs_df['cluster'].
 
-    def _dump_n_log_bp_rna_mapping(self, bp_rna_mapping: dict):
+        Args:
+            rna_list (list): [<RNA_id1>, <RNA_id2>, ...]
+        """
+
+        orthologs_df = self.srna_orthologs if rna_str == 'sRNA' else self.mrna_orthologs
+
+        orthologs_clusters = []
+        for rna in rna_list:
+            # find the cluster that contains this RNA
+            for cluster in orthologs_df['cluster']:
+                cluster = cluster if type(cluster) == tuple else ast.literal_eval(cluster)
+                if rna in cluster:
+                    orthologs_clusters.append(tuple(sorted(cluster)))
+                    break
+
+        return sorted(set(orthologs_clusters))
+    
+    def _find_rnas_with_max_orthologs(self, rna_str: str, max_orthologs: int = 0) -> List[str]:
+        """
+        For each cluster in orthologs_df['cluster'], find which RNAs from strain_to_rna_list are othologs, i.e., belong to the same cluster.
+        Return a set of tuples, each tuple contains the RNAs from strain_to_rna_list that belong to the same cluster.
+
+        Args:
+            strain_to_rna_list (dict): A dictionary in the following format:
+            {
+                <strain_id>: [<RNA_id1>, <RNA_id2>, ...],
+                ...
+            }
+        """
+        if rna_str == 'sRNA':
+            rna_type = self.U.srna
+            orthologs_df = self.srna_orthologs
+        else:
+            rna_type = self.U.mrna
+            orthologs_df = self.mrna_orthologs
+        
+        all_rnas = set([n for n, d in self.G.nodes(data=True) if d.get('type') == rna_type])
+        # RNAs that have orthologs (above max_orthologs threshold)
+        mask_invalid_rnas = orthologs_df['num_strains'] > 1 + max_orthologs
+        invalid_rnas = orthologs_df[mask_invalid_rnas]['cluster'].apply(ast.literal_eval).tolist()
+        invalid_rnas = set([rna for tpl in invalid_rnas for rna in tpl])
+
+        rnas_with_max_orthologs = sorted(all_rnas - invalid_rnas)
+        self.logger.info(f"out of {len(all_rnas)} {rna_str}s, {len(rnas_with_max_orthologs)} have num orthologs <= {max_orthologs}")
+
+        return rnas_with_max_orthologs
+    
+    def _get_targets_of_focus_sRNAs(self, related_mrnas_and_srnas: Dict[str, Dict[str, List[str]]], focus_srnas: List[str]) -> List[str]:
+        targets_of_focus_srnas = set()
+        for mrna_to_srnas in related_mrnas_and_srnas.values():
+            for mrna, srnas in mrna_to_srnas.items():
+                if set(srnas).intersection(focus_srnas):
+                    targets_of_focus_srnas.add(mrna)
+        return sorted(targets_of_focus_srnas)
+
+    def _analysis_2_bp_rna_mapping(self, bp_rna_mapping: dict):
         """
         Generate a DataFrame with information about BPs and their related mRNAs and sRNAs
 
@@ -559,6 +618,7 @@ class Analyzer:
                 'bp_definition': bp_definition,
                 'strains': strains,
                 'num_strains': num_strains,
+                'strain_dict': strain_dict,
                 'related_mRNAs_and_sRNAs': related_mRNAs_and_sRNAs_complete,
                 'related_mRNAs': related_mRNAs,
                 'num_related_mRNAs': num_related_mRNAs,
@@ -571,16 +631,42 @@ class Analyzer:
         for rna_str in ['sRNA', 'mRNA']:
             df[f'related_{rna_str}_orthologs'] = list(map(self._find_orthologs, df[f'related_{rna_str}s'], np.repeat(rna_str, len(df))))
 
-        # 3 - complete info
+        # 3 - rank and add info
+        # 3.1 - Focus sRNAs: find all sRNAs that have num orthologs <= 0
+        srna_max_orthologs = 0
+        focus_srnas = self._find_rnas_with_max_orthologs('sRNA', max_orthologs=srna_max_orthologs)
+        # 3.2 - per BP, get the strains with focus sRNAs
+        df['strain_to_focus_sRNAs'] = df['related_sRNAs'].apply(lambda x: {strain: sorted(set(rnas).intersection(focus_srnas)) for strain, rnas in x.items() if set(rnas).intersection(focus_srnas)})
+        #   --- first criterion
+        df['num_strains_w_focus_sRNAs'] = df['strain_to_focus_sRNAs'].apply(lambda x: len(x))
+        df[f'focus_sRNAs_{srna_max_orthologs}_orthologs'] = df['strain_to_focus_sRNAs'].apply(lambda x: sorted(set([srna for srna_lst in x.values() for srna in srna_lst])))
+        #   --- second criterion
+        df['num_focus_sRNAs'] = df[f'focus_sRNAs_{srna_max_orthologs}_orthologs'].apply(lambda x: len(x))
+        # 3.3 - per BP, get the mRNA targets that interact with focus sRNAs
+        df['targets_of_focus_sRNAs'] = list(map(self._get_targets_of_focus_sRNAs, df['strain_dict'], df[f'focus_sRNAs_{srna_max_orthologs}_orthologs']))
+        df['ortholog_clusters_of_targets'] = list(map(self._get_orthologs_clusters, df['targets_of_focus_sRNAs'], np.repeat('mRNA', len(df))))
+        df['ortholog_clusters_of_targets_of_focus_sRNAs'] = list(map(lambda clusters_lst, targets_lst: [tuple(set(tpl).intersection(targets_lst)) for tpl in clusters_lst if len(set(tpl).intersection(targets_lst)) > 1], df['ortholog_clusters_of_targets'], df['targets_of_focus_sRNAs']))
+        df['num_ortholog_clusters_of_targets_of_focus_sRNAs'] = df['ortholog_clusters_of_targets_of_focus_sRNAs'].apply(lambda x: len(x))
+
+        # 4 - complete info
         for rna_str in ['sRNA', 'mRNA']:
             df[f'related_{rna_str}s'] = df[f'related_{rna_str}s'].apply(lambda x: {strain: [f"{rna}__{self.G.nodes[rna]['name']}" for rna in rnas] for strain, rnas in x.items()})
             df[f'related_{rna_str}_orthologs'] = df[f'related_{rna_str}_orthologs'].apply(lambda x: [tuple(f"{rna}__{self.G.nodes[rna]['name']}" for rna in rnas) for rnas in x])
+        # 'strain_to_focus_sRNAs'
+        # f'focus_sRNAs_{srna_max_orthologs}_orthologs'
+        # 'targets_of_focus_sRNAs'
+        # 'ortholog_clusters_of_targets'
+        # 'num_ortholog_clusters_of_targets_of_focus_sRNAs'
 
-        # 4 - dump
+        # remove 'strain_dict'
+        df = df.drop(columns=['strain_dict'])
+
+
+        # 5 - dump
         _path = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "summary_tables"))
         write_df(df, join(_path, f"Analysis_2__BP_to_related_mRNAs_and_sRNAs__v_{self.graph_version}.csv"))
 
-        # 5 - log
+        # 6 - log
         self.logger.info(f"--------- BP to RNAs mapping\n{df.head()}")
         # self.logger.info(
         #     f"Strain: {strain} \n"
