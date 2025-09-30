@@ -243,7 +243,7 @@ class Analyzer:
             f"max common BPs distribution: \n"
             f"   {max_common_bps_dist}"
         )
-        write_df(all_orthologs_df, join(_path, f"Analysis_1__sRNA_orthologs_w_BPs_extended__v_{self.graph_version}.csv"))
+        write_df(all_orthologs_df, join(_path, f"Analysis_Tool_1__sRNA_orthologs_to_common_BPs__v_{self.graph_version}.csv"))
 
     def _get_common_bps_of_srna_orthologs(self, orthologs_cluster: Tuple[str], srna_bp_mapping: dict, bp_similarity_method: str) -> Tuple[int, Dict[tuple, list], Dict[tuple, int], int, Dict[str, list], Dict[str, int], Dict[str, Dict[str, list]], Dict[str, List[Set[str]]], Dict[str, Dict[str, str]]]:
         # 1 - all BPs
@@ -565,6 +565,35 @@ class Analyzer:
                 if set(srnas).intersection(focus_srnas):
                     targets_of_focus_srnas.add(mrna)
         return sorted(targets_of_focus_srnas)
+    
+    def _get_strain_to_mrna_to_focus_srnas(self, strain_dict_series, all_focus_srnas: List[str]) -> Tuple[Dict[str, Dict[str, List[str]]], List[str], List[str]]:
+        lst_strain_to_mrna_to_focus_srnas = []
+        lst_focus_srnas_flat = []
+        lst_targets_of_focus_srnas_flat = []
+        for strain_dict in strain_dict_series:
+            strain_to_mrna_to_focus_srnas = {}
+            focus_srnas_flat = []
+            targets_of_focus_srnas_flat = []
+            
+            for strain, mrna_to_srnas in strain_dict.items():
+                strain_to_mrna_to_focus_srnas[strain] = {}
+                for mrna, srnas in mrna_to_srnas.items():
+                    focus_srnas = sorted(set(srnas).intersection(all_focus_srnas))
+                    if len(focus_srnas) > 0:
+                        focus_srnas = [f"{srna}__{self.G.nodes[srna]['name']}" for srna in focus_srnas]
+                        strain_to_mrna_to_focus_srnas[strain][f"{mrna}__{self.G.nodes[mrna]['name']}"] = focus_srnas
+                        focus_srnas_flat.extend(focus_srnas)
+                        targets_of_focus_srnas_flat.append(mrna)  # use only mrna id
+            
+            strain_to_mrna_to_focus_srnas = {strain: v for strain, v in strain_to_mrna_to_focus_srnas.items() if v}  # remove strains with empty dict
+            focus_srnas_flat = sorted(set(focus_srnas_flat))
+            targets_of_focus_srnas_flat = sorted(set(targets_of_focus_srnas_flat))
+
+            lst_strain_to_mrna_to_focus_srnas.append(strain_to_mrna_to_focus_srnas)
+            lst_focus_srnas_flat.append(focus_srnas_flat)
+            lst_targets_of_focus_srnas_flat.append(targets_of_focus_srnas_flat)
+
+        return lst_strain_to_mrna_to_focus_srnas, lst_focus_srnas_flat, lst_targets_of_focus_srnas_flat
 
     def _analysis_2_bp_rna_mapping(self, bp_rna_mapping: dict):
         """
@@ -632,22 +661,21 @@ class Analyzer:
             df[f'related_{rna_str}_orthologs'] = list(map(self._find_orthologs, df[f'related_{rna_str}s'], np.repeat(rna_str, len(df))))
 
         # 3 - rank and add info
-        # 3.1 - Focus sRNAs: find all sRNAs that have num orthologs <= 0
+        # 3.1 - all Focus sRNAs: find all sRNAs in G that have num orthologs <= 0
         srna_max_orthologs = 0
-        focus_srnas = self._find_rnas_with_max_orthologs('sRNA', max_orthologs=srna_max_orthologs)
-        # 3.2 - Per BP tree (row), get info about sRNAs
-        # map of strains to their focus sRNAs
-        df['strain_to_focus_sRNAs'] = df['related_sRNAs'].apply(lambda x: {strain: sorted(set(rnas).intersection(focus_srnas)) for strain, rnas in x.items() if set(rnas).intersection(focus_srnas)})
-        df['num_strains_w_focus_sRNAs'] = df['strain_to_focus_sRNAs'].apply(lambda x: len(x))  #   --- first criterion
-        df[f'focus_sRNAs_{srna_max_orthologs}_orthologs'] = df['strain_to_focus_sRNAs'].apply(lambda x: sorted(set([srna for srna_lst in x.values() for srna in srna_lst])))
-        df['num_focus_sRNAs'] = df[f'focus_sRNAs_{srna_max_orthologs}_orthologs'].apply(lambda x: len(x))  #   --- second criterion
-        # 3.3 - Per BP tree (row), get info about mRNAs
-        # the list of mRNA targets that interact with focus sRNAs
-        df['targets_of_focus_sRNAs'] = list(map(self._get_targets_of_focus_sRNAs, df['strain_dict'], df[f'focus_sRNAs_{srna_max_orthologs}_orthologs']))
-        df = df.drop(columns=['strain_dict'])  # remove 'strain_dict'
+        all_focus_srnas = self._find_rnas_with_max_orthologs('sRNA', max_orthologs=srna_max_orthologs)
+        # 3.2 - BP tree for focus sRNAs
+        strain_to_mRNA_to_focus_srnas, focus_srnas, targets_of_focus_srnas = self._get_strain_to_mrna_to_focus_srnas(df['strain_dict'], all_focus_srnas)
+        df['strain_to_mRNA_to_focus_sRNAs'] = strain_to_mRNA_to_focus_srnas  # map of strains to their mRNAs to focus sRNAs
+        # 3.3 - Focus sRNAs
+        df[f'focus_sRNAs_{srna_max_orthologs}_orthologs'] = focus_srnas
+        df['num_focus_sRNAs'] = df[f'focus_sRNAs_{srna_max_orthologs}_orthologs'].apply(lambda x: len(x))  #   --- second criterion for ranking
+        df['num_strains_w_focus_sRNAs'] = df['strain_to_mRNA_to_focus_sRNAs'].apply(lambda x: len(x))      #   --- first criterion for ranking
+        # 3.4 - mRNA targets of focus sRNAs
+        df['targets_of_focus_sRNAs'] = targets_of_focus_srnas
         df['complete_ortholog_clusters_of_targets'] = list(map(self._get_orthologs_clusters, df['targets_of_focus_sRNAs'], np.repeat('mRNA', len(df))))
-        df['filtered_ortholog_clusters_of_targets'] = list(map(lambda clusters_lst, targets_lst: [tuple(set(tpl).intersection(targets_lst)) for tpl in clusters_lst if len(set(tpl).intersection(targets_lst)) > 1], df['ortholog_clusters_of_targets'], df['targets_of_focus_sRNAs']))
-        df['num_filtered_ortholog_clusters_of_targets'] = df['filtered_ortholog_clusters_of_targets'].apply(lambda x: len(x))
+        df['filtered_ortholog_clusters_of_targets'] = list(map(lambda clusters_lst, targets_lst: [tuple(set(tpl).intersection(targets_lst)) for tpl in clusters_lst if len(set(tpl).intersection(targets_lst)) > 1], df['complete_ortholog_clusters_of_targets'], df['targets_of_focus_sRNAs']))
+        df['num_filtered_ortholog_clusters'] = df['filtered_ortholog_clusters_of_targets'].apply(lambda x: len(x))
         df['strains_of_filtered_ortholog_clusters'] = df['filtered_ortholog_clusters_of_targets'].apply(lambda x: sorted(set([self.G.nodes[rna]['strain'] for tpl in x for rna in tpl])))
         df['num_strains_of_filtered_ortholog_clusters'] = df['strains_of_filtered_ortholog_clusters'].apply(lambda x: len(x))
         # 3.4 - score
@@ -659,18 +687,16 @@ class Analyzer:
         for rna_str in ['sRNA', 'mRNA']:
             df[f'related_{rna_str}s'] = df[f'related_{rna_str}s'].apply(lambda x: {strain: [f"{rna}__{self.G.nodes[rna]['name']}" for rna in rnas] for strain, rnas in x.items()})
             df[f'related_{rna_str}_orthologs'] = df[f'related_{rna_str}_orthologs'].apply(lambda x: [tuple(f"{rna}__{self.G.nodes[rna]['name']}" for rna in rnas) for rnas in x])
-        # 'strain_to_focus_sRNAs'
-        # f'focus_sRNAs_{srna_max_orthologs}_orthologs'
-        # 'targets_of_focus_sRNAs'
-        # 'ortholog_clusters_of_targets'
-        # 'num_ortholog_clusters_of_targets_of_focus_sRNAs'
+        df['targets_of_focus_sRNAs'] = df['targets_of_focus_sRNAs'].apply(lambda x: [f"{mrna}__{self.G.nodes[mrna]['name']}" for mrna in x])
+        for col in ['complete_ortholog_clusters_of_targets', 'filtered_ortholog_clusters_of_targets']:
+            df[col] = df[col].apply(lambda x: [tuple(f"{rna}__{self.G.nodes[rna]['name']}" for rna in tpl) for tpl in x])
 
-
-
+        # 5 - remove temp columns
+        df = df.drop(columns=['strain_dict'])
 
         # 5 - dump
         _path = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "summary_tables"))
-        write_df(df, join(_path, f"Analysis_2__BP_to_related_mRNAs_and_sRNAs__v_{self.graph_version}.csv"))
+        write_df(df, join(_path, f"Analysis_Tool_2__BP_trees_of_focus_sRNAs_{srna_max_orthologs}_orthologs__v_{self.graph_version}.csv"))
 
         # 6 - log
         self.logger.info(f"--------- BP to RNAs mapping\n{df.head()}")
