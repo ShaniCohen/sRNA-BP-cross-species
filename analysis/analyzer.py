@@ -36,11 +36,14 @@ class Analyzer:
         self.G = graph_builder.get_graph()
         self.U = graph_utils
 
-        # clustering_analysis
-        self.run_clustering_analysis = False
-        if not self.run_clustering_analysis:
-            self.srna_orthologs = read_df(join(self.config['analysis_output_dir'], "orthologs", f"sRNA_orthologs__v_{self.graph_version}.csv"))
-            self.mrna_orthologs = read_df(join(self.config['analysis_output_dir'], "orthologs", f"mRNA_orthologs__v_{self.graph_version}.csv"))
+        # RNA clustering (homologs)
+        self.run_clustering_of_rna_homologs = False
+
+        # output paths
+        self.out_path_homologs_clustering = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "Clustering_homologs"))
+        self.out_path_summary_tables = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "Summary_tables"))
+        self.out_path_analysis_tool_1 = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "Analysis_tool_1"))
+        self.out_path_analysis_tool_2 = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "Analysis_tool_2"))
 
         # TODO: remove after testing
         self.strains_data = graph_builder.strains_data
@@ -58,26 +61,23 @@ class Analyzer:
         edge is represented as a dict item:
             (<id_str>, <id_str>) : {'type': <str>}
         """
-        self.logger.info(f"running analysis")
+        self.logger.info(f"Running Analysis...")
+        self.logger.info(f"--------------   Preprocess   --------------")
+        # 1 - Dump BPs of annotated mRNAs
+        self._dump_bps_of_annotated_mrnas()
 
-        # --------------   run analysis   --------------
-         # 1 - Analyze RNA clustering (orthologs and paralogs)
-        if self.run_clustering_analysis:   
-            self._analyze_rna_clustering()
+        # 2 - Cluster RNA homologs (orthologs and paralogs)
+        if self.run_clustering_of_rna_homologs:   
+            self._cluster_rna_homologs()
+        self.srna_homologs = read_df(join(self.out_path_homologs_clustering, f"sRNA_homologs__v_{self.graph_version}.csv"))
+        self.mrna_homologs = read_df(join(self.out_path_homologs_clustering, f"mRNA_homologs__v_{self.graph_version}.csv"))
 
-        # 2 - Generate a mapping of sRNA to biological processes (BPs)
+        # 3 - Map sRNAs to biological processes (BPs)
         self.logger.info("----- Before enrichment:")
         srna_bp_mapping = self._generate_srna_bp_mapping()
         self._log_srna_bp_mapping(srna_bp_mapping)
 
-        # 6 - dump BPs of annotated mRNAs
-        self._dump_bps_of_annotated_mrnas()
-        
-        # 3 - generate mapping of BP to mRNAs and sRNAs
-        bp_rna_mapping = self._generate_bp_rna_mapping(srna_bp_mapping)
-        self._analysis_2_bp_rna_mapping(bp_rna_mapping)
-        
-        # 4 - Enrichment (per strain): per sRNA, find and keep only significant biological processes (BPs) that its targets invovlved in.
+        # 4 - Enrichment (per strain): per sRNA, find and keep only significant biological processes (BPs) that its targets are invovlved in.
         # self.logger.info("----- After enrichment:")
         # srna_bp_mapping_post_en, meta = self._apply_enrichment(srna_bp_mapping)
         # self._log_mapping(srna_bp_mapping_post_en)
@@ -85,25 +85,22 @@ class Analyzer:
         # if dump_meta:
         #     self._dump_metadata(meta)
 
-        # 5 - BPs of sRNA orthologs
-        # 5.1 - BP similarity = exact
-        self._analysis_1_bps_of_srna_orthologs(srna_bp_mapping, self.U.exact_bp)
+        self.logger.info(f"--------------   Analysis Tools   --------------")
+        # ------   Analysis 1 - Cross-Species Conservation of sRNAs' Functionality
+        self._analysis_1_srna_homologs_to_commom_bps(srna_bp_mapping, self.U.exact_bp)
 
-        # 6 - dump BPs of annotated mRNAs
-        self._dump_bps_of_annotated_mrnas()
+        # ------   Analysis 2 - sRNA Regulation of Biological Processes (BPs)
+        # generate mapping of BP to mRNAs and sRNAs
+        bp_rna_mapping = self._generate_bp_rna_mapping(srna_bp_mapping)
+        self._analysis_2_bp_rna_mapping(bp_rna_mapping)
 
-    
-    def _analyze_rna_clustering(self):
-        # 1 - paralogs
-        self._analyze_paralogs('sRNA', self.U.srna)
-        self._analyze_paralogs('mRNA', self.U.mrna)
-        # 2 - orthologs
-        # 2.1 - analyze
-        srna_orthologs = self._analyze_orthologs('sRNA', self.U.srna)
-        mrna_orthologs = self._analyze_orthologs('mRNA', self.U.mrna)
-        # 2.2 - save
-        self.srna_orthologs = srna_orthologs
-        self.mrna_orthologs = mrna_orthologs
+    def _cluster_rna_homologs(self):
+        # 1 - paralogs only
+        self._analyze_paralogs_only('sRNA', self.U.srna)
+        self._analyze_paralogs_only('mRNA', self.U.mrna)
+        # 2 - homologs
+        self._cluster_homologs('sRNA', self.U.srna)
+        self._cluster_homologs('mRNA', self.U.mrna)
 
     def _generate_srna_bp_mapping(self) -> dict:
         """
@@ -215,41 +212,41 @@ class Analyzer:
 
         return bp_rna_mapping
 
-    def _analysis_1_bps_of_srna_orthologs(self, srna_bp_mapping: dict, bp_similarity_method: str):
-        self.logger.info(f"Analyzing BPs of sRNA orthologs")
-        # 1 - load sRNA orthologs
-        _path = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "orthologs"))
-        all_orthologs_df = read_df(join(_path, f"sRNA_orthologs__v_{self.graph_version}.csv"))
-        # 2 - analyze common BPs of sRNA orthologs
+    def _analysis_1_srna_homologs_to_commom_bps(self, srna_bp_mapping: dict, bp_similarity_method: str):
+        self.logger.info(f"##############   Analsis 1 - Cross-Species Conservation of sRNAs' Functionality   ##############")
+        # 1 - load clusters of sRNA homologs
+        srna_homologs_df = self.srna_homologs.copy()
+        
+        # 2 - analyze common BPs of sRNA homologs
         records = []
-        for cluster in all_orthologs_df['cluster'].apply(ast.literal_eval):
-            num_srna_w_bps, all_common_bps, num_common_bps, max_common_bps, all_bps, num_all_bps, srnas_to_targets_to_bps_complete, orthologs_clusters_of_all_targets, bp_descriptions = \
-                self._get_common_bps_of_srna_orthologs(cluster, srna_bp_mapping, bp_similarity_method)
-            bp_descriptions = str(bp_descriptions).replace(',', ';')
-            records.append({'num_srna_w_bps': num_srna_w_bps, 'all_common_BPs': all_common_bps, 'num_common_BPs': num_common_bps, 'max_common_BPs': max_common_bps, 'all_BPs': all_bps, 'num_all_BPs': num_all_bps,
-                            'srnas_to_targets_to_bps_complete': srnas_to_targets_to_bps_complete, 'orthologs_clusters_of_all_targets': orthologs_clusters_of_all_targets, 'bp_descriptions': bp_descriptions})
-        all_orthologs_df[list(records[0].keys())] = pd.DataFrame(records)
-        # 3 - log and dump
-        num_clusters = len(all_orthologs_df)
-        # 3.1 - max common BPs distribution
-        unq, counts = np.unique(all_orthologs_df['max_common_BPs'], return_counts=True)
+        for cluster in srna_homologs_df['cluster'].apply(ast.literal_eval):
+            rec = self._get_common_bps_of_srna_orthologs(cluster, srna_bp_mapping, bp_similarity_method)
+            records.append(rec)
+        srna_homologs_df[list(records[0].keys())] = pd.DataFrame(records)
+        
+        # 3 - dump results
+        write_df(srna_homologs_df, join(self.out_path_analysis_tool_1, f"Analysis_Tool_1__sRNA_homologs_to_common_BPs__v_{self.graph_version}.csv"))
+
+        # 4 - log statistics
+        num_clusters = len(srna_homologs_df)
+        # 4.1 - max common BPs distribution
+        unq, counts = np.unique(srna_homologs_df['max_common_BPs'], return_counts=True)
         sorted_dict = dict(sorted(dict(zip(unq, counts)).items(), key=lambda item: item[1], reverse=True))
         max_common_bps_dist = "\n   ".join([f"{counts} with max common BPs = {unq} ({int(round(counts/num_clusters, 2)*100)} %)" for unq, counts in sorted_dict.items()])
         
         self.logger.info(
-            f"----------------   sRNA orthologs \n"
+            f"----------------   sRNA homologs \n"
             f"-------   BP similarity method = {bp_similarity_method} \n"
-            f"Number of clusters: {len(all_orthologs_df)} \n"
+            f"Number of clusters: {len(srna_homologs_df)} \n"
             f"max common BPs distribution: \n"
             f"   {max_common_bps_dist}"
         )
-        write_df(all_orthologs_df, join(_path, f"Analysis_Tool_1__sRNA_orthologs_to_common_BPs__v_{self.graph_version}.csv"))
 
-    def _get_common_bps_of_srna_orthologs(self, orthologs_cluster: Tuple[str], srna_bp_mapping: dict, bp_similarity_method: str) -> Tuple[int, Dict[tuple, list], Dict[tuple, int], int, Dict[str, list], Dict[str, int], Dict[str, Dict[str, list]], Dict[str, List[Set[str]]], Dict[str, Dict[str, str]]]:
+    def _get_common_bps_of_srna_orthologs(self, orthologs_cluster: Tuple[str], srna_bp_mapping: dict, bp_similarity_method: str) -> dict:
         # 1 - all BPs
-        all_bps, num_bps = {}, {}
+        all_bps, num_all_bps = {}, {}
         # 2 - sRNAs to targets to BPs (complete)
-        srnas_to_targets_to_bps_complete = {}  
+        srnas_to_targets_to_bps = {}  
          # for orthologs clusters of targets
         strain_to_mrna_list = {}
 
@@ -259,12 +256,12 @@ class Analyzer:
             if srna_targets:
                 unq_bps = sorted({bp for bps in srna_targets.values() for bp in bps})
                 all_bps[f'{strain}__{srna_id}'] = unq_bps
-                num_bps[f'{strain}__{srna_id}'] = len(unq_bps)
+                num_all_bps[f'{strain}__{srna_id}'] = len(unq_bps)
                 
                 # sRNAs to targets to BPs (complete)
                 srna_complete = f"{strain}__{srna_id}__{self.G.nodes[srna_id]['name']}" 
                 targets_to_bps_complete = {f"{target_id}__{self.G.nodes[target_id]['name']}": bps for target_id, bps in srna_targets.items()}
-                srnas_to_targets_to_bps_complete[srna_complete] = targets_to_bps_complete
+                srnas_to_targets_to_bps[srna_complete] = targets_to_bps_complete
                 
                 # for orthologs clusters of targets
                 if strain not in strain_to_mrna_list.keys():
@@ -272,10 +269,10 @@ class Analyzer:
                 strain_to_mrna_list[strain].extend(list(srna_targets.keys()))
 
         num_srna_w_bps = len(all_bps)
-        srnas_to_targets_to_bps_complete = dict(sorted(srnas_to_targets_to_bps_complete.items()))
+        srnas_to_targets_to_bps = dict(sorted(srnas_to_targets_to_bps.items()))
         
         # 3 - common BPs
-        all_common_bps, num_common_bps, max_common_bps = self._calc_common_bps(all_bps, bp_similarity_method)
+        all_common_bps, num_common_bps, max_strains_w_common_bps, all_common_bps_of_max_strains, max_common_bps = self._calc_common_bps(all_bps, bp_similarity_method)
 
         # 4 - orthologs clusters of all targets (cross-strains)
         orthologs_clusters_of_all_targets = self._find_orthologs(strain_to_mrna_list, 'mRNA')
@@ -288,30 +285,59 @@ class Analyzer:
         # 5.2 - Get descriptions for all BPs
         bp_descriptions = {bp: self.G.nodes[bp]['lbl'] for bp in all_strain_bps}  # self.G.nodes[bp]['meta']['definition']['val']
         bp_descriptions = dict(sorted(bp_descriptions.items()))
+        bp_descriptions = str(bp_descriptions).replace(',', ';')
 
-        return num_srna_w_bps, all_common_bps, num_common_bps, max_common_bps, all_bps, num_bps, srnas_to_targets_to_bps_complete, orthologs_clusters_of_all_targets, bp_descriptions
+        # 6 - output record
+        rec = {
+                'num_srna_w_bps': num_srna_w_bps, 
+                'all_common_BPs': all_common_bps, 
+                'num_common_BPs': num_common_bps, 
+                'max_strains_w_common_bps': max_strains_w_common_bps,
+                'all_common_BPs_of_max_strains': all_common_bps_of_max_strains,
+                'max_common_BPs': max_common_bps, 
+                'all_BPs': all_bps, 
+                'num_all_BPs': num_all_bps,
+                'srnas_to_targets_to_bps': srnas_to_targets_to_bps, 
+                'orthologs_clusters_of_all_targets': orthologs_clusters_of_all_targets, 
+                'bp_descriptions': bp_descriptions
+        }
+
+        return rec
     
-    def _calc_common_bps(self, all_bps: Dict[str, list], bp_similarity_method: str) -> Tuple[Dict[tuple, list], Dict[tuple, int], int]:
+    def _calc_common_bps(self, all_bps: Dict[str, list], bp_similarity_method: str) -> Tuple[Dict[tuple, list], Dict[tuple, int], int, int]:
         all_common_bps, num_common_bps = {}, {}
         max_common_bps = 0
+        max_strains_w_common_bps = 0
         for size in range(2, len(all_bps.keys()) + 1):
-            for rnas in itertools.combinations(all_bps.keys(), size):
-                rnas_bps = list(map(all_bps.get, rnas))
+            for rna_comb in itertools.combinations(all_bps.keys(), size):
+                rnas_bps = list(map(all_bps.get, rna_comb))
                 # 1 - common BPs of rnas
                 common_bps: List[str] = rnas_bps[0]
                 for l in rnas_bps[1:]:
                     common_bps: List[str] = self.U.get_common_bps(common_bps, l, bp_similarity_method)
-                all_common_bps[rnas] = common_bps
-                # 2 - num common BPs
-                num_common_bps[rnas] = len(common_bps)
-                # 3 - max common BPs
-                max_common_bps = max(max_common_bps, len(common_bps))
-        # all common bps complete
-        for pair, bp_lst in all_common_bps.items():
-            all_common_bps[pair] = [f"{bp}__{self.G.nodes[bp]['lbl'].replace(" ", "_")}" for bp in sorted(bp_lst)]
-        return all_common_bps, num_common_bps, max_common_bps
+                
+                if common_bps:
+                    all_common_bps[rna_comb] = common_bps
+                    # 2 - num common BPs
+                    num_common_bps[rna_comb] = len(common_bps)
+                    # 3 - max strains with common BPs
+                    rnas_strains = set([rna.split('__')[0] for rna in rna_comb])
+                    max_strains_w_common_bps = max(max_strains_w_common_bps, len(rnas_strains))
+                    # 4 - max common BPs
+                    max_common_bps = max(max_common_bps, len(common_bps))
+        
+        all_common_bps_of_max_strains = {}
+        for rna_comb, bp_lst in all_common_bps.items():
+            # complete BP info in all common bps 
+            all_common_bps[rna_comb] = [f"{bp}__{self.G.nodes[bp]['lbl'].replace(" ", "_")}" for bp in sorted(bp_lst)]
+            # get all common BPs of max strains
+            rnas_strains = set([rna.split('__')[0] for rna in rna_comb])
+            if len(rnas_strains) == max_strains_w_common_bps:
+                all_common_bps_of_max_strains[rna_comb] = all_common_bps[rna_comb]
+        
+        return all_common_bps, num_common_bps, max_strains_w_common_bps, all_common_bps_of_max_strains, max_common_bps
 
-    def _analyze_paralogs(self, rna_str: str, rna_type: str):
+    def _analyze_paralogs_only(self, rna_str: str, rna_type: str):
         self.logger.info(f"Analyzing {rna_str} paralogs")
         for strain in self.U.strains:
             self.logger.info(f"Strain: {strain}")
@@ -334,59 +360,66 @@ class Analyzer:
             )
             self._dump_paralogs(strain, rna_str, rna_paralogs_clusters)
     
-    def _analyze_orthologs(self, rna_str: str, rna_type: str) -> pd.DataFrame:
-        self.logger.info(f"Analyzing {rna_str} orthologs")
-        # 1 - get all orthologs clusters
-        all_orthologs_clusters = set()
+    def _cluster_homologs(self, rna_str: str, rna_type: str) -> pd.DataFrame:
+        self.logger.info(f"Analyzing {rna_str} homologs")
+        # 1 - get all homologs clusters
+        all_homologs_clusters = set()
         for strain in self.U.strains:
-            orthologs_clusters = self._get_orthologs_clusters_of_strain(rna_type, strain)
-            all_orthologs_clusters = all_orthologs_clusters.union(orthologs_clusters)
+            homologs_clusters = self._get_homologs_clusters_of_strain(rna_type, strain)
+            all_homologs_clusters = all_homologs_clusters.union(homologs_clusters)
         # 2 - validate
-        all_orthologs_df = self._validate_orthologs_clusters(rna_type, all_orthologs_clusters)
+        all_homologs_df = self._validate_homologs_clusters(rna_type, all_homologs_clusters)
         # 3 - log and dump
-        self._log_n_dump_orthologs(rna_str, rna_type, all_orthologs_df)
-
-        return all_orthologs_df
+        self._log_n_dump_homologs(rna_str, rna_type, all_homologs_df)
     
-    def _get_orthologs_clusters_of_strain(self, rna_type: str, strain: str):
+    def _get_homologs_clusters_of_strain(self, rna_type: str, strain: str):
         rna_nodes =  [n for n, d in self.G.nodes(data=True) if d['type'] == rna_type and d['strain'] == strain]
-        # 1 - all clusters
-        all_clusters = set()
+        # 1 - all homologs clusters
+        all_homologs_clusters = set()
         clusters_items = []
         for rna in rna_nodes:
             if rna not in clusters_items:
                 cluster = set()
-                cluster = self.U.get_orthologs_cluster(self.G, rna, cluster)
+                # the recursive function bellow may return a cluster with both orthologs and paralogs.
+                cluster = self.U.get_orthologs_cluster(self.G, rna, cluster)  
                 if cluster:
-                    all_clusters.add(tuple(sorted(cluster)))
+                    all_homologs_clusters.add(tuple(sorted(cluster)))
                     clusters_items = clusters_items + sorted(cluster)
         assert set(rna_nodes) <= set(clusters_items), "some RNA nodes are missing in the clusters"
-        # 2 - orthologs clusters
-        orthologs_clusters = {c for c in all_clusters if len(c) > 1}
-        if not orthologs_clusters:
+        
+        # 2 - homologs clusters with size > 1
+        homologs_clusters = {c for c in all_homologs_clusters if len(c) > 1}
+        if not homologs_clusters:
             self.logger.warning(f"#### no {rna_type} orthologs clusters for {strain}")
         
-        return orthologs_clusters
+        return homologs_clusters
     
-    def _validate_orthologs_clusters(self, rna_type: str, orthologs_clusters: Set[Tuple[str]]) -> pd.DataFrame:
+    def _validate_homologs_clusters(self, rna_type: str, homologs_clusters: Set[Tuple[str]]) -> pd.DataFrame:
         # 1 - general validation
-        nodes = [item for tpl in orthologs_clusters for item in tpl]
+        nodes = [item for tpl in homologs_clusters for item in tpl]
         assert len(set(nodes)) == len(nodes), f"some {rna_type} nodes are duplicated in the orthologs clusters"
         
         # 2 - per cluster validation
         records = []
-        for cluster in orthologs_clusters:
-            # 2.1 - get ortholog pairs and strains
+        for cluster in homologs_clusters:
+            # 2.1 - get ortholog pairs, paralog pairs and strains
             ortholog_pairs, strains = list(), set()
             ortholog_pairs_w_meta = list()
+            paralog_pairs, paralog_pairs_w_meta = list(), list()
             for n1, n2 in itertools.combinations(list(cluster), 2):
                 s1, s2 = self.G.nodes[n1]['strain'], self.G.nodes[n2]['strain']
+                strains = strains.union({s1, s2})
                 if self.U.are_orthologs(self.G, n1, n2, s1, s2):
                     ortholog_pairs.append((n1, n2))
-                    strains = strains.union({s1, s2})
                     ortholog_pairs_w_meta.append((f"{s1}__{n1}__{self.G.nodes[n1]['name']}", f"{s2}__{n2}__{self.G.nodes[n2]['name']}"))
+                elif s1 == s2 and self.U.are_paralogs(self.G, n1, n2, s1):
+                    paralog_pairs.append((n1, n2))
+                    paralog_pairs_w_meta.append((f"{s1}__{n1}__{self.G.nodes[n1]['name']}", f"{s2}__{n2}__{self.G.nodes[n2]['name']}"))
+                else:
+                    continue
+
             # 2.2 - validate
-            assert set(cluster) == set([n for tpl in ortholog_pairs for n in tpl]), f"some {rna_type} cluster nodes are missing in the orthologs pairs"
+            assert set(cluster) == set([n for tpl in ortholog_pairs for n in tpl] + [n for tpl in paralog_pairs for n in tpl]), f"misalignment between {rna_type} homologs cluster VS orthologs/paralogs pairs"
             # 2.3 - add record
             records.append({
                 'cluster': cluster,
@@ -394,26 +427,26 @@ class Analyzer:
                 'strains': tuple(sorted(strains)),
                 'num_strains': len(strains),
                 'ortholog_pairs': sorted(ortholog_pairs_w_meta),
-                'num_ortholog_pairs': len(ortholog_pairs_w_meta)
+                'num_ortholog_pairs': len(ortholog_pairs_w_meta),
+                'paralog_pairs': sorted(paralog_pairs_w_meta),
+                'num_paralog_pairs': len(paralog_pairs_w_meta)
             })
         orthologs_df = pd.DataFrame(records)
 
         return orthologs_df
 
-    def _log_n_dump_orthologs(self, rna_str: str, rna_type: str, all_orthologs_df: pd.DataFrame):
-        out_path = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "orthologs"))
-        
+    def _log_n_dump_homologs(self, rna_str: str, rna_type: str, all_homologs_df: pd.DataFrame):
         # 1 - general analysis
-        num_clusters = len(all_orthologs_df)
+        num_clusters = len(all_homologs_df)
         # cluster size distribution
-        unq, counts = np.unique(all_orthologs_df['cluster_size'], return_counts=True)
+        unq, counts = np.unique(all_homologs_df['cluster_size'], return_counts=True)
         size_dist = " | ".join([f"{counts[i]} of size {unq[i]} ({int(round(counts[i]/num_clusters, 2)*100)} %)" for i in range(len(unq))])
-        # strains distribution
-        unq, counts = np.unique([s for clu in all_orthologs_df['strains'] for s in clu], return_counts=True)
-        strain_2_num_orthologs = dict(zip(unq, counts))
+        # strains distribution   ##############  TODO: check if correct (strain_2_num_orthologs OR strain_2_num_CLUSTERS?)
+        unq, counts = np.unique([s for clu in all_homologs_df['strains'] for s in clu], return_counts=True)
+        strain_2_num_orthologs = dict(zip(unq, counts)) ##############  TODO: homologs?
         strain_dist = " | ".join([f"{counts[i]} includes {unq[i]} ({int(round(counts[i]/num_clusters, 2)*100)} %)" for i in range(len(unq))])
         # strains composition distribution
-        unq, counts = np.unique(all_orthologs_df['strains'], return_counts=True)
+        unq, counts = np.unique(all_homologs_df['strains'], return_counts=True)
         sorted_dict = dict(sorted(dict(zip(unq, counts)).items(), key=lambda item: item[1], reverse=True))
         strain_comp_dist = "\n   ".join([f"{counts} of composition {unq} ({int(round(counts/num_clusters, 2)*100)} %)" for unq, counts in sorted_dict.items()])
 
@@ -421,14 +454,14 @@ class Analyzer:
         per_strain_analysis = ""
         for strain, data in self.strains_data.items():
             num_rna = len(data[f'all_{rna_type}'])
-            num_orthologs = strain_2_num_orthologs.get(strain, 0)
+            num_orthologs = strain_2_num_orthologs.get(strain, 0)  ##############  TODO: homologs?
             per_strain_analysis = per_strain_analysis + f"\n  {strain}: {int(round(num_orthologs/num_rna, 2)*100)} % of {rna_str}s ({num_orthologs} out of {num_rna}) have orthologs "
 
         # 3 - log
         self.logger.info(
             f"----------------   {rna_str} \n"
             f"-------   General analysis \n"
-            f"Number of clusters: {len(all_orthologs_df)} \n"
+            f"Number of clusters: {len(all_homologs_df)} \n"
             f"Cluster size distribution: \n"
             f"  {size_dist} \n"
             f"Strains distribution: \n"
@@ -439,10 +472,10 @@ class Analyzer:
             f"{per_strain_analysis}"
         )
         # 4 - dump
-        write_df(all_orthologs_df, join(out_path, f"{rna_str}_orthologs__v_{self.graph_version}.csv"))
+        write_df(all_homologs_df, join(self.out_path_homologs_clustering, f"{rna_str}_homologs__v_{self.graph_version}.csv"))
 
     def _dump_paralogs(self, strain: str, rna_type: str, rna_paralogs_clusters: List[Set[str]]):
-        out_path = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "paralogs"))
+        out_path = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "paralogs_only"))
         out_file = join(out_path, f"{strain}_{rna_type}_paralogs_clusters.txt")
 
         with open(out_file, 'w', encoding='utf-8') as f:
@@ -492,7 +525,7 @@ class Analyzer:
                 ...
             }
         """
-        orthologs_df = self.srna_orthologs if rna_str == 'sRNA' else self.mrna_orthologs
+        orthologs_df = self.srna_homologs if rna_str == 'sRNA' else self.mrna_homologs
         all_rna_orthologs = []
         # Flatten all RNAs from strain_to_rna_list
         all_rnas = set()
@@ -515,7 +548,7 @@ class Analyzer:
             rna_list (list): [<RNA_id1>, <RNA_id2>, ...]
         """
 
-        orthologs_df = self.srna_orthologs if rna_str == 'sRNA' else self.mrna_orthologs
+        orthologs_df = self.srna_homologs if rna_str == 'sRNA' else self.mrna_homologs
 
         orthologs_clusters = []
         for rna in rna_list:
@@ -542,10 +575,10 @@ class Analyzer:
         """
         if rna_str == 'sRNA':
             rna_type = self.U.srna
-            orthologs_df = self.srna_orthologs
+            orthologs_df = self.srna_homologs
         else:
             rna_type = self.U.mrna
-            orthologs_df = self.mrna_orthologs
+            orthologs_df = self.mrna_homologs
         
         all_rnas = set([n for n, d in self.G.nodes(data=True) if d.get('type') == rna_type])
         # RNAs that have orthologs (above max_orthologs threshold)
@@ -612,6 +645,7 @@ class Analyzer:
                 ...
             }   
         """
+        self.logger.info(f"##############   Analsis 2 - Cross-Species Conservation of Biological Processes   ##############")
         # 1 - generate df
         records = []
         for bp_id, strain_dict in bp_rna_mapping.items():
@@ -694,11 +728,10 @@ class Analyzer:
         # 5 - remove temp columns
         df = df.drop(columns=['strain_dict'])
 
-        # 5 - dump
-        _path = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "summary_tables"))
-        write_df(df, join(_path, f"Analysis_Tool_2__BP_trees_of_focus_sRNAs_{srna_max_orthologs}_orthologs__v_{self.graph_version}.csv"))
+        # 6 - dump results
+        write_df(df, join(self.out_path_analysis_tool_2, f"Analysis_Tool_2__BP_trees_of_focus_sRNAs_{srna_max_orthologs}_orthologs__v_{self.graph_version}.csv"))
 
-        # 6 - log
+        # 7 - log statistics
         self.logger.info(f"--------- BP to RNAs mapping\n{df.head()}")
         # self.logger.info(
         #     f"Strain: {strain} \n"
@@ -730,8 +763,7 @@ class Analyzer:
             records.append({'bp_id': bp, 'lbl': self.G.nodes[bp]['lbl'], 'definition': self.G.nodes[bp]['meta']['definition']['val']})
         bps_of_annotated_mrnas = pd.DataFrame(records)
         # 3 - Dump the DataFrame to a CSV file
-        _path = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "summary_tables"))
-        write_df(bps_of_annotated_mrnas, join(_path, f"BPs_of_annotated_mrnas__v_{self.graph_version}.csv"))
+        write_df(bps_of_annotated_mrnas, join(self.out_path_summary_tables, f"BPs_of_annotated_mrnas__v_{self.graph_version}.csv"))
         return
     
     def _dump_metadata(self, metadata: dict):
