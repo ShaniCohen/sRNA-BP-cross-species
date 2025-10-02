@@ -215,29 +215,34 @@ class Analyzer:
     def _analysis_1_srna_homologs_to_commom_bps(self, srna_bp_mapping: dict, bp_similarity_method: str):
         self.logger.info(f"##############   Analsis 1 - Cross-Species Conservation of sRNAs' Functionality   ##############")
         # 1 - load clusters of sRNA homologs
-        srna_homologs_df = self.srna_homologs.copy()
+        df = self.srna_homologs.copy()
         
         # 2 - analyze common BPs of sRNA homologs
         records = []
-        for cluster in srna_homologs_df['cluster'].apply(ast.literal_eval):
+        for cluster in df['cluster'].apply(ast.literal_eval):
             rec = self._get_common_bps_of_srna_orthologs(cluster, srna_bp_mapping, bp_similarity_method)
             records.append(rec)
-        srna_homologs_df[list(records[0].keys())] = pd.DataFrame(records)
+        df[list(records[0].keys())] = pd.DataFrame(records)
         
-        # 3 - dump results
-        write_df(srna_homologs_df, join(self.out_path_analysis_tool_1, f"Analysis_Tool_1__sRNA_homologs_to_common_BPs__v_{self.graph_version}.csv"))
+        # 3 - score
+        max_of_max_filtered_homolog_cluster_size = df['max_filtered_homolog_cluster_size'].max() if df['max_filtered_homolog_cluster_size'].max() > 0 else 1
+        df['score'] = 100 * df['max_strains_with_common_BPs'] + 10 * (df['max_filtered_homolog_cluster_size'] / max_of_max_filtered_homolog_cluster_size)
+        df = df.sort_values(by=['score'], ascending=False).reset_index(drop=True)
 
-        # 4 - log statistics
-        num_clusters = len(srna_homologs_df)
-        # 4.1 - max common BPs distribution
-        unq, counts = np.unique(srna_homologs_df['max_common_BPs'], return_counts=True)
+        # 4 - dump results
+        write_df(df, join(self.out_path_analysis_tool_1, f"Analysis_Tool_1__sRNA_homologs_to_common_BPs__v_{self.graph_version}.csv"))
+
+        # 5 - log statistics
+        num_clusters = len(df)
+        # 5.1 - max common BPs distribution
+        unq, counts = np.unique(df['max_common_BPs'], return_counts=True)
         sorted_dict = dict(sorted(dict(zip(unq, counts)).items(), key=lambda item: item[1], reverse=True))
         max_common_bps_dist = "\n   ".join([f"{counts} with max common BPs = {unq} ({int(round(counts/num_clusters, 2)*100)} %)" for unq, counts in sorted_dict.items()])
         
         self.logger.info(
             f"----------------   sRNA homologs \n"
             f"-------   BP similarity method = {bp_similarity_method} \n"
-            f"Number of clusters: {len(srna_homologs_df)} \n"
+            f"Number of clusters: {len(df)} \n"
             f"max common BPs distribution: \n"
             f"   {max_common_bps_dist}"
         )
@@ -260,7 +265,7 @@ class Analyzer:
                 
                 # sRNAs to targets to BPs (complete)
                 srna_complete = f"{strain}__{srna_id}__{self.G.nodes[srna_id]['name']}" 
-                targets_to_bps_complete = {f"{target_id}__{self.G.nodes[target_id]['name']}": bps for target_id, bps in srna_targets.items()}
+                targets_to_bps_complete = {f"{target_id}__{self.G.nodes[target_id]['name']}": [f"{bp_id}__{self.G.nodes[bp_id]['lbl']}" for bp_id in bps] for target_id, bps in srna_targets.items()}
                 srnas_to_targets_to_bps[srna_complete] = targets_to_bps_complete
                 
                 # for orthologs clusters of targets
@@ -274,32 +279,40 @@ class Analyzer:
         # 3 - common BPs
         all_common_bps, num_common_bps, max_strains_w_common_bps, all_common_bps_of_max_strains, max_common_bps = self._calc_common_bps(all_bps, bp_similarity_method)
 
-        # 4 - orthologs clusters of all targets (cross-strains)
-        orthologs_clusters_of_all_targets = self._find_orthologs(strain_to_mrna_list, 'mRNA')
-
-        # 5 - description for all strains BPs
-        # 5.1 - Flatten all BPs from all strains
-        all_strain_bps = set()
-        for bp_list in all_bps.values():
-            all_strain_bps.update(bp_list)
-        # 5.2 - Get descriptions for all BPs
-        bp_descriptions = {bp: self.G.nodes[bp]['lbl'] for bp in all_strain_bps}  # self.G.nodes[bp]['meta']['definition']['val']
-        bp_descriptions = dict(sorted(bp_descriptions.items()))
-        bp_descriptions = str(bp_descriptions).replace(',', ';')
+        # 4 - homolog clusters of targets (cross-strains)
+        # complete clusters
+        complete_homolog_clusters_of_targets = self._find_homologs(strain_to_mrna_list, 'mRNA')
+        # filtered clusters - only those that contain at least two targets of sRNAs in the cluster
+        relevant_mrnas = set()
+        for rna_list in strain_to_mrna_list.values():
+            relevant_mrnas.update(rna_list)
+        
+        filtered_homolog_clusters_of_targets = set()
+        for cluster in complete_homolog_clusters_of_targets:
+            rna_homologs = tuple(sorted(set(cluster).intersection(relevant_mrnas)))
+            if len(rna_homologs) >= 2:
+                filtered_homolog_clusters_of_targets.add(rna_homologs)
+        # add info + sort clusters by size (length) from largest to smallest
+        complete_homolog_clusters_of_targets = sorted([tuple(sorted([f"{self.G.nodes[rna]['strain']}__{rna}__{self.G.nodes[rna]['name']}" for rna in cluster])) for cluster in complete_homolog_clusters_of_targets], key=lambda x: len(x), reverse=True)
+        filtered_homolog_clusters_of_targets = sorted([tuple(sorted([f"{self.G.nodes[rna]['strain']}__{rna}__{self.G.nodes[rna]['name']}" for rna in cluster])) for cluster in filtered_homolog_clusters_of_targets], key=lambda x: len(x), reverse=True)
+        
+        # 5 - 
+        max_filtered_homolog_cluster_size = max([len(c) for c in filtered_homolog_clusters_of_targets], default=0)
 
         # 6 - output record
         rec = {
                 'num_srna_w_bps': num_srna_w_bps, 
                 'all_common_BPs': all_common_bps, 
                 'num_common_BPs': num_common_bps, 
-                'max_strains_w_common_bps': max_strains_w_common_bps,
+                'max_strains_with_common_BPs': max_strains_w_common_bps,
                 'all_common_BPs_of_max_strains': all_common_bps_of_max_strains,
                 'max_common_BPs': max_common_bps, 
                 'all_BPs': all_bps, 
                 'num_all_BPs': num_all_bps,
-                'srnas_to_targets_to_bps': srnas_to_targets_to_bps, 
-                'orthologs_clusters_of_all_targets': orthologs_clusters_of_all_targets, 
-                'bp_descriptions': bp_descriptions
+                'complete_homolog_clusters_of_targets': complete_homolog_clusters_of_targets,
+                'filtered_homolog_clusters_of_targets': filtered_homolog_clusters_of_targets,
+                'max_filtered_homolog_cluster_size': max_filtered_homolog_cluster_size,
+                'srnas_to_targets_to_BPs': srnas_to_targets_to_bps, 
         }
 
         return rec
@@ -513,9 +526,9 @@ class Analyzer:
                 f"  Number of unique BPs: {len(unique_bps)}"
             )
     
-    def _find_orthologs(self, strain_to_rna_list: Dict[str, List[str]], rna_str: str) -> List[Tuple[str]]:
+    def _find_homologs(self, strain_to_rna_list: Dict[str, List[str]], rna_str: str) -> List[Tuple[str]]:
         """
-        For each cluster in orthologs_df['cluster'], find which RNAs from strain_to_rna_list are othologs, i.e., belong to the same cluster.
+        For each cluster in homologs_df['cluster'], find which RNAs from strain_to_rna_list are homologs, i.e., belong to the same cluster.
         Return a set of tuples, each tuple contains the RNAs from strain_to_rna_list that belong to the same cluster.
 
         Args:
@@ -525,35 +538,35 @@ class Analyzer:
                 ...
             }
         """
-        orthologs_df = self.srna_homologs if rna_str == 'sRNA' else self.mrna_homologs
-        all_rna_orthologs = []
+        homologs_df = self.srna_homologs if rna_str == 'sRNA' else self.mrna_homologs
         # Flatten all RNAs from strain_to_rna_list
         all_rnas = set()
         for rna_list in strain_to_rna_list.values():
             all_rnas.update(rna_list)
         # Iterate over clusters
-        for cluster in orthologs_df['cluster']:
+        all_rna_homologs = []
+        for cluster in homologs_df['cluster']:
             cluster = cluster if type(cluster) == tuple else ast.literal_eval(cluster)
             # Find intersection with all_rnas
             rna_orthologs = tuple(sorted(set(cluster).intersection(all_rnas)))
             if len(rna_orthologs) > 1:
-                all_rna_orthologs.append(rna_orthologs)
-        return sorted(set(all_rna_orthologs))
+                all_rna_homologs.append(rna_orthologs)
+        return sorted(set(all_rna_homologs))
     
     def _get_orthologs_clusters(self, rna_list: List[str], rna_str: str) -> List[Tuple[str]]:
         """
-        for each RNA in rna_list, find its orthologs cluster from orthologs_df['cluster'].
+        for each RNA in rna_list, find its orthologs cluster from homologs_df['cluster'].
 
         Args:
             rna_list (list): [<RNA_id1>, <RNA_id2>, ...]
         """
 
-        orthologs_df = self.srna_homologs if rna_str == 'sRNA' else self.mrna_homologs
+        homologs_df = self.srna_homologs if rna_str == 'sRNA' else self.mrna_homologs
 
         orthologs_clusters = []
         for rna in rna_list:
             # find the cluster that contains this RNA
-            for cluster in orthologs_df['cluster']:
+            for cluster in homologs_df['cluster']:
                 cluster = cluster if type(cluster) == tuple else ast.literal_eval(cluster)
                 if rna in cluster:
                     orthologs_clusters.append(tuple(sorted(cluster)))
@@ -692,7 +705,7 @@ class Analyzer:
 
         # 2 - identify orthologs
         for rna_str in ['sRNA', 'mRNA']:
-            df[f'related_{rna_str}_orthologs'] = list(map(self._find_orthologs, df[f'related_{rna_str}s'], np.repeat(rna_str, len(df))))
+            df[f'related_{rna_str}_orthologs'] = list(map(self._find_homologs, df[f'related_{rna_str}s'], np.repeat(rna_str, len(df))))
 
         # 3 - rank and add info
         # 3.1 - all Focus sRNAs: find all sRNAs in G that have num orthologs <= 0
