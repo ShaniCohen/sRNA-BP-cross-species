@@ -71,11 +71,11 @@ class DataLoader:
         self.ecoli_k12_nm = 'ecoli_k12'    
         self.ecoli_epec_nm = 'ecoli_epec' 
         self.salmonella_nm = 'salmonella'
-        self.vibrio_nm = 'vibrio'
         self.klebsiella_nm = 'klebsiella'
+        self.vibrio_nm = 'vibrio'
         self.pseudomonas_nm = 'pseudomonas'
 
-        self.strains = [self.ecoli_k12_nm, self.ecoli_epec_nm, self.salmonella_nm, self.vibrio_nm, self.klebsiella_nm, self.pseudomonas_nm]
+        self.strains = [self.ecoli_k12_nm, self.ecoli_epec_nm, self.salmonella_nm, self.klebsiella_nm, self.vibrio_nm, self.pseudomonas_nm]
         
         self.strains_data = {}
         self.srna_acc_col = 'sRNA_accession_id'
@@ -181,33 +181,7 @@ class DataLoader:
             'all_inter_srna_acc_col': 'sRNA_accession_id',
             'all_inter_mrna_acc_col': 'mRNA_accession_id'
         })
-
-        # 4 - Vibrio cholerae O1 biovar El Tor str. N16961 (NC_002505.1 and NC_002506.1)  (Huber 2022)
-        vibrio_dir = self.config[f'{self.vibrio_nm}_dir']
-        vibrio_mrna = read_df(file_path=join(self.config['rna_dir'], vibrio_dir, "huber_vibrio_all_mRNA_molecules.csv"))
-        vibrio_srna = read_df(file_path=join(self.config['rna_dir'], vibrio_dir, "huber_vibrio_all_sRNA_molecules.csv"))
-        vibrio_inter = read_df(file_path=join(self.config['interactions_dir'], vibrio_dir, "huber_vibrio_interactions.csv"))
-
-        vibrio_mrna, vibrio_srna, vibrio_inter = \
-            ap.preprocess_vibrio_inter(mrna_data=vibrio_mrna, srna_data=vibrio_srna, inter_data=vibrio_inter)
-        vibrio_unq_inter, vibrio_sum, vibrio_srna, vibrio_mrna = \
-            ap.analyze_vibrio_inter(mrna_data=vibrio_mrna, srna_data=vibrio_srna, inter_data=vibrio_inter)
-        
-        # 4.1 - update info
-        if self.vibrio_nm not in self.strains_data:
-            self.strains_data[self.vibrio_nm] = {}
-        self.strains_data[self.vibrio_nm].update({
-            'all_mrna': vibrio_mrna,
-            'all_srna': vibrio_srna,
-            'unq_inter': vibrio_unq_inter,
-            'all_inter': vibrio_inter,
-            'all_srna_acc_col': 'sRNA_accession_id',
-            'all_mrna_acc_col': 'mRNA_accession_id',
-            'all_inter_srna_acc_col': 'sRNA_accession_id',
-            'all_inter_mrna_acc_col': 'mRNA_accession_id'
-        })
-
-        # 5 - Klebsiella pneumoniae str. SGH10; KL1, ST23  (Goh 2024)
+        # 4 - Klebsiella pneumoniae str. SGH10; KL1, ST23  (Goh 2024)
         klebsiella_dir = self.config[f'{self.klebsiella_nm}_dir']
         klebsiella_mrna = read_df(file_path=join(self.config['rna_dir'], klebsiella_dir, "goh_klebsiella_all_mRNA_molecules.csv"))
         klebsiella_srna = read_df(file_path=join(self.config['rna_dir'], klebsiella_dir, "goh_klebsiella_all_sRNA_molecules.csv"))
@@ -232,6 +206,31 @@ class DataLoader:
             'all_inter_mrna_acc_col': 'mRNA_accession_id'
         })
 
+        # 5 - Vibrio cholerae O1 biovar El Tor str. N16961 (NC_002505.1 and NC_002506.1)  (Huber 2022)
+        vibrio_dir = self.config[f'{self.vibrio_nm}_dir']
+        vibrio_mrna = read_df(file_path=join(self.config['rna_dir'], vibrio_dir, "huber_vibrio_all_mRNA_molecules.csv"))
+        vibrio_srna = read_df(file_path=join(self.config['rna_dir'], vibrio_dir, "huber_vibrio_all_sRNA_molecules.csv"))
+        vibrio_inter = read_df(file_path=join(self.config['interactions_dir'], vibrio_dir, "huber_vibrio_interactions.csv"))
+
+        vibrio_mrna, vibrio_srna, vibrio_inter = \
+            ap.preprocess_vibrio_inter(mrna_data=vibrio_mrna, srna_data=vibrio_srna, inter_data=vibrio_inter)
+        vibrio_unq_inter, vibrio_sum, vibrio_srna, vibrio_mrna = \
+            ap.analyze_vibrio_inter(mrna_data=vibrio_mrna, srna_data=vibrio_srna, inter_data=vibrio_inter)
+        
+        # 5.1 - update info
+        if self.vibrio_nm not in self.strains_data:
+            self.strains_data[self.vibrio_nm] = {}
+        self.strains_data[self.vibrio_nm].update({
+            'all_mrna': vibrio_mrna,
+            'all_srna': vibrio_srna,
+            'unq_inter': vibrio_unq_inter,
+            'all_inter': vibrio_inter,
+            'all_srna_acc_col': 'sRNA_accession_id',
+            'all_mrna_acc_col': 'mRNA_accession_id',
+            'all_inter_srna_acc_col': 'sRNA_accession_id',
+            'all_inter_mrna_acc_col': 'mRNA_accession_id'
+        })
+
         # 6 - Pseudomonas aeruginosa PAO1  (Gebhardt 2023)
         pseudomonas_dir = self.config[f'{self.pseudomonas_nm}_dir']
         pseudomonas_mrna = read_df(file_path=join(self.config['rna_dir'], pseudomonas_dir, "gebhardt_pseudomonas_all_mRNA_molecules.csv"))
@@ -243,7 +242,7 @@ class DataLoader:
         pseudomonas_unq_inter, pseudomonas_sum, pseudomonas_srna, pseudomonas_mrna = \
             ap.analyze_pseudomonas_inter(mrna_data=pseudomonas_mrna, srna_data=pseudomonas_srna, inter_data=pseudomonas_inter)
         
-        # 4.1 - update info
+        # 6.1 - update info
         if self.pseudomonas_nm not in self.strains_data:
             self.strains_data[self.pseudomonas_nm] = {}
         self.strains_data[self.pseudomonas_nm].update({
@@ -556,31 +555,31 @@ class DataLoader:
             "eggnog_annot": eggnog_annot,
             "eggnog_header_col": e_header_col
         })
-    
-        # 4 - Vibrio cholerae
-        vibrio_dir = self.config[f'{self.vibrio_nm}_dir']
-        vibrio_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], vibrio_dir, 'InterProScan', 'Cholerae_proteins.fasta.json'))
-        
-        interproscan_annot, i_header_col = ap_annot.preprocess_interproscan_annot(vibrio_annot_interproscan)
 
-        # 4.1 - update info
-        if self.vibrio_nm not in self.strains_data:
-            self.strains_data[self.vibrio_nm] = {}
-        self.strains_data[self.vibrio_nm].update({
-            "interproscan_annot": interproscan_annot,
-            "interproscan_header_col": i_header_col
-        })
-
-        # 5 - Klebsiella pneumoniae
+        # 4 - Klebsiella pneumoniae
         klebsiella_dir = self.config[f'{self.klebsiella_nm}_dir']
         klebsiella_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], klebsiella_dir, 'InterProScan', 'Klebsiella_proteins.fasta.json'))
         
         interproscan_annot, i_header_col = ap_annot.preprocess_interproscan_annot(klebsiella_annot_interproscan)
 
-        # 5.1 - update info
+        # 4.1 - update info
         if self.klebsiella_nm not in self.strains_data:
             self.strains_data[self.klebsiella_nm] = {}
         self.strains_data[self.klebsiella_nm].update({
+            "interproscan_annot": interproscan_annot,
+            "interproscan_header_col": i_header_col
+        })
+    
+        # 5 - Vibrio cholerae
+        vibrio_dir = self.config[f'{self.vibrio_nm}_dir']
+        vibrio_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], vibrio_dir, 'InterProScan', 'Cholerae_proteins.fasta.json'))
+        
+        interproscan_annot, i_header_col = ap_annot.preprocess_interproscan_annot(vibrio_annot_interproscan)
+
+        # 5.1 - update info
+        if self.vibrio_nm not in self.strains_data:
+            self.strains_data[self.vibrio_nm] = {}
+        self.strains_data[self.vibrio_nm].update({
             "interproscan_annot": interproscan_annot,
             "interproscan_header_col": i_header_col
         })
@@ -679,9 +678,9 @@ class DataLoader:
             'eco': self.ecoli_k12_nm,
             'epec': self.ecoli_epec_nm,
             'salmonella': self.salmonella_nm,
+            'klebsiella': self.klebsiella_nm,
             'cholerae': self.vibrio_nm,
-            'klebsiella': self.klebsiella_nm,  # TODO: check for klebsiella when data is ready
-            'pseudomonas': self.pseudomonas_nm  # TODO: check for pseudomonas when data is ready
+            'pseudomonas': self.pseudomonas_nm
         }
 
         # 2 - load the clstr file
@@ -725,9 +724,6 @@ class DataLoader:
         clstr_df[col_similarity_score] =  pd.DataFrame(list(map(lambda x: float(re.findall(f"(.*?)%$", x)[0]) if pd.notnull(x) else x, clstr_df['similarity_score_str'])))
         clstr_df = clstr_df[out_cols]
 
-        # # patch to adjust salmonella's accession id
-        # clstr_df[col_acc] = list(map(lambda strain, acc, locus: locus if strain==self.salmonella_nm else acc, clstr_df[col_strain_str], clstr_df[col_acc], clstr_df[col_locus]))
-        
         return clstr_df
     
     def _filter_invalid_matches(self, clstr_df: pd.DataFrame, clstr_nm: str, seq_type: str, debug: bool = False,
@@ -768,15 +764,4 @@ class DataLoader:
         else:
             raise ValueError(f"seq_type {seq_type} is not supported")
         return res
-    
-    # def compute_unique_mrna_names(self) -> pd.DataFrame:
-    #     """Compute the number of unique mRNA_name for each value of signature_library in interproscan_annot."""
-    #     results = []
-    #     for strain, data in self.strains_data.items():
-    #         if 'interproscan_annot' in data:
-    #             unique_counts = data['interproscan_annot'].groupby('signature_library')['mRNA_name'].nunique().reset_index()
-    #             unique_counts.columns = ['signature_library', 'unique_mrna_name_count']
-    #             unique_counts['strain'] = strain
-    #             results.append(unique_counts)
-    #     return pd.concat(results, ignore_index=True)
 
