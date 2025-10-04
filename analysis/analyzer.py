@@ -37,12 +37,12 @@ class Analyzer:
         self.U = graph_utils
 
         # ---------  RUNTIME FLAGS  ---------
-        self.run_clustering_of_rna_homologs = True
+        self.run_clustering_of_rna_homologs = False
         
         # ---------  CONFIGURATIONS  ---------
-        self.enrichment_pv_threshold = 0.05
         self.run_enrichment = self.config['run_enrichment']
         self.run_multiple_testing_correction = self.config['run_multiple_testing_correction']
+        self.enrichment_pv_threshold = self.config['enrichment_pv_threshold']
         
         conf_str = f"{self.graph_version}{'_w_Enrichment' if self.run_enrichment else ''}{'_MTC' if self.run_multiple_testing_correction else ''}"
 

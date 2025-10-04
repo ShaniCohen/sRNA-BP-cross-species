@@ -40,6 +40,7 @@
   "analyzer":{
     "analysis_output_dir": "analysis_output",
     "run_enrichment": true,
-    "run_multiple_testing_correction": false 
+    "run_multiple_testing_correction": false,
+    "enrichment_pv_threshold": 0.05
   }
 }
