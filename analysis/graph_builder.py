@@ -20,7 +20,7 @@ class GraphBuilder:
         self.logger = logger
         self.logger.info(f"initializing GraphBuilder")
         self.config = config
-        self.version = self.config['version']  # "k12_curated_and_ips", "k12_curated", "k12_ips"
+        self.version = self.config['version']  # "k12_curated_ips", "k12_curated", "k12_ips"
 
         self.ecoli_k12_nm = data_loader.ecoli_k12_nm
         # self.vibrio_nm = data_loader.vibrio_nm
@@ -110,10 +110,10 @@ class GraphBuilder:
         for strain, data in self.strains_data.items():  # describe proprocessing in the latex paper
             # E.coli K12
             if strain == self.ecoli_k12_nm:
-                if self.version in ["k12_curated", "k12_curated_and_ips"]:
+                if self.version in ["k12_curated", "k12_curated_ips"]:
                     self._add_all_mrna_and_curated_bp_annot(strain, data['all_mrna_w_curated_annot'])
                     # Example mRNA = 'EG10001', GO BP = ['0006522', '0030632', '0071555', '0009252', '0008360']
-                if self.version in ["k12_ips", "k12_curated_and_ips"]:
+                if self.version in ["k12_ips", "k12_curated_ips"]:
                     self._add_all_mrna_and_ips_bp_annot(strain, data['all_mrna_w_ips_annot'])
             # Other strains
             else:
@@ -357,7 +357,7 @@ class GraphBuilder:
     def _add_all_mrna_and_ips_bp_annot(self, strain, all_mrna_w_ips_annot):
         self.logger.info(f"adding mRNA nodes and InterProScan mRNA-GO annotations for {strain}")
         assert sum(pd.isnull(all_mrna_w_ips_annot['mRNA_accession_id'])) == 0
-        log_warning = False if strain == self.ecoli_k12_nm and self.version == 'k12_curated_and_ips' else True
+        log_warning = False if strain == self.ecoli_k12_nm and self.version == 'k12_curated_ips' else True
         bp_count, missing_bp_dicts = 0, []
 
         for _, r in all_mrna_w_ips_annot.iterrows():

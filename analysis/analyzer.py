@@ -36,23 +36,33 @@ class Analyzer:
         self.G = graph_builder.get_graph()
         self.U = graph_utils
 
-        # RNA clustering (homologs)
-        self.run_clustering_of_rna_homologs = False
+        # ---------  RUNTIME FLAGS  ---------
+        self.run_clustering_of_rna_homologs = True
+        
+        # ---------  CONFIGURATIONS  ---------
+        self.enrichment_pv_threshold = 0.05
+        self.run_enrichment = self.config['run_enrichment']
+        self.run_multiple_testing_correction = self.config['run_multiple_testing_correction']
+        
+        conf_str = f"{self.graph_version}{'_w_Enrichment' if self.run_enrichment else ''}{'_MTC' if self.run_multiple_testing_correction else ''}"
 
         # output paths
-        self.out_path_homologs_clustering = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "Clustering_homologs"))
-        self.out_path_summary_tables = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "Summary_tables"))
-        self.out_path_analysis_tool_1 = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "Analysis_tool_1"))
-        self.out_path_analysis_tool_2 = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "Analysis_tool_2"))
+        parent_dir = join(self.config['analysis_output_dir'], conf_str)
+        self.out_path_clustering_homologs = create_dir_if_not_exists(join(parent_dir, "Clustering_homologs"))
+        self.out_path_clustering_paralogs_only = create_dir_if_not_exists(join(parent_dir, "Clustering_paralogs_only"))
+        self.out_path_enrichment = create_dir_if_not_exists(join(parent_dir, "Enrichment"))
+        self.out_path_summary_tables = create_dir_if_not_exists(join(parent_dir, "Summary_tables"))
+        self.out_path_analysis_tool_1 = create_dir_if_not_exists(join(parent_dir, "Analysis_tool_1"))
+        self.out_path_analysis_tool_2 = create_dir_if_not_exists(join(parent_dir, "Analysis_tool_2"))
+
+        # file names suffix
+        self.out_file_suffix = f"v_{conf_str}"
 
         # TODO: remove after testing
         self.strains_data = graph_builder.strains_data
         self.ips_go_annotations = graph_builder.get_ips_go_annotations()
 
-        # TODO: set enrichment p-value threshold
-        self.enrichment_pv_threshold = 0.05
-
-    def run_analysis(self, dump_meta: bool = True):
+    def run_analysis(self):
         """
         GO node is represented as a dict item:
             <id_str> : {'type': <str>, 'lbl': <str>, 'meta': <dict>}
@@ -69,8 +79,8 @@ class Analyzer:
         # 2 - Cluster RNA homologs (orthologs and paralogs)
         if self.run_clustering_of_rna_homologs:   
             self._cluster_rna_homologs()
-        self.srna_homologs = read_df(join(self.out_path_homologs_clustering, f"sRNA_homologs__v_{self.graph_version}.csv"))
-        self.mrna_homologs = read_df(join(self.out_path_homologs_clustering, f"mRNA_homologs__v_{self.graph_version}.csv"))
+        self.srna_homologs = read_df(join(self.out_path_clustering_homologs, f"sRNA_homologs__{self.out_file_suffix}.csv"))
+        self.mrna_homologs = read_df(join(self.out_path_clustering_homologs, f"mRNA_homologs__{self.out_file_suffix}.csv"))
 
         # 3 - Map sRNAs to biological processes (BPs)
         self.logger.info("----- Before enrichment:")
@@ -78,12 +88,11 @@ class Analyzer:
         self._log_srna_bp_mapping(srna_bp_mapping)
 
         # 4 - Enrichment (per strain): per sRNA, find and keep only significant biological processes (BPs) that its targets are invovlved in.
-        # self.logger.info("----- After enrichment:")
-        # srna_bp_mapping_post_en, meta = self._apply_enrichment(srna_bp_mapping)
-        # self._log_mapping(srna_bp_mapping_post_en)
-        # # 4.1 - dump metadata
-        # if dump_meta:
-        #     self._dump_metadata(meta)
+        if self.run_enrichment:
+            self.logger.info("----- After enrichment:")
+            srna_bp_mapping, meta = self._apply_enrichment(srna_bp_mapping)
+            self._log_srna_bp_mapping(srna_bp_mapping)
+            self._dump_metadata(meta)
 
         self.logger.info(f"--------------   Analysis Tools   --------------")
         # ------   Analysis 1 - Cross-Species Conservation of sRNAs' Functionality
@@ -96,8 +105,8 @@ class Analyzer:
 
     def _cluster_rna_homologs(self):
         # 1 - paralogs only
-        self._analyze_paralogs_only('sRNA', self.U.srna)
-        self._analyze_paralogs_only('mRNA', self.U.mrna)
+        self._cluster_paralogs_only('sRNA', self.U.srna)
+        self._cluster_paralogs_only('mRNA', self.U.mrna)
         # 2 - homologs
         self._cluster_homologs('sRNA', self.U.srna)
         self._cluster_homologs('mRNA', self.U.mrna)
@@ -230,7 +239,18 @@ class Analyzer:
         df = df.sort_values(by=['score'], ascending=False).reset_index(drop=True)
 
         # 4 - dump results
-        write_df(df, join(self.out_path_analysis_tool_1, f"Analysis_Tool_1__sRNA_homologs_to_common_BPs__v_{self.graph_version}.csv"))
+        # 4.1 - csv
+        write_df(df, join(self.out_path_analysis_tool_1, f"Tool_1__sRNA_homologs_to_common_BPs__{self.out_file_suffix}.csv"))
+        # 4.2 - manual txt
+        clusters_for_txt = [('E2348C_ncR46', 'G0-8867', 'GcvB', 'gcvB', 'ncRNA0016'), ('E2348C_ncR22', 'G0-8863', 'gene-SGH10_RS11370', 'ncRNA0059'), ('E2348C_ncR58', 'G0-8871', 'arcZ', 'ncRNA0002'), ('E2348C_ncR33', 'G0-8878', 'cyaR', 'ncRNA0009'), ('E2348C_ncR60', 'G0-8872', 'RyhB', 'ncRNA0030', 'ncRNA0069', 'ryhB-1', 'ryhB-2'), ('E2348C_ncR66', 'EG30098', 'Spot42', 'ncRNA0077', 'spf'), ('E2348CN_0008', 'G0-10671', 'mgrR', 'ncRNA0046'), ('E2348CN_0007', 'G0-10677', 'fnrS', 'ncRNA0015'), ('E2348CN_0013', 'G0-16649', 'cpxQ', 'ncRNA0206'), ('E2348C_ncR48', 'G0-8882', 'ncRNA0052', 'omrB')]
+        dump_manual_txt = True
+        if dump_manual_txt:
+            with open(join(self.out_path_analysis_tool_1, f"Tool_1__Manual_{self.graph_version}.txt"), 'w', encoding='utf-8') as f:
+                for _, row in df.iterrows():
+                    cluster = row['cluster'] if type(row['cluster']) == tuple else ast.literal_eval(row['cluster'])
+                    if cluster in clusters_for_txt:
+                        f.write(f"{row['cluster']}\n")
+                        f.write(f"{row['srnas_to_targets_to_BPs']}\n\n")
 
         # 5 - log statistics
         num_clusters = len(df)
@@ -350,8 +370,8 @@ class Analyzer:
         
         return all_common_bps, num_common_bps, max_strains_w_common_bps, all_common_bps_of_max_strains, max_common_bps
 
-    def _analyze_paralogs_only(self, rna_str: str, rna_type: str):
-        self.logger.info(f"Analyzing {rna_str} paralogs")
+    def _cluster_paralogs_only(self, rna_str: str, rna_type: str):
+        self.logger.info(f"Clustering and analyzing {rna_str} paralogs only")
         for strain in self.U.strains:
             self.logger.info(f"Strain: {strain}")
             # 1 - all RNAs
@@ -364,14 +384,22 @@ class Analyzer:
                     cluster = set([rna] + rna_paralogs)
                     if cluster not in rna_paralogs_clusters:
                         rna_paralogs_clusters.append(cluster)
-            # 3 - log and dump
+            # 3 - log
             self.logger.info(
                 f"  ----------------   \n"
                 f"  Number of {rna_str}: {len(rna_nodes)} \n"
                 f"  Number of {rna_str} with paralogs: {sum(len(c) for c in rna_paralogs_clusters)} \n"
                 f"  Number of {rna_str} paralogs clusters: {len(rna_paralogs_clusters)}"
             )
-            self._dump_paralogs(strain, rna_str, rna_paralogs_clusters)
+            # 4 - dump
+            with open(join(self.out_path_clustering_paralogs_only, f"{strain}_{rna_type}_paralogs_clusters.txt"), 'w', encoding='utf-8') as f:
+                f.write(f"Strain: {strain}\n")
+                f.write(f"{rna_type} paralogs:\n")
+                for cluster in rna_paralogs_clusters:
+                    f.write("\n")
+                    for rna_node_id in cluster:
+                        node_info = self.G.nodes[rna_node_id]
+                        f.write(f"  {rna_node_id}: {json.dumps(node_info, ensure_ascii=False)}\n")
     
     def _cluster_homologs(self, rna_str: str, rna_type: str) -> pd.DataFrame:
         self.logger.info(f"Analyzing {rna_str} homologs")
@@ -485,20 +513,7 @@ class Analyzer:
             f"{per_strain_analysis}"
         )
         # 4 - dump
-        write_df(all_homologs_df, join(self.out_path_homologs_clustering, f"{rna_str}_homologs__v_{self.graph_version}.csv"))
-
-    def _dump_paralogs(self, strain: str, rna_type: str, rna_paralogs_clusters: List[Set[str]]):
-        out_path = create_dir_if_not_exists(join(self.config['analysis_output_dir'], "paralogs_only"))
-        out_file = join(out_path, f"{strain}_{rna_type}_paralogs_clusters.txt")
-
-        with open(out_file, 'w', encoding='utf-8') as f:
-            f.write(f"Strain: {strain}\n")
-            f.write(f"{rna_type} paralogs:\n")
-            for cluster in rna_paralogs_clusters:
-                f.write("\n")
-                for rna_node_id in cluster:
-                    node_info = self.G.nodes[rna_node_id]
-                    f.write(f"  {rna_node_id}: {json.dumps(node_info, ensure_ascii=False)}\n")
+        write_df(all_homologs_df, join(self.out_path_clustering_homologs, f"{rna_str}_homologs__{self.out_file_suffix}.csv"))
 
     def _log_mrna_without_bp(self, strain: str, unq_targets_without_bp: Set[str]):
             ips_annot = self.ips_go_annotations.get(strain, None)
@@ -742,7 +757,18 @@ class Analyzer:
         df = df.drop(columns=['strain_dict'])
 
         # 6 - dump results
-        write_df(df, join(self.out_path_analysis_tool_2, f"Analysis_Tool_2__BP_trees_of_focus_sRNAs_{srna_max_orthologs}_orthologs__v_{self.graph_version}.csv"))
+        # 6.1 - csv
+        write_df(df, join(self.out_path_analysis_tool_2, f"Tool_2__BP_of_focus_sRNAs_{srna_max_orthologs}_orthologs__{self.out_file_suffix}.csv"))
+        # 6.2 - manual txt
+        bps_for_txt = [6355, 55085]
+        dump_manual_txt = True
+        if dump_manual_txt:
+            for _, row in df.iterrows():
+                bp_id = int(row['bp_id'])
+                if bp_id in bps_for_txt:
+                    with open(join(self.out_path_analysis_tool_2, f"Tool_2__Manual_BP_{bp_id}__{self.graph_version}.txt"), 'w', encoding='utf-8') as f:
+                        for col in df.columns:
+                            f.write(f"{col}\n{row[col]}\n\n")         
 
         # 7 - log statistics
         self.logger.info(f"--------- BP to RNAs mapping\n{df.head()}")
@@ -776,7 +802,7 @@ class Analyzer:
             records.append({'bp_id': bp, 'lbl': self.G.nodes[bp]['lbl'], 'definition': self.G.nodes[bp]['meta']['definition']['val']})
         bps_of_annotated_mrnas = pd.DataFrame(records)
         # 3 - Dump the DataFrame to a CSV file
-        write_df(bps_of_annotated_mrnas, join(self.out_path_summary_tables, f"BPs_of_annotated_mrnas__v_{self.graph_version}.csv"))
+        write_df(bps_of_annotated_mrnas, join(self.out_path_summary_tables, f"BPs_of_annotated_mrnas__{self.out_file_suffix}.csv"))
         return
     
     def _dump_metadata(self, metadata: dict):
@@ -806,10 +832,7 @@ class Analyzer:
                 ...
             }  
         """
-        out_path = self.config['analysis_output_dir']
-        self.logger.info(f"Dumping metadata to {out_path}")
-        os.makedirs(out_path, exist_ok=True)
-
+        self.logger.info(f"Dumping enrichment metadata...")
         for strain, srna_data in metadata.items():
             rows = []
             for srna_id, bp_data in srna_data.items():
@@ -831,9 +854,7 @@ class Analyzer:
                     })
 
             df = pd.DataFrame(rows)
-            file_path = os.path.join(out_path, f"metadata_per_srna_{strain}.csv")
-            df.to_csv(file_path, index=False)
-            # self.logger.debug(f"Metadata for strain {strain} dumped to {file_path}")
+            df.to_csv(join(self.out_path_enrichment, f"metadata_per_srna_{strain}.csv"), index=False)
     
     def compare_bp_to_accociated_mrnas(self, bp_to_accociated_mrnas, bp_to_accociated_mrnas_g):
         # Check if keys are the same
@@ -909,7 +930,7 @@ class Analyzer:
             p_value (float):  the p-value of the hypergeometric test
             adj_p_value (float): the adjusted p-value of the hypergeometric test (after multiple testing correction)
         """
-        self.logger.info(f"applying enrichment (finding significant BPs)")
+        self.logger.info(f"applying enrichment {'+ MTC' if self.run_multiple_testing_correction else ''} (finding significant BPs)")
         filtered_mapping, metadata = {}, {}
         for strain, d in mapping.items():   
             ############  Population
@@ -981,14 +1002,15 @@ class Analyzer:
                 for i, bp in enumerate(bps):
                     bp_to_meta[bp]['adj_p_value'] = adj_p_values[i]
 
-                ################################################################
-                # TODO: decide how to filter the BPs (pre or post correction, which threshold, etc.)
-                ################################################################
+                ########################################################################################
+                #     Decide how to filter the BPs (pre or post correction, which threshold, etc.)
+                ########################################################################################
+                pv_col = 'adj_p_value' if self.run_multiple_testing_correction else 'p_value'
+                
                 # 6 - find significant BPs for the sRNA - use adjusted p-values
                 significant_srna_bps = []
                 for bp, meta in bp_to_meta.items():
-                    # bp_p_value = meta['p_value']
-                    bp_p_value = meta['adj_p_value']
+                    bp_p_value = meta[pv_col]
                     if bp_p_value <= self.enrichment_pv_threshold:
                         significant_srna_bps.append(bp)
                 
@@ -1006,8 +1028,7 @@ class Analyzer:
                 
                 # 9 - update metadata for the sRNA
                 d_meta[srna] = bp_to_meta
-                ################################################################
-                ################################################################
+                ########################################################################################
                 
             filtered_mapping[strain] = d_filtered
             metadata[strain] = d_meta
