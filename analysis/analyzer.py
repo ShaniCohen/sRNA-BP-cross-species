@@ -102,6 +102,45 @@ class Analyzer:
         # generate mapping of BP to mRNAs and sRNAs
         bp_rna_mapping = self._generate_bp_rna_mapping(srna_bp_mapping)
         self._analysis_2_bp_rna_mapping(bp_rna_mapping)
+    
+    def _run_ad_hoc_outputs_analysis_1(self, srnas_cluster: Tuple[str], bp_str: str):
+        self.logger.info(f"Running Ad-hoc Analysis...")
+        self.srna_homologs = read_df(join(self.out_path_clustering_homologs, f"sRNA_homologs__{self.out_file_suffix}.csv"))
+        self.mrna_homologs = read_df(join(self.out_path_clustering_homologs, f"mRNA_homologs__{self.out_file_suffix}.csv"))
+        df = read_df(join(self.out_path_analysis_tool_1, f"Tool_1__sRNA_homologs_to_common_BPs__{self.out_file_suffix}.csv"))
+        
+        # 1 - get tree of sRNA homologs cluster
+        srnas_to_targets_to_bps = ast.literal_eval(df[df['cluster'] == str(srnas_cluster)]['srnas_to_targets_to_BPs'].values[0])
+        
+        # 2 - pruned tree: keep only paths to the given BP
+        pruned = {}
+        targets_strs = set()
+        for srna, targets_to_bps in srnas_to_targets_to_bps.items():
+            for target, bp_strs in targets_to_bps.items():
+                if bp_str in bp_strs:
+                    if not srna in pruned.keys():
+                        pruned[srna] = {}
+                    pruned[srna][target] = bp_str
+                    targets_strs.add(target)
+        targets_ids = sorted(set([s.split("__")[0] for s in targets_strs]))
+        
+        # 3 - homolog clusters of targets in pruned
+        complete_ortholog_clusters_of_targets = self._get_orthologs_clusters(targets_ids, 'mRNA')
+        filtered_ortholog_clusters_of_targets = [tuple(set(tpl).intersection(targets_ids)) for tpl in complete_ortholog_clusters_of_targets if len(set(tpl).intersection(targets_ids)) > 1]        
+        
+        # 4 - add original info
+        complete_ortholog_clusters_of_targets = [tuple([f"{id}__{self.G.nodes[id]['name']}" for id in tpl]) for tpl in complete_ortholog_clusters_of_targets]
+        filtered_ortholog_clusters_of_targets = [tuple([f"{id}__{self.G.nodes[id]['name']}" for id in tpl]) for tpl in filtered_ortholog_clusters_of_targets]
+        # 4 - dump
+        with open(join(self.out_path_analysis_tool_1, f"Tool_1__Ad-hoc_{srnas_cluster[0]}_{bp_str}_{self.graph_version}.txt"), 'w', encoding='utf-8') as f:
+            f.write(f"Cluster: \n{srnas_cluster}\n\n")
+            f.write(f"BP: \n{bp_str}\n\n")
+            f.write(f"PRUNED_srnas_to_targets_to_BPs: \n{pruned}\n\n")
+            f.write(f"PRUNED_targets: \n{sorted(targets_strs)}\n\n")
+            f.write(f"PRUNED_filtered_ortholog_clusters_of_targets: \n{filtered_ortholog_clusters_of_targets}\n\n")
+            f.write(f"PRUNED_complete_ortholog_clusters_of_targets: \n{complete_ortholog_clusters_of_targets}\n\n")
+
+        return pruned
 
     def _cluster_rna_homologs(self):
         # 1 - paralogs only
