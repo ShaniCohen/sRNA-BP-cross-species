@@ -20,7 +20,6 @@ class GraphBuilder:
         self.logger = logger
         self.logger.info(f"initializing GraphBuilder")
         self.config = config
-        self.version = self.config['version']  # "k12_curated_ips", "k12_curated", "k12_ips"
 
         self.ecoli_k12_nm = data_loader.ecoli_k12_nm
         # self.vibrio_nm = data_loader.vibrio_nm
@@ -49,10 +48,23 @@ class GraphBuilder:
         """
         self.graph_is_built = False
 
-        self.U = graph_utils
-        # define annotation types to add (curated are always added)
+        # ---------  RUNTIME FLAGS  ---------  
+        # #TODO: adjust that (merge with version/ add to conf)
         self.add_ips_annot = True
         self.add_eggnog_annot = False
+        
+        # ---------  CONFIGURATIONS  ---------
+        self.version = self.config['version']  # "k12_curated_ips", "k12_curated", "k12_ips"
+        
+        conf_str = f"{self.version}"
+
+        # output paths
+        parent_dir = join(self.config['builder_output_dir'], conf_str)
+        self.out_path_mrna_bp_annot = create_dir_if_not_exists(join(parent_dir, "mRNA_BP_annot"))
+        self.out_path_homology_pairs_stats = create_dir_if_not_exists(join(parent_dir, "Homology_pairs_statistics"))
+
+        # file names suffix
+        self.out_file_suffix = f"v_{conf_str}"
     
     def get_version(self) -> str:
         return self.config.get('version')
@@ -152,6 +164,9 @@ class GraphBuilder:
         # 2 - named-based homology edges (for all strains)
         self._add_rna_homology_edges_name_based(rna_type=self.U.srna)
         self._add_rna_homology_edges_name_based(rna_type=self.U.mrna)
+        # 3 - calc & dump statistics
+        self._dump_homology_edges_stats(rna_type=self.U.srna)
+        self._dump_homology_edges_stats(rna_type=self.U.mrna)
 
     def _add_rna_homology_edges_clustering_based(self, rna_type: str):
         """Add homology edges between RNA nodes based on clustering data (bacteria pairs)."""
@@ -173,6 +188,35 @@ class GraphBuilder:
                             # orthologs: different strains
                             if not self.U.are_orthologs(self.G, node_id_1, node_id_2, strain_1, strain_2):
                                 self.G = self.U.add_edges_rna_rna_orthologs(self.G, node_id_1, node_id_2)
+    
+    def _dump_homology_edges_stats(self, rna_type: str):
+        """Add homology edges between their RNA nodes and RNA nodes of all other strain 
+           based on RNA names (bacteria pairs)."""
+        self.logger.info(f"adding {rna_type} homology edges - name based")
+        nm_col = 'sRNA_name' if rna_type==self.U.srna else 'mRNA_name'
+        id_col = self.srna_acc_col if rna_type==self.U.srna else self.mrna_acc_col
+
+        for curr_strain in self.strains_data.keys():  # [self.vibrio_nm, self.pseudomonas_nm]
+            all_rna_curr = self.strains_data[curr_strain][f'all_{rna_type}'].copy()[[id_col, nm_col]]
+            all_rna_curr[nm_col] = all_rna_curr[nm_col].apply(lambda x: x.lower())
+            all_rna_curr = all_rna_curr.rename(columns={col: f"{col}_curr" for col in all_rna_curr.columns})
+            # compare with all other strains
+            for other_strain, other_data in self.strains_data.items():
+                if other_strain != curr_strain:
+                    all_rna_other = other_data[f'all_{rna_type}'].copy()[[id_col, nm_col]]
+                    all_rna_other[nm_col] = all_rna_other[nm_col].apply(lambda x: x.lower())
+                    all_rna_other = all_rna_other.rename(columns={col: f"{col}_other" for col in all_rna_other.columns})
+                    matches = pd.merge(all_rna_curr, all_rna_other, left_on=f"{nm_col}_curr", right_on=f"{nm_col}_other", how='inner')
+                    for _, match in matches.iterrows():
+                        curr_node_id = match[f"{id_col}_curr"]
+                        other_node_id = match[f"{id_col}_other"]
+                        if not self.U.are_orthologs(self.G, curr_node_id, other_node_id, curr_strain, other_strain):
+                            # TODO: cosider to add a 'name_based' attribute to the edge data
+                            self.G = self.U.add_edges_rna_rna_orthologs(self.G, curr_node_id, other_node_id)
+        
+        # 
+        df = pd.DataFrame()
+        write_df(df, join(self.out_path_homology_pairs_stats, f"TBD_{self.out_file_suffix}.csv"))
     
     def _add_rna_homology_edges_name_based(self, rna_type: str):
         """Add homology edges between their RNA nodes and RNA nodes of all other strain 
@@ -329,8 +373,7 @@ class GraphBuilder:
                     'BP_eggnog_only_name': BP_eggnog_only_name
                 })
         df = pd.DataFrame(data)
-        output_path = join(self.config['builder_output_dir'], f"{self.version}_{strain}_mrna_bp_annot.csv")
-        write_df(df, output_path)
+        write_df(df, join(self.out_path_mrna_bp_annot, f"{strain}_mrna_bp_annot_{self.out_file_suffix}.csv"))
     
     def _add_all_mrna_and_curated_bp_annot(self, strain, all_mrna_w_curated_annot):
         self.logger.info(f"adding mRNA nodes and curated mRNA-GO annotations for {strain}")
