@@ -23,8 +23,8 @@ class GraphBuilder:
         self.version = self.config['version']  # "k12_curated_and_ips", "k12_curated", "k12_ips"
 
         self.ecoli_k12_nm = data_loader.ecoli_k12_nm
-        self.vibrio_nm = data_loader.vibrio_nm
-        self.pseudomonas_nm = data_loader.pseudomonas_nm
+        # self.vibrio_nm = data_loader.vibrio_nm
+        # self.pseudomonas_nm = data_loader.pseudomonas_nm
 
         self.strains_data = data_loader.strains_data
         self.srna_acc_col = data_loader.srna_acc_col
@@ -149,7 +149,7 @@ class GraphBuilder:
         # 1 - clustering-based homology edges (for all strains)
         self._add_rna_homology_edges_clustering_based(rna_type=self.U.srna) 
         self._add_rna_homology_edges_clustering_based(rna_type=self.U.mrna)
-        # 2 - named-based homology edges (for vibrio and pseudomonas only)
+        # 2 - named-based homology edges (for all strains)
         self._add_rna_homology_edges_name_based(rna_type=self.U.srna)
         self._add_rna_homology_edges_name_based(rna_type=self.U.mrna)
 
@@ -175,13 +175,13 @@ class GraphBuilder:
                                 self.G = self.U.add_edges_rna_rna_orthologs(self.G, node_id_1, node_id_2)
     
     def _add_rna_homology_edges_name_based(self, rna_type: str):
-        """For vibrio and pseudomonas only: Add homology edges between their RNA nodes and RNA nodes of all other strain 
+        """Add homology edges between their RNA nodes and RNA nodes of all other strain 
            based on RNA names (bacteria pairs)."""
         self.logger.info(f"adding {rna_type} homology edges - name based")
         nm_col = 'sRNA_name' if rna_type==self.U.srna else 'mRNA_name'
         id_col = self.srna_acc_col if rna_type==self.U.srna else self.mrna_acc_col
 
-        for curr_strain in [self.vibrio_nm, self.pseudomonas_nm]:
+        for curr_strain in self.strains_data.keys():  # [self.vibrio_nm, self.pseudomonas_nm]
             all_rna_curr = self.strains_data[curr_strain][f'all_{rna_type}'].copy()[[id_col, nm_col]]
             all_rna_curr[nm_col] = all_rna_curr[nm_col].apply(lambda x: x.lower())
             all_rna_curr = all_rna_curr.rename(columns={col: f"{col}_curr" for col in all_rna_curr.columns})
