@@ -269,8 +269,11 @@ class GraphUtils:
         
         if rna_node_id not in cluster:
             cluster.add(rna_node_id)
+            rna_strain = G.nodes[rna_node_id]['strain']
             # get direct orthologs
-            direct_orthologs = [neighbor for neighbor in G.neighbors(rna_node_id) if G.nodes[neighbor]['type'] in [self.srna, self.mrna] and self.are_orthologs(G, rna_node_id, neighbor, G.nodes[rna_node_id]['strain'], G.nodes[neighbor]['strain'])]
+            direct_orthologs = [neighbor for neighbor in G.neighbors(rna_node_id) if G.nodes[neighbor]['type'] in [self.srna, self.mrna] and \
+                                (self.are_orthologs_by_seq(G, rna_node_id, neighbor, rna_strain, G.nodes[neighbor]['strain']) or \
+                                 self.are_orthologs_by_name(G, rna_node_id, neighbor, rna_strain, G.nodes[neighbor]['strain']))]
             for o in direct_orthologs:
                 cluster = self.get_orthologs_cluster(G, o, cluster)
         

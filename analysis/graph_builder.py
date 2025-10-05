@@ -214,8 +214,36 @@ class GraphBuilder:
         df = pd.DataFrame(records)
         write_df(df, join(self.out_path_homology_pairs_stats, f"{rna_type}_homology_edges__{self.out_file_suffix}.csv"))
     
-    def _get_num_of_ortholog_edges(node_ids_1: List[str], node_ids_2: List[str], ortholog_edge_types: List[str]):
-        return
+    def _get_num_of_ortholog_edges(self, node_ids_1: List[str], node_ids_2: List[str], ortholog_edge_types: List[str]) -> int:
+        """ Calculate the number of ortholog edges between nodes in 1 and nodes in 2, considering all types of edges defined in ortholog_edge_types 
+
+        Args:
+            node_ids_1 (List[str]): 
+            node_ids_2 (List[str]): 
+            ortholog_edge_types (List[str]): types of ortholog edges to consider
+
+        Returns:
+            int: number of ortholog edges between nodes in 1 and nodes in 2, considering all types of edges defined in ortholog_edge_types 
+        """
+        # 1 - fetch strains
+        strains_1 = {n: self.G.nodes[n]['strain'] for n in node_ids_1}
+        strains_2 = {n: self.G.nodes[n]['strain'] for n in node_ids_2}
+        # 2 - define ortholog checks to run
+        checks = []
+        if self.U.ortholog_by_seq in ortholog_edge_types:
+            checks.append(self.U.are_orthologs_by_seq)
+        if self.U.ortholog_by_name in ortholog_edge_types:
+            checks.append(self.U.are_orthologs_by_name)
+        # 3 - run checks
+        num_edges = 0
+        for n1 in node_ids_1:
+            s1 = strains_1[n1]
+            for n2 in node_ids_2:
+                s2 = strains_2[n2]
+                for check in checks:
+                    if check(self.G, n1, n2, s1, s2):
+                        num_edges += 1
+        return num_edges
 
     def _add_rna_homology_edges_name_based(self, rna_type: str):
         """Add homology edges between their RNA nodes and RNA nodes of all other strain 

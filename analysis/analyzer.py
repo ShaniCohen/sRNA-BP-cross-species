@@ -478,26 +478,25 @@ class Analyzer:
         # 1 - general validation
         nodes = [item for tpl in homologs_clusters for item in tpl]
         assert len(set(nodes)) == len(nodes), f"some {rna_type} nodes are duplicated in the orthologs clusters"
-        
         # 2 - per cluster validation
         records = []
         for cluster in homologs_clusters:
-            # 2.1 - get ortholog pairs, paralog pairs and strains
-            ortholog_pairs, strains = list(), set()
-            ortholog_pairs_w_meta = list()
+            # 2.1 - get strains, paralog pairs and ortholog pairs
+            strains = set()
             paralog_pairs, paralog_pairs_w_meta = list(), list()
+            ortholog_pairs, ortholog_pairs_w_meta = list(), list()
+
             for n1, n2 in itertools.combinations(list(cluster), 2):
                 s1, s2 = self.G.nodes[n1]['strain'], self.G.nodes[n2]['strain']
                 strains = strains.union({s1, s2})
-                if self.U.are_orthologs(self.G, n1, n2, s1, s2):
-                    ortholog_pairs.append((n1, n2))
-                    ortholog_pairs_w_meta.append((f"{s1}__{n1}__{self.G.nodes[n1]['name']}", f"{s2}__{n2}__{self.G.nodes[n2]['name']}"))
-                elif s1 == s2 and self.U.are_paralogs(self.G, n1, n2, s1):
+                if s1 == s2 and self.U.are_paralogs(self.G, n1, n2, s1):
                     paralog_pairs.append((n1, n2))
                     paralog_pairs_w_meta.append((f"{s1}__{n1}__{self.G.nodes[n1]['name']}", f"{s2}__{n2}__{self.G.nodes[n2]['name']}"))
+                elif (self.U.are_ortholog_by_seq(self.G, n1, n2, s1, s2) or self.U.are_ortholog_by_name(self.G, n1, n2, s1, s2)):
+                    ortholog_pairs.append((n1, n2))
+                    ortholog_pairs_w_meta.append((f"{s1}__{n1}__{self.G.nodes[n1]['name']}", f"{s2}__{n2}__{self.G.nodes[n2]['name']}"))
                 else:
                     continue
-
             # 2.2 - validate
             assert set(cluster) == set([n for tpl in ortholog_pairs for n in tpl] + [n for tpl in paralog_pairs for n in tpl]), f"misalignment between {rna_type} homologs cluster VS orthologs/paralogs pairs"
             # 2.3 - add record
@@ -511,9 +510,8 @@ class Analyzer:
                 'paralog_pairs': sorted(paralog_pairs_w_meta),
                 'num_paralog_pairs': len(paralog_pairs_w_meta)
             })
-        orthologs_df = pd.DataFrame(records)
-
-        return orthologs_df
+        homologs_df = pd.DataFrame(records)
+        return homologs_df
 
     def _log_n_dump_homologs(self, rna_str: str, rna_type: str, all_homologs_df: pd.DataFrame):
         # 1 - general analysis
