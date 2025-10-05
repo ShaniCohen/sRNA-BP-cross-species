@@ -76,7 +76,7 @@ class Analyzer:
         # 1 - Dump BPs of annotated mRNAs
         self._dump_bps_of_annotated_mrnas()
 
-        # 2 - Cluster RNA homologs (orthologs and paralogs)
+        # 2 - Cluster RNA homologs
         if self.run_clustering_of_rna_homologs:   
             self._cluster_rna_homologs()
         self.srna_homologs = read_df(join(self.out_path_clustering_homologs, f"sRNA_homologs__{self.out_file_suffix}.csv"))

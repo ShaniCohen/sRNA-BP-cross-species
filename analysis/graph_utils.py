@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import List, Tuple
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -48,8 +48,11 @@ class GraphUtils:
         # sRNA --> mRNA     
         self.targets = "targets"
         # RNA <--> RNA
-        self.paralog = "paralog"    # paralogs: same strain
-        self.ortholog = "ortholog"  # orthologs: different strains
+        # paralogs: same strain
+        self.paralog = "paralog"    
+        # orthologs: different strains
+        self.ortholog_by_seq = "ortholog_by_seq"
+        self.ortholog_by_name = "ortholog_by_name"
 
         # edge annot types (annot_type)
         self.curated = "curated"
@@ -121,21 +124,52 @@ class GraphUtils:
         G.add_edge(rna_node_id_2, rna_node_id_1, type=self.paralog)
         return G
 
-    def add_edges_rna_rna_orthologs(self, G, rna_node_id_1, rna_node_id_2):
-        """ Add "ortholog" edge between two RNA nodes of different strains
+    # def add_edges_rna_rna_orthologs(self, G, rna_node_id_1, rna_node_id_2):
+    #     """ Add "ortholog" edge between two RNA nodes of different strains
+
+    #     Args:
+    #         rna_node_id_1 (str): the first RNA node id (accession id)
+    #         rna_node_id_2 (str): the second RNA node id (accession id)
+    #     """
+    #     assert G.has_node(rna_node_id_1) and G.has_node(rna_node_id_2)
+    #     assert G.nodes[rna_node_id_1]['strain'] != G.nodes[rna_node_id_2]['strain']
+    #     both_srna = (G.nodes[rna_node_id_1]['type'] == self.srna) & (G.nodes[rna_node_id_2]['type'] == self.srna)
+    #     both_mrna = (G.nodes[rna_node_id_2]['type'] == self.mrna) & (G.nodes[rna_node_id_2]['type'] == self.mrna)
+    #     assert both_srna or both_mrna
+    #     G.add_edge(rna_node_id_1, rna_node_id_2, type=self.ortholog)
+    #     G.add_edge(rna_node_id_2, rna_node_id_1, type=self.ortholog)
+    #     return G
+    
+    def add_edges_rna_rna_orthologs_by_seq(self, G, rna_node_id_1, rna_node_id_2):
+        """ Add "ortholog_by_seq" edge between two RNA nodes of different strains
 
         Args:
             rna_node_id_1 (str): the first RNA node id (accession id)
             rna_node_id_2 (str): the second RNA node id (accession id)
         """
+        self._validate_rna_rna_orthologs(G, rna_node_id_1, rna_node_id_2)
+        G.add_edge(rna_node_id_1, rna_node_id_2, type=self.ortholog_by_seq)
+        G.add_edge(rna_node_id_2, rna_node_id_1, type=self.ortholog_by_seq)
+        return G
+
+    def add_edges_rna_rna_orthologs_by_name(self, G, rna_node_id_1, rna_node_id_2):
+        """ Add "ortholog_by_name" edge between two RNA nodes of different strains
+
+        Args:
+            rna_node_id_1 (str): the first RNA node id (accession id)
+            rna_node_id_2 (str): the second RNA node id (accession id)
+        """
+        self._validate_rna_rna_orthologs(G, rna_node_id_1, rna_node_id_2)
+        G.add_edge(rna_node_id_1, rna_node_id_2, type=self.ortholog_by_name)
+        G.add_edge(rna_node_id_2, rna_node_id_1, type=self.ortholog_by_name)
+        return G
+    
+    def _validate_rna_rna_orthologs(self, G, rna_node_id_1, rna_node_id_2):
         assert G.has_node(rna_node_id_1) and G.has_node(rna_node_id_2)
         assert G.nodes[rna_node_id_1]['strain'] != G.nodes[rna_node_id_2]['strain']
         both_srna = (G.nodes[rna_node_id_1]['type'] == self.srna) & (G.nodes[rna_node_id_2]['type'] == self.srna)
         both_mrna = (G.nodes[rna_node_id_2]['type'] == self.mrna) & (G.nodes[rna_node_id_2]['type'] == self.mrna)
         assert both_srna or both_mrna
-        G.add_edge(rna_node_id_1, rna_node_id_2, type=self.ortholog)
-        G.add_edge(rna_node_id_2, rna_node_id_1, type=self.ortholog)
-        return G
 
     def is_target(self, G, srna_node_id, mrna_node_id):
         """ Check if there is an interaction edge between sRNA and mRNA nodes """
@@ -189,7 +223,7 @@ class GraphUtils:
             return is_paralog_1_2 and is_paralog_2_1
         return False
     
-    def are_orthologs(self, G, rna_node_id_1, rna_node_id_2, strain_1, strain_2):
+    def _are_orthologs(self, G, rna_node_id_1, rna_node_id_2, strain_1, strain_2, ortholog_edge_type):
         """ Check if there are ortholog edges between two RNA nodes of different strains """
         assert G.has_node(rna_node_id_1) and G.has_node(rna_node_id_2)
         assert strain_1 in self.strains, f"strain {strain_1} is not in the list of strains: {self.strains}"
@@ -205,18 +239,28 @@ class GraphUtils:
             is_ortholog_1_2 = False
             if G.has_edge(rna_node_id_1, rna_node_id_2):
                 for d in G[rna_node_id_1][rna_node_id_2].values():
-                    if d['type'] == self.ortholog:
+                    if d['type'] == ortholog_edge_type:
                         is_ortholog_1_2 = True
                         break
             is_ortholog_2_1 = False
             if G.has_edge(rna_node_id_2, rna_node_id_1):
                 for d in G[rna_node_id_2][rna_node_id_1].values():
-                    if d['type'] == self.ortholog:
+                    if d['type'] == ortholog_edge_type:
                         is_ortholog_2_1 = True
                         break
-            assert is_ortholog_1_2 == is_ortholog_2_1, "Ortholog edge should be symmetric"
+            assert is_ortholog_1_2 == is_ortholog_2_1, f"Ortholog edge {ortholog_edge_type} should be symmetric"
             return is_ortholog_1_2 and is_ortholog_2_1
         return False
+    
+    def are_orthologs_by_seq(self, G, rna_node_id_1, rna_node_id_2, strain_1, strain_2):
+        """ Check if there are ortholog_by_seq edges between two RNA nodes of different strains """
+        edge_type = self.ortholog_by_seq
+        return self._are_orthologs(G, rna_node_id_1, rna_node_id_2, strain_1, strain_2, edge_type)
+    
+    def are_orthologs_by_name(self, G, rna_node_id_1, rna_node_id_2, strain_1, strain_2):
+        """ Check if there are ortholog_by_name edges between two RNA nodes of different strains """
+        edge_type = self.ortholog_by_name
+        return self._are_orthologs(G, rna_node_id_1, rna_node_id_2, strain_1, strain_2, edge_type)
     
     def get_orthologs_cluster(self, G, rna_node_id, cluster) -> set:
         """ Get all orthologs of a given RNA node in the graph G. orrtholog is a transitive relation, so all orthologs of the orthologs are also included. """

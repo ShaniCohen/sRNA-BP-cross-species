@@ -32,6 +32,7 @@ class GraphBuilder:
         
         self.ontology = ontology
         self.curated_go_ids_missing_in_ontology = set()
+        self.U = graph_utils
         
         self.G = nx.MultiDiGraph()
         # add BP nodes and edges
@@ -186,38 +187,36 @@ class GraphBuilder:
                                 self.G = self.U.add_edges_rna_rna_paralogs(self.G, node_id_1, node_id_2)
                         else:
                             # orthologs: different strains
-                            if not self.U.are_orthologs(self.G, node_id_1, node_id_2, strain_1, strain_2):
-                                self.G = self.U.add_edges_rna_rna_orthologs(self.G, node_id_1, node_id_2)
+                            if not self.U.are_orthologs_by_seq(self.G, node_id_1, node_id_2, strain_1, strain_2):
+                                self.G = self.U.add_edges_rna_rna_orthologs_by_seq(self.G, node_id_1, node_id_2)
     
     def _dump_homology_edges_stats(self, rna_type: str):
-        """Add homology edges between their RNA nodes and RNA nodes of all other strain 
-           based on RNA names (bacteria pairs)."""
-        self.logger.info(f"adding {rna_type} homology edges - name based")
-        nm_col = 'sRNA_name' if rna_type==self.U.srna else 'mRNA_name'
-        id_col = self.srna_acc_col if rna_type==self.U.srna else self.mrna_acc_col
-
-        for curr_strain in self.strains_data.keys():  # [self.vibrio_nm, self.pseudomonas_nm]
-            all_rna_curr = self.strains_data[curr_strain][f'all_{rna_type}'].copy()[[id_col, nm_col]]
-            all_rna_curr[nm_col] = all_rna_curr[nm_col].apply(lambda x: x.lower())
-            all_rna_curr = all_rna_curr.rename(columns={col: f"{col}_curr" for col in all_rna_curr.columns})
+        """Calc and dump statistics of homology edge types between RNA nodes of different strains"""
+        self.logger.info(f"Calc and dump statistics - {rna_type} homology edges")
+        records = []
+        for curr_strain in self.U.strains:
+            curr_node_ids = [n for n, d in self.G.nodes(data=True) if d['type'] == rna_type and d['strain'] == curr_strain]
+            rec = {"Strain": f"{curr_strain} \n {rna_type} nodes = {len(curr_node_ids)}"}
             # compare with all other strains
-            for other_strain, other_data in self.strains_data.items():
+            for other_strain in self.U.strains:
                 if other_strain != curr_strain:
-                    all_rna_other = other_data[f'all_{rna_type}'].copy()[[id_col, nm_col]]
-                    all_rna_other[nm_col] = all_rna_other[nm_col].apply(lambda x: x.lower())
-                    all_rna_other = all_rna_other.rename(columns={col: f"{col}_other" for col in all_rna_other.columns})
-                    matches = pd.merge(all_rna_curr, all_rna_other, left_on=f"{nm_col}_curr", right_on=f"{nm_col}_other", how='inner')
-                    for _, match in matches.iterrows():
-                        curr_node_id = match[f"{id_col}_curr"]
-                        other_node_id = match[f"{id_col}_other"]
-                        if not self.U.are_orthologs(self.G, curr_node_id, other_node_id, curr_strain, other_strain):
-                            # TODO: cosider to add a 'name_based' attribute to the edge data
-                            self.G = self.U.add_edges_rna_rna_orthologs(self.G, curr_node_id, other_node_id)
-        
-        # 
-        df = pd.DataFrame()
-        write_df(df, join(self.out_path_homology_pairs_stats, f"TBD_{self.out_file_suffix}.csv"))
+                    other_node_ids = [n for n, d in self.G.nodes(data=True) if d['type'] == rna_type and d['strain'] == other_strain]
+                    _col_nm = f"{other_strain} \n {rna_type} nodes = {len(other_node_ids)}"
+                    # calculate the number of ortholog edges (seq and name) between RNAs of curr & other strain
+                    # TODO: ----------------
+                    num_ortholog_by_seq = self._get_num_of_ortholog_edges(curr_node_ids, other_node_ids, [self.U.ortholog_by_seq])
+                    num_ortholog_by_name = self._get_num_of_ortholog_edges(curr_node_ids, other_node_ids, [self.U.ortholog_by_name])
+                    num_ortholog_by_seq_or_name = self._get_num_of_ortholog_edges(curr_node_ids, other_node_ids, [self.U.ortholog_by_seq, self.U.ortholog_by_name])
+
+                    _col_val = 0
+                    # TODO: ----------------
+                    rec = {_col_nm: _col_val}
+        df = pd.DataFrame(records)
+        write_df(df, join(self.out_path_homology_pairs_stats, f"{rna_type}_homology_edges__{self.out_file_suffix}.csv"))
     
+    def _get_num_of_ortholog_edges(node_ids_1: List[str], node_ids_2: List[str], ortholog_edge_types: List[str]):
+        return
+
     def _add_rna_homology_edges_name_based(self, rna_type: str):
         """Add homology edges between their RNA nodes and RNA nodes of all other strain 
            based on RNA names (bacteria pairs)."""
@@ -225,7 +224,7 @@ class GraphBuilder:
         nm_col = 'sRNA_name' if rna_type==self.U.srna else 'mRNA_name'
         id_col = self.srna_acc_col if rna_type==self.U.srna else self.mrna_acc_col
 
-        for curr_strain in self.strains_data.keys():  # [self.vibrio_nm, self.pseudomonas_nm]
+        for curr_strain in self.U.strains:
             all_rna_curr = self.strains_data[curr_strain][f'all_{rna_type}'].copy()[[id_col, nm_col]]
             all_rna_curr[nm_col] = all_rna_curr[nm_col].apply(lambda x: x.lower())
             all_rna_curr = all_rna_curr.rename(columns={col: f"{col}_curr" for col in all_rna_curr.columns})
@@ -239,9 +238,9 @@ class GraphBuilder:
                     for _, match in matches.iterrows():
                         curr_node_id = match[f"{id_col}_curr"]
                         other_node_id = match[f"{id_col}_other"]
-                        if not self.U.are_orthologs(self.G, curr_node_id, other_node_id, curr_strain, other_strain):
+                        if not self.U.are_orthologs_by_name(self.G, curr_node_id, other_node_id, curr_strain, other_strain):
                             # TODO: cosider to add a 'name_based' attribute to the edge data
-                            self.G = self.U.add_edges_rna_rna_orthologs(self.G, curr_node_id, other_node_id)
+                            self.G = self.U.add_edges_rna_rna_orthologs_by_name(self.G, curr_node_id, other_node_id)
 
     def _log_graph_info(self, dump=False):
         self.logger.info("Logging graph information...")
