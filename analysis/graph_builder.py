@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import List, Dict, Set, Tuple
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -49,7 +49,8 @@ class GraphBuilder:
         """
         self.graph_is_built = False
 
-        # ---------  RUNTIME FLAGS  ---------  
+        # ---------  RUNTIME FLAGS  ---------
+        self.run_n_dump_stats_of_homology_edges = False
         # #TODO: adjust that (merge with version/ add to conf)
         self.add_ips_annot = True
         self.add_eggnog_annot = False
@@ -166,8 +167,9 @@ class GraphBuilder:
         self._add_rna_homology_edges_name_based(rna_type=self.U.srna)
         self._add_rna_homology_edges_name_based(rna_type=self.U.mrna)
         # 3 - calc & dump statistics
-        self._dump_homology_edges_stats(rna_type=self.U.srna)
-        self._dump_homology_edges_stats(rna_type=self.U.mrna)
+        if self.run_n_dump_stats_of_homology_edges:
+            self._dump_homology_edges_stats(rna_type=self.U.srna)
+            self._dump_homology_edges_stats(rna_type=self.U.mrna)
 
     def _add_rna_homology_edges_clustering_based(self, rna_type: str):
         """Add homology edges between RNA nodes based on clustering data (bacteria pairs)."""
@@ -190,60 +192,103 @@ class GraphBuilder:
                             if not self.U.are_orthologs_by_seq(self.G, node_id_1, node_id_2, strain_1, strain_2):
                                 self.G = self.U.add_edges_rna_rna_orthologs_by_seq(self.G, node_id_1, node_id_2)
     
+    def _get_strain_str(self, strain_nm: str, strain_nodes: List[str]) -> str:
+        _str = f"{strain_nm} \n (N = {len(strain_nodes)})"
+        return _str
+
     def _dump_homology_edges_stats(self, rna_type: str):
         """Calc and dump statistics of homology edge types between RNA nodes of different strains"""
         self.logger.info(f"Calc and dump statistics - {rna_type} homology edges")
-        records = []
-        for curr_strain in self.U.strains:
-            curr_node_ids = [n for n, d in self.G.nodes(data=True) if d['type'] == rna_type and d['strain'] == curr_strain]
-            rec = {"Strain": f"{curr_strain} \n {rna_type} nodes = {len(curr_node_ids)}"}
-            # compare with all other strains
-            for other_strain in self.U.strains:
-                if other_strain != curr_strain:
-                    other_node_ids = [n for n, d in self.G.nodes(data=True) if d['type'] == rna_type and d['strain'] == other_strain]
-                    _col_nm = f"{other_strain} \n {rna_type} nodes = {len(other_node_ids)}"
-                    # calculate the number of ortholog edges (seq and name) between RNAs of curr & other strain
-                    # TODO: ----------------
-                    num_ortholog_by_seq = self._get_num_of_ortholog_edges(curr_node_ids, other_node_ids, [self.U.ortholog_by_seq])
-                    num_ortholog_by_name = self._get_num_of_ortholog_edges(curr_node_ids, other_node_ids, [self.U.ortholog_by_name])
-                    num_ortholog_by_seq_or_name = self._get_num_of_ortholog_edges(curr_node_ids, other_node_ids, [self.U.ortholog_by_seq, self.U.ortholog_by_name])
+        strain_col = 'Strain'
+        strain_to_rec = {}
+        for (curr_strain, other_strain) in list(itertools.combinations(self.U.strains, 2)):
+            self.logger.debug(f"---- comparing: {(curr_strain, other_strain)}")
+            # 1 - get record of curr strain
+            if not curr_strain in strain_to_rec:
+                curr_node_ids = [n for n, d in self.G.nodes(data=True) if d['type'] == rna_type and d['strain'] == curr_strain]
+                strain_to_rec[curr_strain] = {strain_col: self._get_strain_str(curr_strain, curr_node_ids)}
+            rec = strain_to_rec[curr_strain]
+            # 2 - compare curr strain to other strain
+            # 2.1 - get RNA ortholog pairs (between curr & other)
+            other_node_ids = [n for n, d in self.G.nodes(data=True) if d['type'] == rna_type and d['strain'] == other_strain]
+            ortholog_by_seq, ortholog_by_name, ortholog_by_seq_and_name = self._get_pairs_w_ortholog_edges_for_van(curr_node_ids, other_node_ids)
+            # 2.2 - calculate numbers for Van diagram
+            seq_only = len(ortholog_by_seq - ortholog_by_seq_and_name)
+            name_only = len(ortholog_by_name - ortholog_by_seq_and_name)
+            seq_and_name = len(ortholog_by_seq_and_name)
+            _col_val = (seq_only, seq_and_name, name_only)
+            # 3 - update record of curr strain (add a column for comparision with other)
+            _col_nm = self._get_strain_str(other_strain,other_node_ids)
+            rec.update({_col_nm: _col_val})
+            strain_to_rec[curr_strain] = rec
 
-                    _col_val = 0
-                    # TODO: ----------------
-                    rec = {_col_nm: _col_val}
-        df = pd.DataFrame(records)
+        df = pd.DataFrame(list(strain_to_rec.values()))
         write_df(df, join(self.out_path_homology_pairs_stats, f"{rna_type}_homology_edges__{self.out_file_suffix}.csv"))
+
+    # def _get_pairs_w_ortholog_edges(self, node_ids_1: List[str], node_ids_2: List[str], ortholog_edge_types: List[str]) -> Set[Tuple[str, str]]:
+    #     """ Get pairs of nodes that are linked with ALL types of ortholog edges defined in ortholog_edge_types. 
+    #         Checks all node pairs (n1, n2), where n1 in node_ids_1 and n2 in node_ids_2.
+
+    #     Args:
+    #         node_ids_1 (List[str]): 
+    #         node_ids_2 (List[str]): 
+    #         ortholog_edge_types (List[str]): types of ortholog edges to consider.
+
+    #     Returns:
+    #         int: the number of pairs that are linked with ALL types of ortholog edges defined in ortholog_edge_types
+    #     """
+    #     # 1 - fetch strains
+    #     strains_1 = {n: self.G.nodes[n]['strain'] for n in node_ids_1}
+    #     strains_2 = {n: self.G.nodes[n]['strain'] for n in node_ids_2}
+    #     # 2 - define ortholog checks to run
+    #     checks = []
+    #     if self.U.ortholog_by_seq in ortholog_edge_types:
+    #         checks.append(self.U.are_orthologs_by_seq)
+    #     if self.U.ortholog_by_name in ortholog_edge_types:
+    #         checks.append(self.U.are_orthologs_by_name)
+    #     # 3 - run all checks
+    #     pairs = []
+    #     for n1 in node_ids_1:
+    #         s1 = strains_1[n1]
+    #         for n2 in node_ids_2:
+    #             s2 = strains_2[n2]
+    #             checks_results = [check(self.G, n1, n2, s1, s2) for check in checks]
+    #             # if all checks passed
+    #             if sum(checks_results) == len(checks_results):
+    #                 pairs.append((n1, n2))
+    #     return set(pairs)
     
-    def _get_num_of_ortholog_edges(self, node_ids_1: List[str], node_ids_2: List[str], ortholog_edge_types: List[str]) -> int:
-        """ Calculate the number of ortholog edges between nodes in 1 and nodes in 2, considering all types of edges defined in ortholog_edge_types 
+    def _get_pairs_w_ortholog_edges_for_van(self, node_ids_1: List[str], node_ids_2: List[str]) -> Tuple[Set[tuple], Set[tuple], Set[tuple]]:
+        """ Get pairs of nodes that are linked with different types of ortholog edges.
+            Checks all node pairs (n1, n2), where n1 in node_ids_1 and n2 in node_ids_2.
 
         Args:
             node_ids_1 (List[str]): 
             node_ids_2 (List[str]): 
-            ortholog_edge_types (List[str]): types of ortholog edges to consider
+            ortholog_edge_types (List[str]): types of ortholog edges to consider.
 
         Returns:
-            int: number of ortholog edges between nodes in 1 and nodes in 2, considering all types of edges defined in ortholog_edge_types 
+            Set[tuple]: ortholog_by_seq
+            Set[tuple]: ortholog_by_name
+            Set[tuple]: ortholog_by_seq_and_name
         """
         # 1 - fetch strains
         strains_1 = {n: self.G.nodes[n]['strain'] for n in node_ids_1}
         strains_2 = {n: self.G.nodes[n]['strain'] for n in node_ids_2}
-        # 2 - define ortholog checks to run
-        checks = []
-        if self.U.ortholog_by_seq in ortholog_edge_types:
-            checks.append(self.U.are_orthologs_by_seq)
-        if self.U.ortholog_by_name in ortholog_edge_types:
-            checks.append(self.U.are_orthologs_by_name)
-        # 3 - run checks
-        num_edges = 0
-        for n1 in node_ids_1:
-            s1 = strains_1[n1]
-            for n2 in node_ids_2:
-                s2 = strains_2[n2]
-                for check in checks:
-                    if check(self.G, n1, n2, s1, s2):
-                        num_edges += 1
-        return num_edges
+        
+        ortholog_by_seq, ortholog_by_name, ortholog_by_seq_and_name = [], [], []
+        for (n1, n2) in [(n1, n2) for n1 in node_ids_1 for n2 in node_ids_2]:
+            s1, s2 = strains_1[n1], strains_2[n2]
+            _by_seq = self.U.are_orthologs_by_seq(self.G, n1, n2, s1, s2)
+            _by_name = self.U.are_orthologs_by_name(self.G, n1, n2, s1, s2)
+            if _by_seq:
+                ortholog_by_seq.append((n1, n2))
+            if _by_name:
+                ortholog_by_name.append((n1, n2))
+            if _by_seq and _by_name:
+                ortholog_by_seq_and_name.append((n1, n2))
+
+        return set(ortholog_by_seq), set(ortholog_by_name), set(ortholog_by_seq_and_name)
 
     def _add_rna_homology_edges_name_based(self, rna_type: str):
         """Add homology edges between their RNA nodes and RNA nodes of all other strain 
