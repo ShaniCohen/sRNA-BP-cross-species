@@ -86,7 +86,7 @@ class Analyzer:
 
         # 3 - Calculate and dump statistics of homolog clusters
         if self.run_homolog_clusters_stats:  
-            self._dump_stats_rna_homolog_clusters_size(val_type = 'ratio', min_val_limit = 0.01)
+            self._dump_stats_rna_homolog_clusters_size(val_type = 'ratio')
             self._dump_stats_rna_homolog_clusters_strains_composition(val_type = 'ratio', min_val_limit = 0.01)
 
         # 4 - Map sRNAs to biological processes (BPs)
@@ -519,7 +519,7 @@ class Analyzer:
         homologs_df = pd.DataFrame(records)
         return homologs_df
     
-    def _convert_counts_to_vals(counts: np.array, denominator: int, val_type: str) -> list:
+    def _convert_counts_to_vals(self, counts: np.array, denominator: int, val_type: str) -> list:
         """
         Args:
             counts (np.array): array of counts (int)
@@ -536,7 +536,7 @@ class Analyzer:
             raise ValueError(f"val_type {val_type} is not supported")
         return vals
         
-    def _dump_stats_rna_homolog_clusters_size(self, val_type: str, min_val_limit: float):
+    def _dump_stats_rna_homolog_clusters_size(self, val_type: str, min_val_limit: float = None):
         """
         Args:
             val_type (str): 'ratio' or 'percentage'
@@ -555,8 +555,11 @@ class Analyzer:
             # 2.2 - list of tuples (cluster_size , val) **sorted by cluster_size**
             size_to_val = dict(zip(unq, vals))
             cluster_sizes_vals = [(size, size_to_val.get(size, 0)) for size in range(2, max(unq) + 1)]
+            self.logger.debug(f"{rna_type} cluster_sizes_vals ({len(cluster_sizes_vals)}): {cluster_sizes_vals}")
             # 2.3 - limit vals
-            cluster_sizes_vals = [(x, val) for (x, val) in cluster_sizes_vals if val >= min_val_limit]
+            if min_val_limit:
+                cluster_sizes_vals = [(x, val) for (x, val) in cluster_sizes_vals if val >= min_val_limit]
+                self.logger.debug(f"{rna_type} cluster_sizes_vals AFTER limit (val >= {min_val_limit}) ({len(cluster_sizes_vals)}): {cluster_sizes_vals}")
             # 2.4 - get sizes
             cluster_sizes = [x[0] for x in cluster_sizes_vals]
             # 2.5 - y max (maximal val)
@@ -567,6 +570,7 @@ class Analyzer:
                 "num_clusters": num_clusters,
                 f"cluster_sizes_{val_type}s": cluster_sizes_vals,
                 "cluster_sizes": cluster_sizes,
+                "num_coordinates": len(cluster_sizes),
                 f"y_max_{val_type}": y_max_val
             }
             records.append(rec)
@@ -574,7 +578,7 @@ class Analyzer:
         df = pd.DataFrame(records)
         write_df(df, join(self.out_path_rna_homologs_multi_strains, f"{rna_type}_cluster_sizes_{val_type}_{min_val_limit}__{self.out_file_suffix}.csv"))
     
-    def _dump_stats_rna_homolog_clusters_strains_composition(self, val_type: str, min_val_limit: float):
+    def _dump_stats_rna_homolog_clusters_strains_composition(self, val_type: str, min_val_limit: float = None):
         """
         Args:
             val_type (str): 'ratio' or 'percentage'
@@ -592,8 +596,11 @@ class Analyzer:
 
             # 2.2 - list of tuples (strains_composition , val) **sorted by val** in descending order  
             cluster_compositions_vals = sorted(list(zip(unq, vals)), key=lambda x: x[1], reverse=True)
+            self.logger.debug(f"{rna_type} cluster_compositions_vals ({len(cluster_compositions_vals)})")
             # 2.3 - limit vals
-            cluster_compositions_vals = [(x, val) for (x, val) in cluster_compositions_vals if val >= min_val_limit]
+            if min_val_limit:
+                cluster_compositions_vals = [(x, val) for (x, val) in cluster_compositions_vals if val >= min_val_limit]
+                self.logger.debug(f"{rna_type} cluster_compositions_vals AFTER limit (val >= {min_val_limit}) ({len(cluster_compositions_vals)})")
             # 2.4 - get compositions
             cluster_compositions = [x[0] for x in cluster_compositions_vals]
             # 2.5 - y max (maximal val)
@@ -604,6 +611,7 @@ class Analyzer:
                 "num_clusters": num_clusters,
                 f"cluster_strains_compositions_{val_type}s": cluster_compositions_vals,
                 "cluster_strains_compositions": cluster_compositions,
+                "num_coordinates": len(cluster_compositions),
                 f"y_max_{val_type}": y_max_val
             }
             records.append(rec)
