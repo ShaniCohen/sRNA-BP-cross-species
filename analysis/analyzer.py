@@ -564,18 +564,18 @@ class Analyzer:
             if min_val_limit:
                 cluster_sizes_vals = [(x, val) for (x, val) in cluster_sizes_vals if val >= min_val_limit]
                 self.logger.debug(f"{rna_type} cluster_sizes_vals AFTER limit (val >= {min_val_limit}) ({len(cluster_sizes_vals)}): {cluster_sizes_vals}")
-            cluster_sizes_vals_str = str(cluster_sizes_vals).replace(", ", ",").replace("),", ") ")
+            cluster_sizes_vals_str = str(cluster_sizes_vals).replace(", ", ",").replace("),", ") ").replace("[", "{").replace("]", "}")
             # 2.4 - get sizes
             cluster_sizes = [x[0] for x in cluster_sizes_vals]
-            cluster_sizes_str = str(cluster_sizes).replace(", ", ",")
+            cluster_sizes_str = str(cluster_sizes).replace(", ", ",").replace("[", "{").replace("]", "}")
             # 2.5 - y max (maximal val)
             y_max_val = max(vals)
 
             rec = {
                 "rna_type": rna_type,
                 "num_clusters": num_clusters,
-                f"cluster_sizes_{val_type}s": cluster_sizes_vals_str,
-                "cluster_sizes": cluster_sizes_str,
+                "symbolic_x_coords_cluster_sizes": cluster_sizes_str,
+                f"coordinates_cluster_sizes_{val_type}s": cluster_sizes_vals_str,
                 "num_coordinates": len(cluster_sizes),
                 f"y_max_{val_type}": y_max_val
             }
@@ -584,7 +584,7 @@ class Analyzer:
         df = pd.DataFrame(records)
         write_df(df, join(self.out_path_rna_homologs_multi_strains, f"{rna_type}_cluster_sizes_{val_type}_{min_val_limit}__{self.out_file_suffix}.csv"))
     
-    def _dump_stats_rna_homolog_clusters_strains_composition(self, val_type: str, min_val_limit: float = None):
+    def _dump_stats_rna_homolog_clusters_strains_composition(self, val_type: str, min_val_limit: float = None, add_textit: bool = False):
         """
         Args:
             val_type (str): 'ratio' or 'percentage'
@@ -608,22 +608,23 @@ class Analyzer:
             if min_val_limit:
                 cluster_compositions_vals = [(x, val) for (x, val) in cluster_compositions_vals if val >= min_val_limit]
                 self.logger.debug(f"{rna_type} cluster_compositions_vals AFTER limit (val >= {min_val_limit}) ({len(cluster_compositions_vals)})")
-            cluster_compositions_vals_str = str(cluster_compositions_vals).replace("('", "{(").replace("'), ", ")},").replace("', '", ", ").replace("), (", ") (")
+            cluster_compositions_vals_str = str(cluster_compositions_vals).replace("('", "{(").replace("'), ", ")},").replace("', '", ", ").replace("), (", ") (").replace("[", "{").replace("]", "}")
             # 2.4 - get compositions
             cluster_compositions = [x[0] for x in cluster_compositions_vals]
-            cluster_compositions_str = str(cluster_compositions).replace("('", "{(").replace("'), ", ")},").replace("', '", ", ")
+            cluster_compositions_str = str(cluster_compositions).replace("('", "{(").replace("'), ", ")},").replace("', '", ", ").replace("[", "{").replace("]", "}")
             # 2.5 - add LateX "\textit" command
-            for n in list(self.U.strain_nm_to_short.values()):
-                cluster_compositions_vals_str = cluster_compositions_vals_str.replace(f"{n}", "\textit{" f"{n}" + "}")
-                cluster_compositions_str = cluster_compositions_str.replace(f"{n}", "\textit{" f"{n}" + "}")
+            if add_textit:
+                for n in list(self.U.strain_nm_to_short.values()):
+                    cluster_compositions_vals_str = cluster_compositions_vals_str.replace(f"{n}", "\textit{" f"{n}" + "}")
+                    cluster_compositions_str = cluster_compositions_str.replace(f"{n}", "\textit{" f"{n}" + "}")
             # 2.6 - y max (maximal val)
             y_max_val = max(vals)
             
             rec = {
                 "rna_type": rna_type,
                 "num_clusters": num_clusters,
-                f"cluster_strains_compositions_{val_type}s": cluster_compositions_vals_str,
-                "cluster_strains_compositions": cluster_compositions_str,
+                "symbolic_x_coords_cluster_strains_compositions": cluster_compositions_str,
+                f"coordinates_cluster_strains_compositions_{val_type}s": cluster_compositions_vals_str,
                 "num_coordinates": len(cluster_compositions),
                 f"y_max_{val_type}": y_max_val
             }
