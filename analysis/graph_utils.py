@@ -22,6 +22,15 @@ class GraphUtils:
 
         # strains
         self.strains = data_loader.get_strains()
+        self.strain_nm_to_short = {
+            'ecoli_k12': 'E.coli K12', 
+            'ecoli_epec': 'E.coli EPEC', 
+            'salmonella': 'Salmonella', 
+            'klebsiella': "Klebsiella", 
+            'vibrio': "Vibrio", 
+            'pseudomonas': "Pseudomonas"
+        }
+        assert len(set(self.strains) - set(self.strain_nm_to_short.keys())) == 0, "misalignment between strain names in GraphUtils & data_loader"
 
         # ----- Graph properties
         # node types
@@ -123,22 +132,6 @@ class GraphUtils:
         G.add_edge(rna_node_id_1, rna_node_id_2, type=self.paralog)
         G.add_edge(rna_node_id_2, rna_node_id_1, type=self.paralog)
         return G
-
-    # def add_edges_rna_rna_orthologs(self, G, rna_node_id_1, rna_node_id_2):
-    #     """ Add "ortholog" edge between two RNA nodes of different strains
-
-    #     Args:
-    #         rna_node_id_1 (str): the first RNA node id (accession id)
-    #         rna_node_id_2 (str): the second RNA node id (accession id)
-    #     """
-    #     assert G.has_node(rna_node_id_1) and G.has_node(rna_node_id_2)
-    #     assert G.nodes[rna_node_id_1]['strain'] != G.nodes[rna_node_id_2]['strain']
-    #     both_srna = (G.nodes[rna_node_id_1]['type'] == self.srna) & (G.nodes[rna_node_id_2]['type'] == self.srna)
-    #     both_mrna = (G.nodes[rna_node_id_2]['type'] == self.mrna) & (G.nodes[rna_node_id_2]['type'] == self.mrna)
-    #     assert both_srna or both_mrna
-    #     G.add_edge(rna_node_id_1, rna_node_id_2, type=self.ortholog)
-    #     G.add_edge(rna_node_id_2, rna_node_id_1, type=self.ortholog)
-    #     return G
     
     def add_edges_rna_rna_orthologs_by_seq(self, G, rna_node_id_1, rna_node_id_2):
         """ Add "ortholog_by_seq" edge between two RNA nodes of different strains
@@ -278,6 +271,9 @@ class GraphUtils:
                 cluster = self.get_orthologs_cluster(G, o, cluster)
         
         return cluster
+    
+    def get_short_strain_nm(self, strain_nm: str) -> str:
+        return self.strain_nm_to_short[strain_nm]
     
     def get_common_bps(self, bps1: List[str], bps2: List[str], bp_similiarity_method: str) -> List[str]:
         if bp_similiarity_method == self.exact_bp:
