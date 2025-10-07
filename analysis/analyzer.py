@@ -572,6 +572,7 @@ class Analyzer:
             if min_val_limit:
                 cluster_sizes_vals = [(x, val) for (x, val) in cluster_sizes_vals if val >= min_val_limit]
                 self.logger.debug(f"{rna_type} cluster_sizes_vals AFTER limit (val >= {min_val_limit}) ({len(cluster_sizes_vals)}): {cluster_sizes_vals}")
+            cluster_sizes_vals_str = str(cluster_sizes_vals).replace(", ", ",").replace("),", ") ")
             # 2.4 - get sizes
             cluster_sizes = [x[0] for x in cluster_sizes_vals]
             # 2.5 - y max (maximal val)
@@ -580,7 +581,7 @@ class Analyzer:
             rec = {
                 "rna_type": rna_type,
                 "num_clusters": num_clusters,
-                f"cluster_sizes_{val_type}s": cluster_sizes_vals,
+                f"cluster_sizes_{val_type}s": cluster_sizes_vals_str,
                 "cluster_sizes": cluster_sizes,
                 "num_coordinates": len(cluster_sizes),
                 f"y_max_{val_type}": y_max_val
@@ -614,6 +615,7 @@ class Analyzer:
             if min_val_limit:
                 cluster_compositions_vals = [(x, val) for (x, val) in cluster_compositions_vals if val >= min_val_limit]
                 self.logger.debug(f"{rna_type} cluster_compositions_vals AFTER limit (val >= {min_val_limit}) ({len(cluster_compositions_vals)})")
+            cluster_compositions_vals_str = str(cluster_compositions_vals).replace(", ", ",").replace("),", ") ").replace("('", "{(").replace("')", ")}").replace("','", ",")
             # 2.4 - get compositions
             cluster_compositions = [x[0] for x in cluster_compositions_vals]
             # 2.5 - y max (maximal val)
@@ -622,7 +624,7 @@ class Analyzer:
             rec = {
                 "rna_type": rna_type,
                 "num_clusters": num_clusters,
-                f"cluster_strains_compositions_{val_type}s": cluster_compositions_vals,
+                f"cluster_strains_compositions_{val_type}s": cluster_compositions_vals_str,
                 "cluster_strains_compositions": cluster_compositions,
                 "num_coordinates": len(cluster_compositions),
                 f"y_max_{val_type}": y_max_val
