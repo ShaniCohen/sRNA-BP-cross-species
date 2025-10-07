@@ -38,6 +38,7 @@ class Analyzer:
 
         # ---------  RUNTIME FLAGS  ---------
         self.run_clustering_of_rna_homologs = False
+        self.run_homolog_clusters_stats = True   # Chapter 4.3.3: Clustering of RNA Homologs Across Multiple Strains
         
         # ---------  CONFIGURATIONS  ---------
         self.run_enrichment = self.config['run_enrichment']
@@ -82,12 +83,16 @@ class Analyzer:
         self.srna_homologs = read_df(join(self.out_path_clustering_homologs, f"sRNA_homologs__{self.out_file_suffix}.csv"))
         self.mrna_homologs = read_df(join(self.out_path_clustering_homologs, f"mRNA_homologs__{self.out_file_suffix}.csv"))
 
-        # 3 - Map sRNAs to biological processes (BPs)
+        # 3 - Calculate and dump statistics of homolog clusters
+        if self.run_homolog_clusters_stats:  
+            self._dump_rna_homolog_clusters_stats()
+
+        # 4 - Map sRNAs to biological processes (BPs)
         self.logger.info("----- Before enrichment:")
         srna_bp_mapping = self._generate_srna_bp_mapping()
         self._log_srna_bp_mapping(srna_bp_mapping)
 
-        # 4 - Enrichment (per strain): per sRNA, find and keep only significant biological processes (BPs) that its targets are invovlved in.
+        # 5 - Enrichment (per strain): per sRNA, find and keep only significant biological processes (BPs) that its targets are invovlved in.
         if self.run_enrichment:
             self.logger.info("----- After enrichment:")
             srna_bp_mapping, meta = self._apply_enrichment(srna_bp_mapping)
@@ -447,10 +452,9 @@ class Analyzer:
         for strain in self.U.strains:
             homologs_clusters = self._get_homologs_clusters_of_strain(rna_type, strain)
             all_homologs_clusters = all_homologs_clusters.union(homologs_clusters)
-        # 2 - validate
+        # 2 - validate and dump
         all_homologs_df = self._validate_homologs_clusters(rna_type, all_homologs_clusters)
-        # 3 - log and dump
-        self._log_n_dump_homologs(rna_str, rna_type, all_homologs_df)
+        write_df(all_homologs_df, join(self.out_path_clustering_homologs, f"{rna_str}_homologs__{self.out_file_suffix}.csv"))
     
     def _get_homologs_clusters_of_strain(self, rna_type: str, strain: str):
         rna_nodes =  [n for n, d in self.G.nodes(data=True) if d['type'] == rna_type and d['strain'] == strain]
@@ -513,7 +517,36 @@ class Analyzer:
         homologs_df = pd.DataFrame(records)
         return homologs_df
 
-    def _log_n_dump_homologs(self, rna_str: str, rna_type: str, all_homologs_df: pd.DataFrame):
+    def _dump_rna_homolog_clusters_stats(self):
+        records = []
+        for (rna_type, all_homologs_df) in [(self.U.srna, self.srna_homologs.copy()), (self.U.mrna, self.mrna_homologs.copy())]:
+            # 1 - num_clusters
+            num_clusters = len(all_homologs_df)
+
+            # 2 - cluster size distribution
+            unq, counts = np.unique(all_homologs_df['cluster_size'], return_counts=True)
+            ratios = [int(round(count/num_clusters, 2)) for count in counts]
+            # percentages = [int(round(count/num_clusters, 2)*100) for count in counts]
+            clusrer_sizes_ratios = list(zip(unq, ratios))
+
+            size_dist = " | ".join([f"{counts[i]} of size {unq[i]} ({int(round(counts[i]/num_clusters, 2)*100)} %)" for i in range(len(unq))])
+            # strains distribution   ##############  TODO: check if correct (strain_2_num_orthologs OR strain_2_num_CLUSTERS?)
+            unq, counts = np.unique([s for clu in all_homologs_df['strains'] for s in clu], return_counts=True)
+            strain_2_num_orthologs = dict(zip(unq, counts)) ##############  TODO: homologs?
+            strain_dist = " | ".join([f"{counts[i]} includes {unq[i]} ({int(round(counts[i]/num_clusters, 2)*100)} %)" for i in range(len(unq))])
+            # strains composition distribution
+            unq, counts = np.unique(all_homologs_df['strains'], return_counts=True)
+            sorted_dict = dict(sorted(dict(zip(unq, counts)).items(), key=lambda item: item[1], reverse=True))
+            strain_comp_dist = "\n   ".join([f"{counts} of composition {unq} ({int(round(counts/num_clusters, 2)*100)} %)" for unq, counts in sorted_dict.items()])
+            
+            rec = {
+                "rna_type": rna_type,
+                "num_clusters": num_clusters
+            }
+
+        # rna_str: str, rna_type: str, all_homologs_df: pd.DataFrame
+        # self._calc_n_dump_homolog_clusters_stats('sRNA', self.U.srna, self.srna_homologs.copy())
+        # self._calc_n_dump_homolog_clusters_stats('mRNA', self.U.mrna, self.mrna_homologs.copy())
         # 1 - general analysis
         num_clusters = len(all_homologs_df)
         # cluster size distribution

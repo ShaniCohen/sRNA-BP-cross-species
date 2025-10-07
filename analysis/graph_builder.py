@@ -50,7 +50,8 @@ class GraphBuilder:
         self.graph_is_built = False
 
         # ---------  RUNTIME FLAGS  ---------
-        self.run_n_dump_stats_of_homology_edges = False
+        self.run_n_dump_stats_of_homology_edges = False   # Chapter 4.3.2: RNA Homology Detection Between Strain Pairs (Statistics)
+
         # #TODO: adjust that (merge with version/ add to conf)
         self.add_ips_annot = True
         self.add_eggnog_annot = False
