@@ -87,7 +87,7 @@ class Analyzer:
         # 3 - Calculate and dump statistics of homolog clusters
         if self.run_homolog_clusters_stats:  
             self._dump_stats_rna_homolog_clusters_size(val_type = 'ratio')
-            self._dump_stats_rna_homolog_clusters_strains_composition(val_type = 'ratio', min_val_limit = 0.01)
+            self._dump_stats_rna_homolog_clusters_strains_composition(val_type = 'ratio', min_val_limit = 0.02)
 
         # 4 - Map sRNAs to biological processes (BPs)
         self.logger.info("----- Before enrichment:")
@@ -519,6 +519,18 @@ class Analyzer:
         homologs_df = pd.DataFrame(records)
         return homologs_df
     
+    def _convert_strain_names(self, tuples_of_names: List[tuple]) -> List[tuple]:
+        _rename = {
+            'ecoli_k12': 'E.coli K12', 
+            'ecoli_epec': 'E.coli EPEC', 
+            'salmonella': 'Salmonella', 
+            'klebsiella': "Klebsiella", 
+            'vibrio': "Vibrio", 
+            'pseudomonas': "Pseudomonas"
+        }
+        new_tuples_of_names = [tuple([_rename[nm] for nm in ast.literal_eval(tpl)]) for tpl in tuples_of_names]
+        return new_tuples_of_names
+    
     def _convert_counts_to_vals(self, counts: np.array, denominator: int, val_type: str) -> list:
         """
         Args:
@@ -592,6 +604,7 @@ class Analyzer:
             # 2 - strains composition
             # 2.1 - get distributoin values per strains composition
             unq, counts = np.unique(all_homologs_df['strains'], return_counts=True)
+            unq = self._convert_strain_names(list(unq))
             vals = self._convert_counts_to_vals(counts, num_clusters, val_type)
 
             # 2.2 - list of tuples (strains_composition , val) **sorted by val** in descending order  
