@@ -51,6 +51,7 @@ class Analyzer:
         parent_dir = join(self.config['analysis_output_dir'], conf_str)
         self.out_path_clustering_homologs = create_dir_if_not_exists(join(parent_dir, "Clustering_homologs"))
         self.out_path_clustering_paralogs_only = create_dir_if_not_exists(join(parent_dir, "Clustering_paralogs_only"))
+        self.out_path_rna_homologs_multi_strains = create_dir_if_not_exists(join(parent_dir, "RNA_homologs_multi_strains"))
         self.out_path_enrichment = create_dir_if_not_exists(join(parent_dir, "Enrichment"))
         self.out_path_summary_tables = create_dir_if_not_exists(join(parent_dir, "Summary_tables"))
         self.out_path_analysis_tool_1 = create_dir_if_not_exists(join(parent_dir, "Analysis_tool_1"))
@@ -85,7 +86,8 @@ class Analyzer:
 
         # 3 - Calculate and dump statistics of homolog clusters
         if self.run_homolog_clusters_stats:  
-            self._dump_rna_homolog_clusters_stats()
+            self._dump_stats_rna_homolog_clusters_size(val_type = 'ratio', min_val_limit = 0.01)
+            self._dump_stats_rna_homolog_clusters_strains_composition(val_type = 'ratio', min_val_limit = 0.01)
 
         # 4 - Map sRNAs to biological processes (BPs)
         self.logger.info("----- Before enrichment:")
@@ -516,74 +518,98 @@ class Analyzer:
             })
         homologs_df = pd.DataFrame(records)
         return homologs_df
-
-    def _dump_rna_homolog_clusters_stats(self):
+    
+    def _convert_counts_to_vals(counts: np.array, denominator: int, val_type: str) -> list:
+        """
+        Args:
+            counts (np.array): array of counts (int)
+            denominator (int): denominator
+            val_type (str): 'ratio' or 'percentage'
+        Returns:
+            list: vals according to val_type
+        """
+        if val_type == 'ratio':
+            vals = [float(round(count/denominator, 2)) for count in counts]
+        elif val_type == 'percentage':
+            vals = [int(round(count/denominator, 2)*100) for count in counts]
+        else:
+            raise ValueError(f"val_type {val_type} is not supported")
+        return vals
+        
+    def _dump_stats_rna_homolog_clusters_size(self, val_type: str, min_val_limit: float):
+        """
+        Args:
+            val_type (str): 'ratio' or 'percentage'
+            min_val_limit (float)
+        """
         records = []
         for (rna_type, all_homologs_df) in [(self.U.srna, self.srna_homologs.copy()), (self.U.mrna, self.mrna_homologs.copy())]:
             # 1 - num_clusters
             num_clusters = len(all_homologs_df)
 
-            # 2 - cluster size distribution
+            # 2 - size
+            # 2.1 - get distributoin values per size
             unq, counts = np.unique(all_homologs_df['cluster_size'], return_counts=True)
-            ratios = [int(round(count/num_clusters, 2)) for count in counts]
-            # percentages = [int(round(count/num_clusters, 2)*100) for count in counts]
-            clusrer_sizes_ratios = list(zip(unq, ratios))
+            vals = self._convert_counts_to_vals(counts, num_clusters, 'ratio')
+            
+            # 2.2 - list of tuples (cluster_size , val) **sorted by cluster_size**
+            size_to_val = dict(zip(unq, vals))
+            cluster_sizes_vals = [(size, size_to_val.get(size, 0)) for size in range(2, max(unq) + 1)]
+            # 2.3 - limit vals
+            cluster_sizes_vals = [(x, val) for (x, val) in cluster_sizes_vals if val >= min_val_limit]
+            # 2.4 - get sizes
+            cluster_sizes = [x[0] for x in cluster_sizes_vals]
+            # 2.5 - y max (maximal val)
+            y_max_val = max(vals)
 
-            size_dist = " | ".join([f"{counts[i]} of size {unq[i]} ({int(round(counts[i]/num_clusters, 2)*100)} %)" for i in range(len(unq))])
-            # strains distribution   ##############  TODO: check if correct (strain_2_num_orthologs OR strain_2_num_CLUSTERS?)
-            unq, counts = np.unique([s for clu in all_homologs_df['strains'] for s in clu], return_counts=True)
-            strain_2_num_orthologs = dict(zip(unq, counts)) ##############  TODO: homologs?
-            strain_dist = " | ".join([f"{counts[i]} includes {unq[i]} ({int(round(counts[i]/num_clusters, 2)*100)} %)" for i in range(len(unq))])
-            # strains composition distribution
+            rec = {
+                "rna_type": rna_type,
+                "num_clusters": num_clusters,
+                f"cluster_sizes_{val_type}s": cluster_sizes_vals,
+                "cluster_sizes": cluster_sizes,
+                f"y_max_{val_type}": y_max_val
+            }
+            records.append(rec)
+
+        df = pd.DataFrame(records)
+        write_df(df, join(self.out_path_rna_homologs_multi_strains, f"{rna_type}_cluster_sizes_{val_type}_{min_val_limit}__{self.out_file_suffix}.csv"))
+    
+    def _dump_stats_rna_homolog_clusters_strains_composition(self, val_type: str, min_val_limit: float):
+        """
+        Args:
+            val_type (str): 'ratio' or 'percentage'
+            min_val_limit (float)
+        """
+        records = []
+        for (rna_type, all_homologs_df) in [(self.U.srna, self.srna_homologs.copy()), (self.U.mrna, self.mrna_homologs.copy())]:
+            # 1 - num_clusters
+            num_clusters = len(all_homologs_df)
+
+            # 2 - strains composition
+            # 2.1 - get distributoin values per strains composition
             unq, counts = np.unique(all_homologs_df['strains'], return_counts=True)
-            sorted_dict = dict(sorted(dict(zip(unq, counts)).items(), key=lambda item: item[1], reverse=True))
-            strain_comp_dist = "\n   ".join([f"{counts} of composition {unq} ({int(round(counts/num_clusters, 2)*100)} %)" for unq, counts in sorted_dict.items()])
+            vals = self._convert_counts_to_vals(counts, num_clusters, val_type)
+
+            # 2.2 - list of tuples (strains_composition , val) **sorted by val** in descending order  
+            cluster_compositions_vals = sorted(list(zip(unq, vals)), key=lambda x: x[1], reverse=True)
+            # 2.3 - limit vals
+            cluster_compositions_vals = [(x, val) for (x, val) in cluster_compositions_vals if val >= min_val_limit]
+            # 2.4 - get compositions
+            cluster_compositions = [x[0] for x in cluster_compositions_vals]
+            # 2.5 - y max (maximal val)
+            y_max_val = max(vals)
             
             rec = {
                 "rna_type": rna_type,
-                "num_clusters": num_clusters
+                "num_clusters": num_clusters,
+                f"cluster_strains_compositions_{val_type}s": cluster_compositions_vals,
+                "cluster_strains_compositions": cluster_compositions,
+                f"y_max_{val_type}": y_max_val
             }
-
-        # rna_str: str, rna_type: str, all_homologs_df: pd.DataFrame
-        # self._calc_n_dump_homolog_clusters_stats('sRNA', self.U.srna, self.srna_homologs.copy())
-        # self._calc_n_dump_homolog_clusters_stats('mRNA', self.U.mrna, self.mrna_homologs.copy())
-        # 1 - general analysis
-        num_clusters = len(all_homologs_df)
-        # cluster size distribution
-        unq, counts = np.unique(all_homologs_df['cluster_size'], return_counts=True)
-        size_dist = " | ".join([f"{counts[i]} of size {unq[i]} ({int(round(counts[i]/num_clusters, 2)*100)} %)" for i in range(len(unq))])
-        # strains distribution   ##############  TODO: check if correct (strain_2_num_orthologs OR strain_2_num_CLUSTERS?)
-        unq, counts = np.unique([s for clu in all_homologs_df['strains'] for s in clu], return_counts=True)
-        strain_2_num_orthologs = dict(zip(unq, counts)) ##############  TODO: homologs?
-        strain_dist = " | ".join([f"{counts[i]} includes {unq[i]} ({int(round(counts[i]/num_clusters, 2)*100)} %)" for i in range(len(unq))])
-        # strains composition distribution
-        unq, counts = np.unique(all_homologs_df['strains'], return_counts=True)
-        sorted_dict = dict(sorted(dict(zip(unq, counts)).items(), key=lambda item: item[1], reverse=True))
-        strain_comp_dist = "\n   ".join([f"{counts} of composition {unq} ({int(round(counts/num_clusters, 2)*100)} %)" for unq, counts in sorted_dict.items()])
-
-        # 2 - per strain analysis
-        per_strain_analysis = ""
-        for strain, data in self.strains_data.items():
-            num_rna = len(data[f'all_{rna_type}'])
-            num_orthologs = strain_2_num_orthologs.get(strain, 0)  ##############  TODO: homologs?
-            per_strain_analysis = per_strain_analysis + f"\n  {strain}: {int(round(num_orthologs/num_rna, 2)*100)} % of {rna_str}s ({num_orthologs} out of {num_rna}) have orthologs "
-
-        # 3 - log
-        self.logger.info(
-            f"----------------   {rna_str} \n"
-            f"-------   General analysis \n"
-            f"Number of clusters: {len(all_homologs_df)} \n"
-            f"Cluster size distribution: \n"
-            f"  {size_dist} \n"
-            f"Strains distribution: \n"
-            f"  {strain_dist} \n"
-            f"Strains composition distribution: \n"
-            f"   {strain_comp_dist} \n"
-            f"-------   Per strain analysis"
-            f"{per_strain_analysis}"
-        )
-        # 4 - dump
-        write_df(all_homologs_df, join(self.out_path_clustering_homologs, f"{rna_str}_homologs__{self.out_file_suffix}.csv"))
+            records.append(rec)
+        
+        df = pd.DataFrame(records)
+        write_df(df, join(self.out_path_rna_homologs_multi_strains, f"{rna_type}_cluster_compositions_{val_type}_{min_val_limit}__{self.out_file_suffix}.csv"))
 
     def _log_mrna_without_bp(self, strain: str, unq_targets_without_bp: Set[str]):
             ips_annot = self.ips_go_annotations.get(strain, None)
