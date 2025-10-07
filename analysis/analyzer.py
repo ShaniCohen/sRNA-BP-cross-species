@@ -618,6 +618,7 @@ class Analyzer:
             cluster_compositions_vals_str = str(cluster_compositions_vals).replace(", ", ",").replace("),", ") ").replace("('", "{(").replace("')", ")}").replace("','", ", ")
             # 2.4 - get compositions
             cluster_compositions = [x[0] for x in cluster_compositions_vals]
+            cluster_compositions_str = str(cluster_compositions).replace("('", "{(").replace("')", ")}").replace("', '", ", ")
             # 2.5 - y max (maximal val)
             y_max_val = max(vals)
             
@@ -625,7 +626,7 @@ class Analyzer:
                 "rna_type": rna_type,
                 "num_clusters": num_clusters,
                 f"cluster_strains_compositions_{val_type}s": cluster_compositions_vals_str,
-                "cluster_strains_compositions": cluster_compositions,
+                "cluster_strains_compositions": cluster_compositions_str,
                 "num_coordinates": len(cluster_compositions),
                 f"y_max_{val_type}": y_max_val
             }
