@@ -611,7 +611,7 @@ class Analyzer:
             cluster_compositions_vals_str = str(cluster_compositions_vals).replace("('", "{(").replace("'), ", ")},").replace("', '", ", ").replace("), (", ") (").replace("[", "{").replace("]", "}")
             # 2.4 - get compositions
             cluster_compositions = [x[0] for x in cluster_compositions_vals]
-            cluster_compositions_str = str(cluster_compositions).replace("('", "{(").replace("'), ", ")},").replace("', '", ", ").replace("[", "{").replace("]", "}")
+            cluster_compositions_str = str(cluster_compositions).replace("('", "{(").replace("'), ", ")},").replace("', '", ", ").replace("[", "{").replace("')]", ")}}")
             # 2.5 - add LateX "\textit" command
             if add_textit:
                 for n in list(self.U.strain_nm_to_short.values()):
