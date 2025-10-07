@@ -615,7 +615,7 @@ class Analyzer:
             if min_val_limit:
                 cluster_compositions_vals = [(x, val) for (x, val) in cluster_compositions_vals if val >= min_val_limit]
                 self.logger.debug(f"{rna_type} cluster_compositions_vals AFTER limit (val >= {min_val_limit}) ({len(cluster_compositions_vals)})")
-            cluster_compositions_vals_str = str(cluster_compositions_vals).replace(", ", ",").replace("),", ") ").replace("('", "{(").replace("')", ")}").replace("','", ",")
+            cluster_compositions_vals_str = str(cluster_compositions_vals).replace(", ", ",").replace("),", ") ").replace("('", "{(").replace("')", ")}").replace("','", ", ")
             # 2.4 - get compositions
             cluster_compositions = [x[0] for x in cluster_compositions_vals]
             # 2.5 - y max (maximal val)
