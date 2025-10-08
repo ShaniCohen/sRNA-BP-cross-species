@@ -88,6 +88,7 @@ class Analyzer:
         if self.run_homolog_clusters_stats:  
             self._dump_stats_rna_homolog_clusters_size(val_type = 'ratio')
             self._dump_stats_rna_homolog_clusters_strains_composition(val_type = 'ratio', min_val_limit = 0.02)
+            self._dump_stats_rna_orthologs_n_paralogs_per_strain(val_type = 'ratio')
 
         # 4 - Map sRNAs to biological processes (BPs)
         self.logger.info("----- Before enrichment:")
@@ -523,22 +524,22 @@ class Analyzer:
         new_tuples_of_names = [tuple([self.U.get_short_strain_nm(nm) for nm in ast.literal_eval(tpl)]) for tpl in tuples_of_names]
         return new_tuples_of_names
     
-    def _convert_counts_to_vals(self, counts: np.array, denominator: int, val_type: str) -> list:
+    def _convert_count_to_val(self, count: int, denominator: int, val_type: str):
         """
         Args:
-            counts (np.array): array of counts (int)
+            count (int):
             denominator (int): denominator
             val_type (str): 'ratio' or 'percentage'
         Returns:
-            list: vals according to val_type
+            float or int: desired val
         """
         if val_type == 'ratio':
-            vals = [float(round(count/denominator, 2)) for count in counts]
+            val = float(round(count/denominator, 2))
         elif val_type == 'percentage':
-            vals = [int(round(count/denominator, 2)*100) for count in counts]
+            val = int(round(count/denominator, 2)*100)
         else:
             raise ValueError(f"val_type {val_type} is not supported")
-        return vals
+        return val
         
     def _dump_stats_rna_homolog_clusters_size(self, val_type: str, min_val_limit: float = None):
         """
@@ -554,7 +555,7 @@ class Analyzer:
             # 2 - size
             # 2.1 - get distributoin values per size
             unq, counts = np.unique(all_homologs_df['cluster_size'], return_counts=True)
-            vals = self._convert_counts_to_vals(counts, num_clusters, 'ratio')
+            vals = [self._convert_count_to_val(count, num_clusters, 'ratio') for count in counts]
             
             # 2.2 - list of tuples (cluster_size , val) **sorted by cluster_size**
             size_to_val = dict(zip(unq, vals))
@@ -599,7 +600,7 @@ class Analyzer:
             # 2.1 - get distributoin values per strains composition
             unq, counts = np.unique(all_homologs_df['strains'], return_counts=True)
             unq = self._convert_strain_names(list(unq))
-            vals = self._convert_counts_to_vals(counts, num_clusters, val_type)
+            vals = [self._convert_count_to_val(count, num_clusters, val_type) for count in counts]
 
             # 2.2 - list of tuples (strains_composition , val) **sorted by val** in descending order  
             cluster_compositions_vals = sorted(list(zip(unq, vals)), key=lambda x: x[1], reverse=True)
@@ -632,6 +633,45 @@ class Analyzer:
         
         df = pd.DataFrame(records)
         write_df(df, join(self.out_path_rna_homologs_multi_strains, f"{rna_type}_cluster_compositions_{val_type}_{min_val_limit}__{self.out_file_suffix}.csv"))
+    
+    def _dump_stats_rna_orthologs_n_paralogs_per_strain(self, val_type: str):
+        """
+        Args:
+            val_type (str): 'ratio' or 'percentage'
+        """
+        records = []
+        for (rna_type, all_homologs_df) in [(self.U.srna, self.srna_homologs.copy()), (self.U.mrna, self.mrna_homologs.copy())]:
+            # 1 - num RNAs per strain
+            strain_2_num_rnas = {}
+            for strain in self.U.strains:
+                num_rnas = len([n for n, d in self.G.nodes(data=True) if d['type'] == rna_type and d['strain'] == strain])
+                strain_2_num_rnas[strain] = num_rnas
+
+            # 2 - orthologs ratio per strain
+            clusters = [ast.literal_eval(c) for c in all_homologs_df['cluster'] ]
+            unq, counts = np.unique([self.G.nodes[rna]['strain'] for cls in clusters for rna in cls], return_counts=True)
+            strain_2_orthologs_ratio = {}
+            for (strain, count) in list(zip(unq, counts)):
+                num_rnas = strain_2_num_rnas[strain]
+                val = self._convert_count_to_val(count, num_rnas, 'ratio')
+                strain_2_orthologs_ratio[strain] = val
+
+            # 3 - paralogs ratio per strain
+            strain_2_paralogs_ratio = {}
+            for strain in self.U.strains:
+                # TODO
+                strain_2_paralogs_ratio[strain] = 0
+
+            # 4 - adjust output record
+            rec = {"rna_type": rna_type}
+            for strain_nm, short in self.U.strain_nm_to_short.items():
+                orthologs_ratio = strain_2_orthologs_ratio.get(strain_nm, 0)
+                paralogs_ratio = strain_2_paralogs_ratio.get(strain_nm, 0)
+                rec[short] = "{(O," + f"{orthologs_ratio}" + ") (P," + f"{paralogs_ratio}" +")}"
+            records.append(rec)
+
+        df = pd.DataFrame(records)
+        write_df(df, join(self.out_path_rna_homologs_multi_strains, f"{val_type}_of_{rna_type}_homologs_per_strain__{self.out_file_suffix}.csv"))
 
     def _log_mrna_without_bp(self, strain: str, unq_targets_without_bp: Set[str]):
             ips_annot = self.ips_go_annotations.get(strain, None)
