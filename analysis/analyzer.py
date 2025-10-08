@@ -38,7 +38,7 @@ class Analyzer:
 
         # ---------  RUNTIME FLAGS  ---------
         self.run_clustering_of_rna_homologs = False
-        self.run_clustering_of_rna_paralogs_only = True
+        self.run_clustering_of_rna_paralogs_only = False
 
         self.run_homolog_clusters_stats = True   # Chapter 4.3.3: Clustering of RNA Homologs Across Multiple Strains
         
@@ -438,40 +438,12 @@ class Analyzer:
         for strain in self.U.strains:
             # 1 - get paralogs only clusters per strain
             paralogs_clusters = self._get_paralog_only_clusters_of_strain(rna_type, strain)
+            if not paralogs_clusters:
+                self.logger.debug(f"No {rna_type} paralog clusters for {strain}")
+                continue
             # 2 - validate and dump 
             paralogs_df = self._validate_paralogs_only_clusters(rna_type, paralogs_clusters, strain)
-            write_df(paralogs_df, join(self.out_path_clustering_paralogs_only, f"{strain}_{rna_str}_paralogs__{self.out_file_suffix}.csv"))
-    
-    def _cluster_paralogs_only_PREV(self, rna_str: str, rna_type: str):
-        self.logger.info(f"Clustering and analyzing {rna_str} paralogs only")
-        for strain in self.U.strains:
-            self.logger.info(f"Strain: {strain}")
-            # 1 - all RNAs
-            rna_nodes =  [n for n, d in self.G.nodes(data=True) if d['type'] == rna_type and d['strain'] == strain]
-            # 2 - RNAs that are paralogs
-            rna_paralogs_clusters = []
-            for rna in rna_nodes:
-                rna_paralogs = [n for n in self.G.neighbors(rna) if self.G.nodes[n]['type'] == rna_type and self.U.are_paralogs(self.G, rna, n, strain)]
-                if rna_paralogs:
-                    cluster = set([rna] + rna_paralogs)
-                    if cluster not in rna_paralogs_clusters:
-                        rna_paralogs_clusters.append(cluster)
-            # 3 - log
-            self.logger.info(
-                f"  ----------------   \n"
-                f"  Number of {rna_str}: {len(rna_nodes)} \n"
-                f"  Number of {rna_str} with paralogs: {sum(len(c) for c in rna_paralogs_clusters)} \n"
-                f"  Number of {rna_str} paralogs clusters: {len(rna_paralogs_clusters)}"
-            )
-            # 4 - dump
-            with open(join(self.out_path_clustering_paralogs_only, f"{strain}_{rna_type}_paralogs_clusters.txt"), 'w', encoding='utf-8') as f:
-                f.write(f"Strain: {strain}\n")
-                f.write(f"{rna_type} paralogs:\n")
-                for cluster in rna_paralogs_clusters:
-                    f.write("\n")
-                    for rna_node_id in cluster:
-                        node_info = self.G.nodes[rna_node_id]
-                        f.write(f"  {rna_node_id}: {json.dumps(node_info, ensure_ascii=False)}\n")
+            write_df(paralogs_df, join(self.out_path_clustering_paralogs_only, f"{strain}_{rna_type}_paralogs__{self.out_file_suffix}.csv"))
     
     def _get_homologs_clusters_of_strain(self, rna_type: str, strain: str) -> Set[Tuple[str, str]]:
         rna_nodes =  [n for n, d in self.G.nodes(data=True) if d['type'] == rna_type and d['strain'] == strain]
@@ -639,7 +611,7 @@ class Analyzer:
             records.append(rec)
 
         df = pd.DataFrame(records)
-        write_df(df, join(self.out_path_rna_homologs_multi_strains, f"{rna_type}_cluster_sizes_{val_type}_{min_val_limit}__{self.out_file_suffix}.csv"))
+        write_df(df, join(self.out_path_rna_homologs_multi_strains, f"cluster_sizes_{val_type}_{min_val_limit}__{self.out_file_suffix}.csv"))
     
     def _dump_stats_rna_homolog_clusters_strains_composition(self, val_type: str, min_val_limit: float = None, add_textit: bool = False):
         """
@@ -688,38 +660,55 @@ class Analyzer:
             records.append(rec)
         
         df = pd.DataFrame(records)
-        write_df(df, join(self.out_path_rna_homologs_multi_strains, f"{rna_type}_cluster_compositions_{val_type}_{min_val_limit}__{self.out_file_suffix}.csv"))
+        write_df(df, join(self.out_path_rna_homologs_multi_strains, f"cluster_compositions_{val_type}_{min_val_limit}__{self.out_file_suffix}.csv"))
     
     def _dump_stats_rna_orthologs_n_paralogs_per_strain(self, val_type: str):
         """
         Args:
             val_type (str): 'ratio' or 'percentage'
         """
+        # -----------------   sRNA, mRNA rows   -----------------
+        _map = {}
         records = []
         for (rna_type, all_homologs_df) in [(self.U.srna, self.srna_homologs.copy()), (self.U.mrna, self.mrna_homologs.copy())]:
+            _map[rna_type] = {}
+
             # 1 - num RNAs per strain
             strain_2_num_rnas = {}
             for strain in self.U.strains:
                 num_rnas = len([n for n, d in self.G.nodes(data=True) if d['type'] == rna_type and d['strain'] == strain])
                 strain_2_num_rnas[strain] = num_rnas
+            _map[rna_type]['strain_2_num_rnas'] = strain_2_num_rnas
 
             # 2 - orthologs val per strain
             clusters = [ast.literal_eval(c) for c in all_homologs_df['cluster'] ]
             unq, counts = np.unique([self.G.nodes[rna]['strain'] for cls in clusters for rna in cls], return_counts=True)
             strain_2_orthologs_val = {}
-            for (strain, count) in list(zip(unq, counts)):
+            for (strain, o_count) in list(zip(unq, counts)):
                 num_rnas = strain_2_num_rnas[strain]
-                val = self._convert_count_to_val(count, num_rnas, val_type)
+                val = self._convert_count_to_val(o_count, num_rnas, val_type)
                 strain_2_orthologs_val[strain] = val
+            _map[rna_type]['strain_2_orthologs_val'] = strain_2_orthologs_val
 
             # 3 - paralogs val per strain
             strain_2_paralogs_val = {}
             for strain in self.U.strains:
-                # TODO
-                strain_2_paralogs_val[strain] = 0
+                file_path = join(self.out_path_clustering_paralogs_only, f"{strain}_{rna_type}_paralogs__{self.out_file_suffix}.csv")
+                if not os.path.exists(file_path):
+                    self.logger.info(f"#### no {rna_type} paralogs clusters for {strain}")
+                    continue
+                # paralogs count
+                paralogs_df = read_df(file_path)
+                clusters = [ast.literal_eval(c) for c in paralogs_df['cluster']]
+                p_count = sum([len(cls) for cls in clusters])
+                # paralogs val
+                num_rnas = strain_2_num_rnas[strain]
+                val = self._convert_count_to_val(p_count, num_rnas, val_type)
+                strain_2_paralogs_val[strain] = val
+            _map[rna_type]['strain_2_paralogs_val'] = strain_2_paralogs_val
 
             # 4 - adjust output record
-            rec = {"rna_type": rna_type}
+            rec = {"key": rna_type}
             max_val = 0
             for strain_nm, short in self.U.strain_nm_to_short.items():
                 orthologs_val = strain_2_orthologs_val.get(strain_nm, 0)
@@ -727,11 +716,25 @@ class Analyzer:
                 rec[short] = "{(O," + f"{orthologs_val}" + ") (P," + f"{paralogs_val}" +")}"
                 max_val = max(max_val, orthologs_val, paralogs_val)
             rec['max_val'] = max_val
-            
             records.append(rec)
+        df1 = pd.DataFrame(records)
+        
+        # -----------------   Orthologs, Paralogs rows   -----------------
+        records = []
+        for k in ["orthologs", "paralogs"]:
+            rec = {"key": k}
+            max_val = 0
+            for strain_nm, short in self.U.strain_nm_to_short.items():
+                srna_val = _map[self.U.srna][f'strain_2_{k}_val'].get(strain_nm, 0)
+                mrna_val = _map[self.U.mrna][f'strain_2_{k}_val'].get(strain_nm, 0)
+                rec[short] = "{(s," + f"{srna_val}" + ") (m," + f"{mrna_val}" +")}"
+                max_val = max(max_val, srna_val, mrna_val)
+            rec['max_val'] = max_val
+            records.append(rec)
+        df2 = pd.DataFrame(records)
 
-        df = pd.DataFrame(records)
-        write_df(df, join(self.out_path_rna_homologs_multi_strains, f"{val_type}_of_{rna_type}_homologs_per_strain__{self.out_file_suffix}.csv"))
+        df = pd.concat([df1, df2], ignore_index=True)
+        write_df(df, join(self.out_path_rna_homologs_multi_strains, f"rna_homologs_per_strain_{val_type}__{self.out_file_suffix}.csv"))
 
     def _log_mrna_without_bp(self, strain: str, unq_targets_without_bp: Set[str]):
             ips_annot = self.ips_go_annotations.get(strain, None)
