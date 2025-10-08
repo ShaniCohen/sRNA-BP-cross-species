@@ -256,7 +256,7 @@ class GraphUtils:
         return self._are_orthologs(G, rna_node_id_1, rna_node_id_2, strain_1, strain_2, edge_type)
     
     def get_orthologs_cluster(self, G, rna_node_id, cluster) -> set:
-        """ Get all orthologs of a given RNA node in the graph G. orrtholog is a transitive relation, so all orthologs of the orthologs are also included. """
+        """ Get all orthologs of a given RNA node in the graph G. ortholog is a transitive relation, so all orthologs of the orthologs are also included. """
         assert G.has_node(rna_node_id)
         assert G.nodes[rna_node_id]['type'] in [self.srna, self.mrna], f"RNA node {rna_node_id} has invalid type: {G.nodes[rna_node_id]['type']}"
         
@@ -270,6 +270,21 @@ class GraphUtils:
             for o in direct_orthologs:
                 cluster = self.get_orthologs_cluster(G, o, cluster)
         
+        return cluster
+    
+    def get_paralogs_only_cluster(self, G, strain, rna_node_id, cluster) -> set:
+        """ Get all paralogs of a given RNA node in the graph G. paralogs is a transitive relation, so all paralogs of the paralogs are also included. """
+        assert G.has_node(rna_node_id)
+        assert G.nodes[rna_node_id]['type'] in [self.srna, self.mrna], f"RNA node {rna_node_id} has invalid type: {G.nodes[rna_node_id]['type']}"
+        
+        if rna_node_id not in cluster:
+            cluster.add(rna_node_id)
+            # get direct paralogs
+            direct_paralogs = [neighbor for neighbor in G.neighbors(rna_node_id) if G.nodes[neighbor]['type'] in [self.srna, self.mrna] and \
+                               self.are_paralogs(G, rna_node_id, neighbor, strain)]
+            for p in direct_paralogs:
+                cluster = self.get_paralogs_only_cluster(G, strain, p, cluster)
+
         return cluster
     
     def get_short_strain_nm(self, strain_nm: str) -> str:
