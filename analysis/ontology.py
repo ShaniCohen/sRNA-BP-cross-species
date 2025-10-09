@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from os.path import join
 from pathlib import Path
-from preprocessing.general_pr import convert_count_to_val
+from preprocessing.general_pr import convert_count_to_val, get_latex_coords_info
 from typing import List, Dict
 import pickle
 import json
@@ -177,16 +177,13 @@ class Ontology:
                 self.logger.warning(f"missing nodes: {[go for go in (sub_go_number, obj_go_number) if not G.has_node(go)]}")    
         
         assert G.number_of_edges() == sum(edge_type_to_count.values())
+        self.logger.info(f"GO type: {go_node_type}, nodes: {G.number_of_nodes()}, edges (all): {G.number_of_edges()}, edge types (all): {edge_type_to_count}")
         
-        # 3 - log
-
-        rec = {
-            "latex_symbolic_x_coords": "",
-            "latex_coordinates": ""
-        }
+        # 3 - log relevant edges type (for LateX papar)
+        edge_type_to_count = {k: v for k, v in edge_type_to_count.items() if k != self.type_sub_property_of}
+        edge_type_to_ratio = {k: convert_count_to_val(v, sum(edge_type_to_count.values()), 'ratio') for k, v in edge_type_to_count.items()}
+        edge_type_to_ratio = dict(sorted(edge_type_to_ratio.items(), key=lambda item: item[1], reverse=True))
+        symbolic_x_coords, coordinates, ymax = get_latex_coords_info(edge_type_to_ratio)
+        self.logger.info(f"\n symbolic_x_coords: {symbolic_x_coords} \n coordinates: {coordinates} \n ymax: {ymax}")
         
-
-
-        self.logger.info(f"GO type: {go_node_type}, nodes: {G.number_of_nodes()}, edges: {G.number_of_edges()}, edge types: {sorted(edge_types)}")
-
         return G

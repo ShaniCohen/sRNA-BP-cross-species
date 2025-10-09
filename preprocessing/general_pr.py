@@ -1,5 +1,6 @@
 import pandas as pd
 import logging
+from typing import Tuple, Dict
 logger = logging.getLogger(__name__)
 
 
@@ -43,4 +44,17 @@ def convert_count_to_val(count: int, denominator: int, val_type: str):
         else:
             raise ValueError(f"val_type {val_type} is not supported")
         return val
+
+
+def get_latex_coords_info(x_to_y: Dict[str, float], italics: bool = False) -> Tuple[str, str, float]:
+    # preprocess x
+    x_to_y = {x.replace("_", r"\_"): y for x, y in x_to_y.items()}
+    if italics:
+        x_to_y = {"\\textit{" + f"{x}" + "}": y for x, y in x_to_y.items()}
+    max_y = max(x_to_y.values())
+    # apply format 
+    latex_symbolic_x_coords = "{" + ",".join(list(x_to_y.keys())) + "}"
+    latex_coordinates = "{(" + ") (".join([f"{k},{v}" for k, v in x_to_y.items()]) + ")}"
+
+    return latex_symbolic_x_coords, latex_coordinates, max_y
 
