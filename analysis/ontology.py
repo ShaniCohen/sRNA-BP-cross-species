@@ -181,9 +181,10 @@ class Ontology:
         
         # 3 - log relevant edges type (for LateX papar)
         edge_type_to_count = {k: v for k, v in edge_type_to_count.items() if k != self.type_sub_property_of}
+        num_edges = sum(edge_type_to_count.values())
         edge_type_to_ratio = {k: convert_count_to_val(v, sum(edge_type_to_count.values()), 'ratio') for k, v in edge_type_to_count.items()}
         edge_type_to_ratio = dict(sorted(edge_type_to_ratio.items(), key=lambda item: item[1], reverse=True))
-        symbolic_x_coords, coordinates, ymax = get_latex_coords_info(edge_type_to_ratio)
-        self.logger.info(f"\n symbolic_x_coords: {symbolic_x_coords} \n coordinates: {coordinates} \n ymax: {ymax}")
+        symbolic_x_coords, coordinates, ymax = get_latex_coords_info(edge_type_to_ratio, italics=True)
+        self.logger.info(f"\n num_edges: {num_edges} \n symbolic_x_coords: {symbolic_x_coords} \n coordinates: {coordinates} \n ymax: {ymax}")
         
         return G
