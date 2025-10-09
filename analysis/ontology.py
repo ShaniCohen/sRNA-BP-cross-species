@@ -152,6 +152,7 @@ class Ontology:
             "http://www.geneontology.org/formats/oboInOwl#hasAlternativeId"
         """
         G = nx.MultiDiGraph()
+        
         # 1 - add nodes
         for n in self.class_nodes:
             go_number = self._go_number_from_id(n['id'])
@@ -161,6 +162,7 @@ class Ontology:
                 if v['val'] == go_node_type:
                     G.add_node(go_number, type=go_node_type, lbl=lbl, meta=meta)
                     break
+        
         # 2 - add edges
         edge_type_to_count = dict(zip(self.all_edge_types, [0]*len(self.all_edge_types)))            
         for e in self.edges:

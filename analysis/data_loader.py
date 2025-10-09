@@ -442,20 +442,20 @@ class DataLoader:
     def _load_annotations(self) -> Dict[str, Dict[str, pd.DataFrame]]:
         # ---------------------------   per dataset preprocessing   ---------------------------
         for strain in self.strains:
-            self._load_curated_annotations(strain=strain)
+            self._load_uniprot_annotations(strain=strain)
             self._load_interproscan_annotations(strain=strain)
-            # TODO: re-run with clean protein files
+            # TODO: re-run eggnog with clean protein files
             # self._load_eggnog_annotations(strain=strain)
     
-    def _load_curated_annotations(self, strain: str):
+    def _load_uniprot_annotations(self, strain: str):
         _path = join(self.config['go_annotations_dir'], 'Curated')
         if os.path.exists(join(_path, f'{strain}.goa')):
             self.logger.info(f"loading curated annotations for {strain}")
             # 1 - load and preprocess
-            annot_uniport = load_goa(file_path=join(_path, f'{strain}.goa'))
-            annot_map_uniport_to_locus = read_df(file_path=join(_path, f'{strain}_idmapping.dat'))
-            annot_map_uniport_to_locus.columns = ['UniProt_ID', 'Database', 'Mapped_ID']
-            curated_annot, c_locus_col = ap_annot.preprocess_curated_annot(strain, annot_uniport, annot_map_uniport_to_locus)
+            annot_uniprot = load_goa(file_path=join(_path, f'{strain}.goa'))
+            annot_map_uniprot_to_locus = read_df(file_path=join(_path, f'{strain}_idmapping.dat'))
+            annot_map_uniprot_to_locus.columns = ['UniProt_ID', 'Database', 'Mapped_ID']
+            curated_annot, c_locus_col = ap_annot.preprocess_curated_annot(strain, annot_uniprot, annot_map_uniprot_to_locus)
             # 2 - update info
             if strain not in self.strains_data:
                 self.strains_data[strain] = {}
@@ -493,110 +493,6 @@ class DataLoader:
                 "eggnog_annot": eggnog_annot,
                 "eggnog_header_col": e_header_col
             })
-    
-    def _load_annotations_prev(self) -> Dict[str, Dict[str, pd.DataFrame]]:
-        # ---------------------------   per dataset preprocessing   ---------------------------
-        # 1 - Escherichia coli K12
-        k12_dir = self.config[f'{self.ecoli_k12_nm}_dir']
-        k12_annot_uniport = load_goa(file_path=join(self.config['go_annotations_dir'], k12_dir, 'e_coli_MG1655.goa'))
-        k12_annot_map_uniport_to_locus = read_df(file_path=join(self.config['go_annotations_dir'], k12_dir, 'ECOLI_83333_idmapping.dat'))
-        k12_annot_map_uniport_to_locus.columns = ['UniProt_ID', 'Database', 'Mapped_ID']
-        k12_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], k12_dir, 'InterProScan', 'Ecoli_k12_proteins.fasta.json'))
-        
-        interproscan_annot, i_header_col = ap_annot.preprocess_interproscan_annot(k12_annot_interproscan)
-        curated_annot, c_locus_col = ap_annot.preprocess_curated_annot(self.ecoli_k12_nm, k12_annot_uniport, k12_annot_map_uniport_to_locus)
-
-        # 1.1 - update info
-        if self.ecoli_k12_nm not in self.strains_data:
-            self.strains_data[self.ecoli_k12_nm] = {}
-        self.strains_data[self.ecoli_k12_nm].update({
-            "interproscan_annot": interproscan_annot,
-            "interproscan_header_col": i_header_col,
-            "curated_annot": curated_annot,
-            "curated_locus_col": c_locus_col
-        })
-        
-        # 2 - Escherichia coli EPEC
-        epec_dir = self.config[f'{self.ecoli_epec_nm}_dir']
-        epec_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], epec_dir, 'InterProScan', 'EPEC_proteins.fasta.json'))
-        eggnog_annot_file=join(self.config['go_annotations_dir'], epec_dir, 'EggNog', 'EPEC.annotations')
-
-        interproscan_annot, i_header_col = ap_annot.preprocess_interproscan_annot(epec_annot_interproscan)
-        eggnog_annot, e_header_col = ap_annot.load_and_preprocess_eggnog_annot(eggnog_annot_file)
-        
-        # 2.1 - update info
-        if self.ecoli_epec_nm not in self.strains_data:
-            self.strains_data[self.ecoli_epec_nm] = {}
-        self.strains_data[self.ecoli_epec_nm].update({
-            "interproscan_annot": interproscan_annot,
-            "interproscan_header_col": i_header_col,
-            "eggnog_annot": eggnog_annot,
-            "eggnog_header_col": e_header_col
-        })
-    
-        # 3 - Salmonella enterica
-        salmonella_dir = self.config[f'{self.salmonella_nm}_dir']
-        salmonella_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], salmonella_dir, 'InterProScan', 'Salmonella_proteins.fasta.json'))
-        eggnog_annot_file=join(self.config['go_annotations_dir'], salmonella_dir, 'EggNog', 'Salmonella.annotations')
-        
-        interproscan_annot, i_header_col = ap_annot.preprocess_interproscan_annot(salmonella_annot_interproscan)
-        eggnog_annot, e_header_col = ap_annot.load_and_preprocess_eggnog_annot(eggnog_annot_file)
-        # # patch to adjust Salmonella headers
-        # _lambda = lambda x: x.split("|")[0] + "|" + x.split("|")[2] + "|" + "|".join(x.split("|")[2:])
-        # interproscan_annot[i_header_col] = interproscan_annot[i_header_col].apply(_lambda)
-        # eggnog_annot[e_header_col] = eggnog_annot[e_header_col].apply(_lambda)
-        
-        # 3.1 - update info
-        if self.salmonella_nm not in self.strains_data:
-            self.strains_data[self.salmonella_nm] = {}
-        self.strains_data[self.salmonella_nm].update({
-            "interproscan_annot": interproscan_annot,
-            "interproscan_header_col": i_header_col,
-            "eggnog_annot": eggnog_annot,
-            "eggnog_header_col": e_header_col
-        })
-
-        # 4 - Klebsiella pneumoniae
-        klebsiella_dir = self.config[f'{self.klebsiella_nm}_dir']
-        klebsiella_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], klebsiella_dir, 'InterProScan', 'Klebsiella_proteins.fasta.json'))
-        
-        interproscan_annot, i_header_col = ap_annot.preprocess_interproscan_annot(klebsiella_annot_interproscan)
-
-        # 4.1 - update info
-        if self.klebsiella_nm not in self.strains_data:
-            self.strains_data[self.klebsiella_nm] = {}
-        self.strains_data[self.klebsiella_nm].update({
-            "interproscan_annot": interproscan_annot,
-            "interproscan_header_col": i_header_col
-        })
-    
-        # 5 - Vibrio cholerae
-        vibrio_dir = self.config[f'{self.vibrio_nm}_dir']
-        vibrio_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], vibrio_dir, 'InterProScan', 'Cholerae_proteins.fasta.json'))
-        
-        interproscan_annot, i_header_col = ap_annot.preprocess_interproscan_annot(vibrio_annot_interproscan)
-
-        # 5.1 - update info
-        if self.vibrio_nm not in self.strains_data:
-            self.strains_data[self.vibrio_nm] = {}
-        self.strains_data[self.vibrio_nm].update({
-            "interproscan_annot": interproscan_annot,
-            "interproscan_header_col": i_header_col
-        })
-
-        # 6 - Pseudomonas aeruginosa
-        pseudomonas_dir = self.config[f'{self.pseudomonas_nm}_dir']
-        pseudomonas_annot_interproscan = load_json(file_path=join(self.config['go_annotations_dir'], pseudomonas_dir, 'InterProScan', 'Pseudomonas_proteins.fasta.json'))
-        
-        interproscan_annot, i_header_col = ap_annot.preprocess_interproscan_annot(pseudomonas_annot_interproscan)
-
-        # 6.1 - update info
-        if self.pseudomonas_nm not in self.strains_data:
-            self.strains_data[self.pseudomonas_nm] = {}
-        self.strains_data[self.pseudomonas_nm].update({
-            "interproscan_annot": interproscan_annot,
-            "interproscan_header_col": i_header_col
-        })
 
     def _match_annotations_to_mrnas(self):
         for strain, data in self.strains_data.items():

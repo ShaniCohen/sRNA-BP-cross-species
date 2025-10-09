@@ -235,7 +235,6 @@ def preprocess_curated_annot(strain_nm: str, annot_uniport: Dict[str, Set[str]],
     annot_map[out_col_map] = list(map(lambda x: (x[0], x[1]), annot_map[['Database', 'Mapped_ID']].values))
     annot_map = annot_map[[col_uniport_id, out_col_map]].groupby([col_uniport_id], as_index=False).agg(lambda x: dict(sorted(x))).reset_index(drop=True)
 
-    # 2
     out_col_go_terms = 'GO_Terms'
     uniport_go_terms = pd.DataFrame({
         col_uniport_id: list(annot_uniport.keys()),
