@@ -5,6 +5,7 @@ from os.path import join
 import itertools
 from pathlib import Path
 from utils.general import read_df, write_df, create_dir_if_not_exists
+from preprocessing.general_pr import convert_count_to_val
 import networkx as nx
 from pyvis.network import Network
 from scipy.stats import hypergeom, false_discovery_control
@@ -551,24 +552,7 @@ class Analyzer:
     def _convert_strain_names(self, tuples_of_names: List[tuple]) -> List[tuple]:
         new_tuples_of_names = [tuple([self.U.get_short_strain_nm(nm) for nm in ast.literal_eval(tpl)]) for tpl in tuples_of_names]
         return new_tuples_of_names
-    
-    def _convert_count_to_val(self, count: int, denominator: int, val_type: str):
-        """
-        Args:
-            count (int):
-            denominator (int): denominator
-            val_type (str): 'ratio' or 'percentage'
-        Returns:
-            float or int: desired val
-        """
-        if val_type == 'ratio':
-            val = float(round(count/denominator, 2))
-        elif val_type == 'percentage':
-            val = int(round(count/denominator, 2)*100)
-        else:
-            raise ValueError(f"val_type {val_type} is not supported")
-        return val
-        
+
     def _dump_stats_rna_homolog_clusters_size(self, val_type: str, min_val_limit: float = None):
         """
         Args:
@@ -583,7 +567,7 @@ class Analyzer:
             # 2 - size
             # 2.1 - get distributoin values per size
             unq, counts = np.unique(all_homologs_df['cluster_size'], return_counts=True)
-            vals = [self._convert_count_to_val(count, num_clusters, 'ratio') for count in counts]
+            vals = [convert_count_to_val(count, num_clusters, 'ratio') for count in counts]
             
             # 2.2 - list of tuples (cluster_size , val) **sorted by cluster_size**
             size_to_val = dict(zip(unq, vals))
@@ -628,7 +612,7 @@ class Analyzer:
             # 2.1 - get distributoin values per strains composition
             unq, counts = np.unique(all_homologs_df['strains'], return_counts=True)
             unq = self._convert_strain_names(list(unq))
-            vals = [self._convert_count_to_val(count, num_clusters, val_type) for count in counts]
+            vals = [convert_count_to_val(count, num_clusters, val_type) for count in counts]
 
             # 2.2 - list of tuples (strains_composition , val) **sorted by val** in descending order  
             cluster_compositions_vals = sorted(list(zip(unq, vals)), key=lambda x: x[1], reverse=True)
@@ -686,7 +670,7 @@ class Analyzer:
             strain_2_orthologs_val = {}
             for (strain, o_count) in list(zip(unq, counts)):
                 num_rnas = strain_2_num_rnas[strain]
-                val = self._convert_count_to_val(o_count, num_rnas, val_type)
+                val = convert_count_to_val(o_count, num_rnas, val_type)
                 strain_2_orthologs_val[strain] = val
             _map[rna_type]['strain_2_orthologs_val'] = strain_2_orthologs_val
 
@@ -703,7 +687,7 @@ class Analyzer:
                 p_count = sum([len(cls) for cls in clusters])
                 # paralogs val
                 num_rnas = strain_2_num_rnas[strain]
-                val = self._convert_count_to_val(p_count, num_rnas, val_type)
+                val = convert_count_to_val(p_count, num_rnas, val_type)
                 strain_2_paralogs_val[strain] = val
             _map[rna_type]['strain_2_paralogs_val'] = strain_2_paralogs_val
 

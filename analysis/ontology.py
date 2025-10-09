@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from os.path import join
 from pathlib import Path
-from utils.general import read_df, write_df
+from preprocessing.general_pr import convert_count_to_val
 from typing import List, Dict
 import pickle
 import json
@@ -46,6 +46,7 @@ class Ontology:
         self.type_pos_regulates = 'positively_regulates'
         self.type_is_a = 'is_a'
         self.type_sub_property_of = 'sub_property_of'
+        self.all_edge_types = [self.type_part_of, self.type_regulates, self.type_neg_regulates, self.type_pos_regulates, self.type_is_a, self.type_sub_property_of]
         
     @staticmethod
     def _go_number_from_id(original_id):
@@ -151,7 +152,7 @@ class Ontology:
             "http://www.geneontology.org/formats/oboInOwl#hasAlternativeId"
         """
         G = nx.MultiDiGraph()
-        # add nodes
+        # 1 - add nodes
         for n in self.class_nodes:
             go_number = self._go_number_from_id(n['id'])
             lbl = n['lbl']
@@ -160,9 +161,8 @@ class Ontology:
                 if v['val'] == go_node_type:
                     G.add_node(go_number, type=go_node_type, lbl=lbl, meta=meta)
                     break
-
-        # add edges
-        edge_types = set()            
+        # 2 - add edges
+        edge_type_to_count = dict(zip(self.all_edge_types, [0]*len(self.all_edge_types)))            
         for e in self.edges:
             sub_go_number = self._go_number_from_id(e['sub'])
             obj_go_number = self._go_number_from_id(e['obj'])
@@ -171,65 +171,22 @@ class Ontology:
             # add edge if both nodes exist
             if G.has_node(sub_go_number) and G.has_node(obj_go_number):
                 G.add_edge(sub_go_number, obj_go_number, type=edge_type)
-                edge_types.add(edge_type)
-            # warn if missing a node
+                edge_type_to_count[edge_type] = edge_type_to_count[edge_type] + 1
+            # warn if missing a single node
             if sum([G.has_node(sub_go_number), G.has_node(obj_go_number)]) == 1:
-                self.logger.warning(f"missing node: {sub_go_number if not G.has_node(sub_go_number) else obj_go_number}")     
+                self.logger.warning(f"missing nodes: {[go for go in (sub_go_number, obj_go_number) if not G.has_node(go)]}")    
         
+        assert G.number_of_edges() == sum(edge_type_to_count.values())
+        
+        # 3 - log
+
+        rec = {
+            "latex_symbolic_x_coords": "",
+            "latex_coordinates": ""
+        }
+        
+
+
         self.logger.info(f"GO type: {go_node_type}, nodes: {G.number_of_nodes()}, edges: {G.number_of_edges()}, edge types: {sorted(edge_types)}")
-        return G 
 
-
-	# def ref_create_ontology_nx_graph(self):
-    #     G = nx.Graph()
-
-    #     # Add nodes with different types
-    #     G.add_node("Person1", type="person")
-    #     G.add_node("Person2", type="person")
-    #     G.add_node("Company1", type="company")
-    #     G.add_node("Company2", type="company")
-    #     G.add_node("Event1", type="event")
-    #     G.add_node("Event2", type="event")
-
-    #     # Add edges between the nodes
-    #     G.add_edge("Person1", "Company1")
-    #     G.add_edge("Person2", "Company2")
-    #     G.add_edge("Person1", "Event1")
-    #     G.add_edge("Person2", "Event2")
-    #     G.add_edge("Company1", "Event1")
-    #     G.add_edge("Company2", "Event2")
-
-    #     # Create another graph H
-    #     H = nx.Graph()
-
-    #     # Add nodes to the new graph H
-    #     H.add_node("Person3", type="person")
-    #     H.add_node("Company3", type="company")
-    #     H.add_node("Event3", type="event")
-
-    #     # Add edges within graph H
-    #     H.add_edge("Person3", "Company3")
-    #     H.add_edge("Company3", "Event3")
-    #     H.add_edge("Event3", "Person3")
-
-    #     # Add edges connecting nodes from H to nodes in G
-    #     H.add_edge("Person3", "Company1")
-    #     H.add_edge("Company3", "Event1")
-
-    #     # Combine both graphs into a new graph
-    #     F = nx.compose(G, H)
-
-    #     # Draw the combined graph with different colors for different types of nodes
-    #     pos = nx.spring_layout(F)
-    #     node_colors = []
-    #     for node in F.nodes(data=True):
-    #         if node[1]['type'] == 'person':
-    #             node_colors.append('blue')
-    #         elif node[1]['type'] == 'company':
-    #             node_colors.append('green')
-    #         elif node[1]['type'] == 'event':
-    #             node_colors.append('red')
-
-    #     nx.draw(F, pos, with_labels=True, node_color=node_colors, node_size=3000, font_size=12, font_color='white')
-    #     plt.show()
-    #     return
+        return G
