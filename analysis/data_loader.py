@@ -85,8 +85,10 @@ class DataLoader:
         self.srna_seq_type = 'sRNA'
         self.protein_seq_type = 'protein'
 
+        # ---------  RUNTIME FLAGS  ---------
         self.dump_rna_and_inter_data_summary = True
         self.generate_clean_rna_fasta = False
+        self.load_pairs_clustering_from_pickle = True
     
     def get_strains(self) -> List[str]:
         return self.strains
@@ -106,7 +108,7 @@ class DataLoader:
         self._load_annotations()
         self._match_annotations_to_mrnas()
         # 4 - clustering
-        self._load_clustering_data(load_from_pickle=True)
+        self._load_clustering_data()
     
     def _load_rna_and_inter_data(self) -> Dict[str, Dict[str, pd.DataFrame]]:
         # ---------------------------   per dataset preprocessing   ---------------------------
@@ -440,7 +442,6 @@ class DataLoader:
             data['all_mrna'] = all_mrna_w
     
     def _load_annotations(self) -> Dict[str, Dict[str, pd.DataFrame]]:
-        # ---------------------------   per dataset preprocessing   ---------------------------
         for strain in self.strains:
             self._load_uniprot_annotations(strain=strain)
             self._load_interproscan_annotations(strain=strain)
@@ -503,9 +504,9 @@ class DataLoader:
             if 'eggnog_annot' in data:
                 data['all_mrna_w_eggnog_annot'] = ap_annot.annotate_mrnas_w_eggnog_annt(strain, data)
 
-    def _load_clustering_data(self, load_from_pickle: bool = False):
+    def _load_clustering_data(self):
         # 1 - load sRNA and mRNA clustering
-        if load_from_pickle:
+        if self.load_pairs_clustering_from_pickle:
             srna_clstr_dict = self._load_clustering_pickle(seq_type=self.srna_seq_type)
             mrna_clstr_dict = self._load_clustering_pickle(seq_type=self.protein_seq_type)
         else:
