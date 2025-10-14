@@ -90,10 +90,10 @@ class Analyzer:
         self.mrna_homologs = read_df(join(self.out_path_clustering_homologs, f"mRNA_homologs__{self.out_file_suffix}.csv"))
 
         # 3 - Calculate and dump statistics of homolog clusters
-        if self.run_homolog_clusters_stats:  
+        if self.run_homolog_clusters_stats:
+            self._dump_stats_rna_orthologs_n_paralogs_per_strain(val_type = 'ratio')
             self._dump_stats_rna_homolog_clusters_size(val_type = 'ratio')
             self._dump_stats_rna_homolog_clusters_strains_composition(val_type = 'ratio', min_val_limit = 0.02)
-            self._dump_stats_rna_orthologs_n_paralogs_per_strain(val_type = 'ratio')
 
         # 4 - Map sRNAs to biological processes (BPs)
         self.logger.info("----- Before enrichment:")
