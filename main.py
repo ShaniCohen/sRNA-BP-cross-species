@@ -38,10 +38,10 @@ class AnalysisRunner:
         configs['runner']['input_data_path'] = configs['runner']['remote_data_path'] if 'shanisa' in ROOT_PATH else configs['runner']['local_data_path']
         configs['runner']['output_data_path'] = join(configs['runner']['input_data_path'], 'outputs')
         # data loader
-        for _dir in ['interactions_dir', 'rna_dir', 'proteins_dir', 'go_annotations_dir', 'clustering_dir']:
+        for _dir in ['interactions_dir', 'rna_dir', 'proteins_dir', 'go_annotations_dir', 'go_embeddings_dir', 'clustering_dir']:
             configs['data_loader'][_dir] = join(configs['runner']['input_data_path'], configs['data_loader'][_dir])
         # ontology
-        for _dir in ['gene_ontology_dir', 'go_embeddings_dir']:
+        for _dir in ['gene_ontology_dir']:
             configs['ontology'][_dir] = join(configs['runner']['input_data_path'], configs['ontology'][_dir])
         # graph utils
         # graph builder
@@ -61,7 +61,6 @@ class AnalysisRunner:
         ontology = Ontology(self.configs['ontology'], self.logger)
         ontology.load_go_ontology()
         ontology.create_ontology_nx_graphs()
-        ontology.load_go_embeddings()
 
         graph_utils = GraphUtils(self.configs['graph_utils'], self.logger, data_loader, ontology)
 
@@ -75,9 +74,6 @@ class AnalysisRunner:
         #                                         bp_str = "0006865__amino acid transport")
         
         self.logger.info(f"--------------   run completed   --------------")
-    
-    def _run_ad_hoc_outputs(self):
-        print()
 
 
 if __name__ == "__main__":

@@ -80,7 +80,9 @@ class DataLoader:
         self.strains_data = {}
         self.srna_acc_col = 'sRNA_accession_id'
         self.mrna_acc_col = 'mRNA_accession_id'
-        
+
+        self.go_embeddings_data = {}  # go id to embeddings vector
+
         self.clustering_data = {}
         self.srna_seq_type = 'sRNA'
         self.protein_seq_type = 'protein'
@@ -107,8 +109,10 @@ class DataLoader:
         # 3 - GO annotations
         self._load_annotations()
         self._match_annotations_to_mrnas()
-        # 4 - clustering
-        self._load_clustering_data()
+        # 4 - GO embeddings
+        self._load_po2vec_go_embeddings()
+        # 4 - RNA homology clustering
+        self._load_rna_homology_clustering_data()
     
     def _load_rna_and_inter_data(self) -> Dict[str, Dict[str, pd.DataFrame]]:
         # ---------------------------   per dataset preprocessing   ---------------------------
@@ -504,7 +508,15 @@ class DataLoader:
             if 'eggnog_annot' in data:
                 data['all_mrna_w_eggnog_annot'] = ap_annot.annotate_mrnas_w_eggnog_annt(strain, data)
 
-    def _load_clustering_data(self):
+    def _load_po2vec_go_embeddings(self):
+        self.logger.info(f"loading PO2Vec GO embeddings...")
+        embeddings_pkl_file = join(self.config['go_embeddings_dir'], self.config['po2vec_go_embeddings_pkl_file'])
+        embeddings_df = pd.read_pickle(embeddings_pkl_file)
+        go_id_to_emb = dict(zip(embeddings_df['terms'].apply(lambda x: x.split(':')[1]), 
+                                embeddings_df['embeddings'].apply(lambda x: np.array(x))))
+        self.go_embeddings_data['po2vec_embeddings'] = go_id_to_emb
+
+    def _load_rna_homology_clustering_data(self):
         # 1 - load sRNA and mRNA clustering
         if self.load_pairs_clustering_from_pickle:
             srna_clstr_dict = self._load_clustering_pickle(seq_type=self.srna_seq_type)

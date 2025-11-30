@@ -32,8 +32,8 @@ class GraphUtils:
         }
         assert len(set(self.strains) - set(self.strain_nm_to_short.keys())) == 0, "misalignment between strain names in GraphUtils & data_loader"
 
-        # ----- Graph properties
-        # node types
+        # -----  Graph properties  -----
+        # ---  node types
         # GO
         self.bp = ontology.type_bp
         self.mf = ontology.type_mf
@@ -44,7 +44,11 @@ class GraphUtils:
         # sRNA
         self.srna = "srna"
 
-        # edge types
+        # ---  node properties
+        #   po2vec_embeddings (optional)
+        self.po2vec_emb = 'po2vec_embeddings'
+
+        # ---  edge types
         # GO --> GO  
         self.part_of = ontology.type_part_of
         self.regulates = ontology.type_regulates
@@ -62,6 +66,8 @@ class GraphUtils:
         # orthologs: different strains
         self.ortholog_by_seq = "ortholog_by_seq"
         self.ortholog_by_name = "ortholog_by_name"
+        # GO <--> GO
+        self.po2vec_similarity = "po2vec_similarity"
 
         # edge annot types (annot_type)
         self.curated = "curated"
@@ -163,6 +169,40 @@ class GraphUtils:
         both_srna = (G.nodes[rna_node_id_1]['type'] == self.srna) & (G.nodes[rna_node_id_2]['type'] == self.srna)
         both_mrna = (G.nodes[rna_node_id_2]['type'] == self.mrna) & (G.nodes[rna_node_id_2]['type'] == self.mrna)
         assert both_srna or both_mrna
+    
+    def add_edges_po2vec_similarity(self, G, go_node_id_1, go_node_id_2, po2vec_similarity_score: float):
+        """ Add "po2vec_similarity" edge between two RNA nodes of different strains
+
+        Args:
+            go_node_id_1 (str): the first GO id (node id)
+            go_node_id_2 (str): the second GO id (node id)
+            po2vec_similarity_score (float): the similarity score between the two GO terms based on PO2Vec embeddings
+        """
+        self._validate_go_go_similarity(G, go_node_id_1, go_node_id_2)
+        G.add_edge(go_node_id_1, go_node_id_2, type=self.po2vec_similarity, similarity_score=po2vec_similarity_score)
+        G.add_edge(go_node_id_2, go_node_id_1, type=self.po2vec_similarity, similarity_score=po2vec_similarity_score)
+        return G
+    
+    def add_node_property_po2vec_embedding(self, G, go_node_id, po2vec_embedding: np.ndarray):
+        """ Add PO2Vec embedding property to a GO node
+
+        Args:
+            go_node_id (str): the GO id (node id)
+            po2vec_embedding (np.ndarray): the PO2Vec embedding vector
+        """
+        assert G.has_node(go_node_id)
+        assert G.nodes[go_node_id]['type'] in self.go_types
+        assert G.nodes[go_node_id].get(self.po2vec_emb) is None, f"GO node {go_node_id} already has PO2Vec embedding"
+        
+        G.nodes[go_node_id][self.po2vec_emb] = po2vec_embedding
+        return G
+    
+    def _validate_go_go_similarity(self, G, go_node_id_1, go_node_id_2):
+        assert G.has_node(go_node_id_1) and G.has_node(go_node_id_2)
+        both_bp = (G.nodes[go_node_id_1]['type'] == self.bp) & (G.nodes[go_node_id_2]['type'] == self.bp)
+        both_mf = (G.nodes[go_node_id_1]['type'] == self.mf) & (G.nodes[go_node_id_2]['type'] == self.mf)
+        both_cc = (G.nodes[go_node_id_1]['type'] == self.cc) & (G.nodes[go_node_id_2]['type'] == self.cc)
+        assert both_bp or both_mf or both_cc
 
     def is_target(self, G, srna_node_id, mrna_node_id):
         """ Check if there is an interaction edge between sRNA and mRNA nodes """
@@ -254,6 +294,36 @@ class GraphUtils:
         """ Check if there are ortholog_by_name edges between two RNA nodes of different strains """
         edge_type = self.ortholog_by_name
         return self._are_orthologs(G, rna_node_id_1, rna_node_id_2, strain_1, strain_2, edge_type)
+
+    def _are_similar(self, G, go_node_id_1, go_node_id_2, similarity_edge_type):
+        """ Check if there are similarity edges between two GO nodes """
+        assert G.has_node(go_node_id_1) and G.has_node(go_node_id_2)
+        different_nodes = go_node_id_1 != go_node_id_2
+        both_go = (G.nodes[go_node_id_1]['type'] in self.go_types) & (G.nodes[go_node_id_2]['type'] in self.go_types)
+        
+        if different_nodes and both_go:
+            is_similar_1_2 = False
+            if G.has_edge(go_node_id_1, go_node_id_2):
+                for d in G[go_node_id_1][go_node_id_2].values():
+                    if d['type'] == similarity_edge_type:
+                        is_similar_1_2 = True
+                        score_1_2 = d['similarity_score']
+                        break
+            is_similar_2_1 = False
+            if G.has_edge(go_node_id_2, go_node_id_1):
+                for d in G[go_node_id_2][go_node_id_1].values():
+                    if d['type'] == similarity_edge_type:
+                        is_similar_2_1 = True
+                        score_2_1 = d['similarity_score']
+                        break
+            assert is_similar_1_2 == is_similar_2_1, "GO similarity edges should be symmetric"
+            assert (not is_similar_1_2) or (score_1_2 == score_2_1), "GO similarity scores should be the same in both directions"
+            return is_similar_1_2 and is_similar_2_1
+        return False
+    
+    def are_similar_by_po2vec(self, G, go_node_id_1, go_node_id_2):
+        """ Check if there are po2vec_similarity edges between two GO nodes """
+        return self._are_similar(G, go_node_id_1, go_node_id_2, self.po2vec_similarity)
     
     def get_orthologs_cluster(self, G, rna_node_id, cluster) -> set:
         """ Get all orthologs of a given RNA node in the graph G. ortholog is a transitive relation, so all orthologs of the orthologs are also included. """

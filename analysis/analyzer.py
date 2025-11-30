@@ -97,24 +97,30 @@ class Analyzer:
 
         # 4 - Map sRNAs to biological processes (BPs)
         self.logger.info("----- Before enrichment:")
+        # 4.1 - extract subgraphs
         srna_bp_mapping = self._generate_srna_bp_mapping()
+        bp_rna_mapping = self._generate_bp_rna_mapping(srna_bp_mapping)
+        # 4.2 - log
         self._log_srna_bp_mapping(srna_bp_mapping)
 
         # 5 - Enrichment (per strain): per sRNA, find and keep only significant biological processes (BPs) that its targets are invovlved in.
         if self.run_enrichment:
             self.logger.info("----- After enrichment:")
-            srna_bp_mapping, meta = self._apply_enrichment(srna_bp_mapping)
-            self._log_srna_bp_mapping(srna_bp_mapping)
-            self._dump_metadata(meta)
+            # 5.1 - extract subgraphs
+            srna_bp_mapping_en, meta_en = self._apply_enrichment(srna_bp_mapping)
+            bp_rna_mapping_en = self._generate_bp_rna_mapping(srna_bp_mapping_en)
+            # 5.2 - log and dump
+            self._log_srna_bp_mapping(srna_bp_mapping_en)
+            self._dump_metadata(meta_en)
 
         self.logger.info(f"--------------   Analysis Tools   --------------")
         # ------   Analysis 1 - Cross-Species Conservation of sRNAs' Functionality
         self._analysis_1_srna_homologs_to_commom_bps(srna_bp_mapping, self.U.exact_bp)
+        # self._analysis_1_srna_homologs_to_commom_bps(srna_bp_mapping_en, self.U.exact_bp)  # TODO: add indication when dumping results
 
         # ------   Analysis 2 - sRNA Regulation of Biological Processes (BPs)
-        # generate mapping of BP to mRNAs and sRNAs
-        bp_rna_mapping = self._generate_bp_rna_mapping(srna_bp_mapping)
         self._analysis_2_bp_rna_mapping(bp_rna_mapping)
+        # self._analysis_2_bp_rna_mapping(bp_rna_mapping_en)  # TODO: add indication when dumping results
     
     def _run_ad_hoc_outputs_analysis_1(self, srnas_cluster: Tuple[str], bp_str: str):
         self.logger.info(f"Running Ad-hoc Analysis...")

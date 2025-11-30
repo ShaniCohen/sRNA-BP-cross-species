@@ -35,8 +35,6 @@ class Ontology:
         self.type_cc = 'cellular_component'
         # 	lbl
 		# 	meta
-        #   po2vec_embeddings (optional)
-        self.emb_type_po2vec = 'po2vec_embeddings'
 
 		# ---- Edge properties ----
 		# 	type
@@ -74,31 +72,31 @@ class Ontology:
         # analysis
         self._log_stats()
         
-    def load_go_embeddings(self):
-        self._load_po2vec_go_embeddings()
-        return
+    # def load_go_embeddings(self):
+    #     self._load_po2vec_go_embeddings()
+    #     return
 
-    def _load_po2vec_go_embeddings(self):
-        self.logger.info(f"loading PO2Vec GO embeddings...")
-        embeddings_pkl_file = join(self.config['go_embeddings_dir'], self.config['po2vec_go_embeddings_pkl_file'])
-        embeddings_df = pd.read_pickle(embeddings_pkl_file)
-        go_id_to_emb = dict(zip(embeddings_df['terms'].apply(lambda x: x.split(':')[1]), 
-                                embeddings_df['embeddings'].apply(lambda x: np.array(x))))
-        # add embeddings to nodes
-        self._add_embeddings_to_graph_nodes(self.emb_type_po2vec, go_id_to_emb)
+    # def _load_po2vec_go_embeddings(self):
+    #     self.logger.info(f"loading PO2Vec GO embeddings...")
+    #     embeddings_pkl_file = join(self.config['go_embeddings_dir'], self.config['po2vec_go_embeddings_pkl_file'])
+    #     embeddings_df = pd.read_pickle(embeddings_pkl_file)
+    #     go_id_to_emb = dict(zip(embeddings_df['terms'].apply(lambda x: x.split(':')[1]), 
+    #                             embeddings_df['embeddings'].apply(lambda x: np.array(x))))
+    #     # add embeddings to nodes
+    #     self._add_embeddings_to_graph_nodes(self.emb_type_po2vec, go_id_to_emb)
     
-    def _add_embeddings_to_graph_nodes(self, emb_type: str, node_id_to_emb: Dict[str, np.ndarray]):
-        """
-        Iterates over all nodes in self.BP, self.MF, and self.CC and add their embeddings vectors.
-        """
-        for graph, graph_name in [(self.BP, "BP"), (self.MF, "MF"), (self.CC, "CC")]:
-            emb_count = 0
-            for node_id in graph.nodes:
-                emb = node_id_to_emb.get(node_id, None)
-                if emb is not None:
-                    graph.nodes[node_id][emb_type] = emb
-                    emb_count += 1
-            self.logger.info(f"{graph_name}: out of {len(graph.nodes)} nodes, {emb_count} have {emb_type} ({(emb_count/len(graph.nodes))*100:.2f}%)")
+    # def _add_embeddings_to_graph_nodes(self, emb_type: str, node_id_to_emb: Dict[str, np.ndarray]):
+    #     """
+    #     Iterates over all nodes in self.BP, self.MF, and self.CC and add their embeddings vectors.
+    #     """
+    #     for graph, graph_name in [(self.BP, "BP"), (self.MF, "MF"), (self.CC, "CC")]:
+    #         emb_count = 0
+    #         for node_id in graph.nodes:
+    #             emb = node_id_to_emb.get(node_id, None)
+    #             if emb is not None:
+    #                 graph.nodes[node_id][emb_type] = emb
+    #                 emb_count += 1
+    #         self.logger.info(f"{graph_name}: out of {len(graph.nodes)} nodes, {emb_count} have {emb_type} ({(emb_count/len(graph.nodes))*100:.2f}%)")
         
     def get_deprecated_node_ids(self) -> List[str]:
         dep_go_ids = []

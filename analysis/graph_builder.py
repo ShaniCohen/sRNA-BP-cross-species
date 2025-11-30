@@ -28,6 +28,7 @@ class GraphBuilder:
         self.strains_data = data_loader.strains_data
         self.srna_acc_col = data_loader.srna_acc_col
         self.mrna_acc_col = data_loader.mrna_acc_col
+        self.go_embeddings_data = data_loader.go_embeddings_data
         self.clustering_data = data_loader.clustering_data
         
         self.ontology = ontology
@@ -99,6 +100,8 @@ class GraphBuilder:
         self._add_mrna_nodes_and_annotation_edges()
         self._add_srna_nodes_and_interaction_edges()
         self._add_homology_edges()
+       
+        self._add_po2vec_embeddings_and_similarity_edges()
         # self._log_graph_info()
         self._log_graph_info(dump=True)
         self.graph_is_built = True
@@ -225,39 +228,6 @@ class GraphBuilder:
 
         df = pd.DataFrame(list(strain_to_rec.values()))
         write_df(df, join(self.out_path_homology_pairs_stats, f"{rna_type}_homology_edges__{self.out_file_suffix}.csv"))
-
-    # def _get_pairs_w_ortholog_edges(self, node_ids_1: List[str], node_ids_2: List[str], ortholog_edge_types: List[str]) -> Set[Tuple[str, str]]:
-    #     """ Get pairs of nodes that are linked with ALL types of ortholog edges defined in ortholog_edge_types. 
-    #         Checks all node pairs (n1, n2), where n1 in node_ids_1 and n2 in node_ids_2.
-
-    #     Args:
-    #         node_ids_1 (List[str]): 
-    #         node_ids_2 (List[str]): 
-    #         ortholog_edge_types (List[str]): types of ortholog edges to consider.
-
-    #     Returns:
-    #         int: the number of pairs that are linked with ALL types of ortholog edges defined in ortholog_edge_types
-    #     """
-    #     # 1 - fetch strains
-    #     strains_1 = {n: self.G.nodes[n]['strain'] for n in node_ids_1}
-    #     strains_2 = {n: self.G.nodes[n]['strain'] for n in node_ids_2}
-    #     # 2 - define ortholog checks to run
-    #     checks = []
-    #     if self.U.ortholog_by_seq in ortholog_edge_types:
-    #         checks.append(self.U.are_orthologs_by_seq)
-    #     if self.U.ortholog_by_name in ortholog_edge_types:
-    #         checks.append(self.U.are_orthologs_by_name)
-    #     # 3 - run all checks
-    #     pairs = []
-    #     for n1 in node_ids_1:
-    #         s1 = strains_1[n1]
-    #         for n2 in node_ids_2:
-    #             s2 = strains_2[n2]
-    #             checks_results = [check(self.G, n1, n2, s1, s2) for check in checks]
-    #             # if all checks passed
-    #             if sum(checks_results) == len(checks_results):
-    #                 pairs.append((n1, n2))
-    #     return set(pairs)
     
     def _get_pairs_w_ortholog_edges_for_van(self, node_ids_1: List[str], node_ids_2: List[str]) -> Tuple[Set[tuple], Set[tuple], Set[tuple]]:
         """ Get pairs of nodes that are linked with different types of ortholog edges.
@@ -315,6 +285,55 @@ class GraphBuilder:
                         if not self.U.are_orthologs_by_name(self.G, curr_node_id, other_node_id, curr_strain, other_strain):
                             # TODO: cosider to add a 'name_based' attribute to the edge data
                             self.G = self.U.add_edges_rna_rna_orthologs_by_name(self.G, curr_node_id, other_node_id)
+
+    def _add_po2vec_embeddings_and_similarity_edges(self):
+        self._add_po2vec_embeddings_to_go_nodes()
+        # TODO
+        self._add_po2vec_similarity_edges_between_go_nodes()
+
+    def _add_po2vec_embeddings_to_go_nodes(self):
+        """
+        Iterates over all nodes in self.BP, self.MF, and self.CC and add their embeddings vectors.
+        node_id_to_emb: Dict[str, np.ndarray]
+
+        """
+        self.logger.info(f"adding PO2Vec embeddings to GO nodes")
+        # 1 - add PO2Vec embeddings to GO nodes
+        node_id_to_po2vec_emb = self.go_embeddings_data['po2vec_embeddings']
+        for go_id, po2vec_emb in node_id_to_po2vec_emb.items():
+            if self.G.has_node(go_id):
+                self.G = self.U.add_node_property_po2vec_embedding(self.G, go_id, po2vec_emb)
+        # 2 - log stats
+        bp_nodes, bp_nodes_with_emb = 0, 0 
+        for n, d in self.G.nodes(data=True):
+            if d['type'] == self.U.bp:
+                bp_nodes += 1
+                if self.U.po2vec_emb in d:
+                    bp_nodes_with_emb += 1
+        self.logger.info(f"BP: out of {bp_nodes} nodes, {bp_nodes_with_emb} have PO2Vec embeddings ({(bp_nodes_with_emb/bp_nodes)*100:.2f}%)")
+
+    def _add_po2vec_similarity_edges_between_go_nodes(self):
+        self.logger.info(f"adding PO2Vec-based similarity edges between GO nodes")
+
+        # emb_type = self.ontology.emb_type_po2vec
+        # go_ids_with_emb = [n for n, d in self.G.nodes(data=True) if d['type'] == self.U.bp and emb_type in d]
+        # self.logger.info(f"total GO terms with {emb_type}: {len(go_ids_with_emb)}")
+        
+        # # build KDTree for fast nearest neighbor search
+        # go_id_to_emb = {n: self.G.nodes[n][emb_type] for n in go_ids_with_emb}
+        # emb_matrix = np.array([go_id_to_emb[n] for n in go_ids_with_emb])
+        # from sklearn.neighbors import NearestNeighbors
+        # nbrs = NearestNeighbors(n_neighbors=self.config['num_similar_go_terms'] + 1, algorithm='auto').fit(emb_matrix)
+        # distances, indices = nbrs.kneighbors(emb_matrix)
+
+        # # add similarity edges
+        # for i, go_id in enumerate(go_ids_with_emb):
+        #     similar_indices = indices[i][1:]  # skip the first one (itself)
+        #     similar_go_ids = [go_ids_with_emb[idx] for idx in similar_indices]
+        #     for sim_go_id in similar_go_ids:
+        #         # if not self.U.has_similarity_edge(self.G, go_id, sim_go_id):
+        #         if not self.U.are_similar_by_po2vec(self.G, curr_go_id, other_go_id):
+        #             self.G = self.U.add_edges_po2vec_similarity(self.G, curr_go_id, other_go_id, po2vec_similarity_score)
 
     def _log_graph_info(self, dump=False):
         self.logger.info("Logging graph information...")
