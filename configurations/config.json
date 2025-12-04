@@ -35,7 +35,13 @@
   "graph_builder":{
     "version": "k12_curated_ips",
     "all_versions": ["k12_curated_ips", "k12_curated", "k12_ips"],
-    "builder_output_dir": "builder_output"
+    "bp_clustering_dir": "bp_clustering",
+    "builder_output_dir": "builder_output",
+
+    "bp_clustering_config": {
+      "linkage_method": "single",
+      "distance_metric": "cosine"
+    }
   },
   "analyzer":{
     "analysis_output_dir": "analysis_output",

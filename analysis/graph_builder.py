@@ -2,6 +2,10 @@ from typing import List, Dict, Set, Tuple
 import pandas as pd
 import numpy as np
 from pathlib import Path
+import pickle
+import numpy as np
+from scipy.cluster.hierarchy import linkage, dendrogram, fcluster
+from scipy.spatial.distance import pdist
 import itertools
 from utils.general import write_df, create_dir_if_not_exists
 import networkx as nx
@@ -20,6 +24,7 @@ class GraphBuilder:
         self.logger = logger
         self.logger.info(f"initializing GraphBuilder")
         self.config = config
+        self.bp_clustering_config = self.config['bp_clustering_config']
 
         self.ecoli_k12_nm = data_loader.ecoli_k12_nm
         # self.vibrio_nm = data_loader.vibrio_nm
@@ -33,6 +38,7 @@ class GraphBuilder:
         
         self.ontology = ontology
         self.curated_go_ids_missing_in_ontology = set()
+        self.bp_id_to_cluster = {}
         self.U = graph_utils
         
         self.G = nx.MultiDiGraph()
@@ -51,7 +57,8 @@ class GraphBuilder:
         self.graph_is_built = False
 
         # ---------  RUNTIME FLAGS  ---------
-        self.run_n_dump_stats_of_homology_edges = False   # Chapter 4.3.2: RNA Homology Detection Between Strain Pairs (Statistics)
+        self.run_n_dump_stats_of_homology_edges = False   # RNA Homology Detection Between Strain Pairs (Statistics)
+        self.run_n_dump_po2vec_clustering = True   # PO2Vec-based Clustering of BPs
 
         # #TODO: adjust that (merge with version/ add to conf)
         self.add_ips_annot = True
@@ -101,7 +108,8 @@ class GraphBuilder:
         self._add_srna_nodes_and_interaction_edges()
         self._add_homology_edges()
        
-        self._add_po2vec_embeddings_and_similarity_edges()
+        self._add_po2vec_embeddings_and_clusters_to_bp_nodes()
+
         # self._log_graph_info()
         self._log_graph_info(dump=True)
         self.graph_is_built = True
@@ -286,31 +294,147 @@ class GraphBuilder:
                             # TODO: cosider to add a 'name_based' attribute to the edge data
                             self.G = self.U.add_edges_rna_rna_orthologs_by_name(self.G, curr_node_id, other_node_id)
 
-    def _add_po2vec_embeddings_and_similarity_edges(self):
-        self._add_po2vec_embeddings_to_go_nodes()
-        # TODO
-        self._add_po2vec_similarity_edges_between_go_nodes()
-
-    def _add_po2vec_embeddings_to_go_nodes(self):
-        """
-        Iterates over all nodes in self.BP, self.MF, and self.CC and add their embeddings vectors.
-        node_id_to_emb: Dict[str, np.ndarray]
-
-        """
-        self.logger.info(f"adding PO2Vec embeddings to GO nodes")
-        # 1 - add PO2Vec embeddings to GO nodes
+    def _add_po2vec_embeddings_and_clusters_to_bp_nodes(self):
+        # 1 - add PO2Vec embeddings to BP nodes
+        bp_to_po2vec_emb = self._add_po2vec_embeddings_to_bp_nodes()
+        # 2 - cluster BPs based on PO2Vec embeddings
+        if self.run_n_dump_po2vec_clustering:
+            self._cluster_bps_based_on_po2vec_embeddings(bp_to_po2vec_emb)
+        bp_to_po2vec_cluster = self._load_n_validate_po2vec_bp_clustering(bp_to_po2vec_emb)
+        # 3 - add PO2Vec-based clusters to BP nodes
+        self._add_po2vec_clusters_to_bp_nodes(bp_to_po2vec_cluster)
+    
+    def _add_po2vec_embeddings_to_bp_nodes(self) -> Dict[str, np.ndarray]:
+        self.logger.info(f"adding PO2Vec embeddings to BP nodes")
         node_id_to_po2vec_emb = self.go_embeddings_data['po2vec_embeddings']
+        
+        bp_to_po2vec_emb = {}
         for go_id, po2vec_emb in node_id_to_po2vec_emb.items():
-            if self.G.has_node(go_id):
+            if self.G.has_node(go_id) and self.G.nodes[go_id]['type'] == self.U.bp:
                 self.G = self.U.add_node_property_po2vec_embedding(self.G, go_id, po2vec_emb)
-        # 2 - log stats
-        bp_nodes, bp_nodes_with_emb = 0, 0 
-        for n, d in self.G.nodes(data=True):
-            if d['type'] == self.U.bp:
-                bp_nodes += 1
-                if self.U.po2vec_emb in d:
-                    bp_nodes_with_emb += 1
-        self.logger.info(f"BP: out of {bp_nodes} nodes, {bp_nodes_with_emb} have PO2Vec embeddings ({(bp_nodes_with_emb/bp_nodes)*100:.2f}%)")
+                bp_to_po2vec_emb[go_id] = po2vec_emb
+        
+        bp_nodes = [n for n, d in self.G.nodes(data=True) if d['type'] == self.U.bp]
+        self.logger.info(f"BP: out of {len(bp_nodes)} nodes, {len(bp_to_po2vec_emb)} have PO2Vec embeddings ({(len(bp_to_po2vec_emb)/len(bp_nodes))*100:.2f}%)")
+
+        return bp_to_po2vec_emb
+
+    def _get_bp_clustering_params_dir_n_nm(self) -> tuple:
+        linkage_method = self.bp_clustering_config['linkage_method']    # 'single'
+        distance_metric = self.bp_clustering_config['distance_metric']  # 'cosine', 'dice', 'euclidean'
+        _dir = create_dir_if_not_exists(join(self.config['bp_clustering_dir'], linkage_method))
+        f_name = f"bp_clustering_{linkage_method}_{distance_metric}"
+        return _dir, f_name, linkage_method, distance_metric
+    
+    def _cluster_bps_based_on_po2vec_embeddings(self, bp_to_po2vec_emb: Dict[str, np.ndarray]):
+        self.logger.info(f"clustering BPs based on PO2Vec embeddings")
+        # config params
+        _dir, f_name, linkage_method, distance_metric = self._get_bp_clustering_params_dir_n_nm()
+
+        # perform distance-based hierarchical clustering
+        bp_ids = list(bp_to_po2vec_emb.keys())
+        embeddings = np.array([bp_to_po2vec_emb[bp] for bp in bp_ids])  # Shape: (num_BPs, embedding_dim)
+
+        distances = pdist(X=embeddings, metric=distance_metric)
+        # TODO:
+        distance_threshold = self.config.get('clustering_threshold', 0.03)  # You can set this in your config
+
+        Z = linkage(y=distances, method=linkage_method)
+        cluster_labels = fcluster(Z, distance_threshold, criterion='distance')
+
+        # map GO IDs to their cluster labels
+        # TODO: review clustering
+        bp_to_cluster = dict(zip(bp_ids, cluster_labels))
+        with open(join(_dir, f'{f_name}.pickle'), 'wb') as handle:
+            pickle.dump(bp_to_cluster, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    
+    def _load_n_validate_po2vec_bp_clustering(self, bp_to_po2vec_emb: Dict[str, np.ndarray]) -> Dict[str, int]:
+        self.logger.info(f"loading and validating PO2Vec-based BP clustering")
+        # load clustering from pickle
+        _dir, f_name, _, _ = self._get_bp_clustering_params_dir_n_nm()
+        self.logger.info(f"loading BP clustering based on PO2Vec embeddings from pickle ({_dir})")
+        with open(join(_dir, f'{f_name}.pickle'), 'rb') as handle:
+            bp_to_cluster = pickle.load(handle)
+        
+        # validate clustering
+        assert sorted(bp_to_cluster.keys()) == sorted(bp_to_po2vec_emb.keys()), "clustering keys do not match BP ids with PO2Vec embeddings"
+        
+        return bp_to_cluster
+
+    # def _load_rna_homology_clustering_data(self):
+    #     # 1 - load sRNA and mRNA clustering
+    #     if self.load_pairs_clustering_from_pickle:
+    #         srna_clstr_dict = self._load_clustering_pickle(seq_type=self.srna_seq_type)
+    #         mrna_clstr_dict = self._load_clustering_pickle(seq_type=self.protein_seq_type)
+    #     else:
+    #         srna_clstr_dict = self._load_n_preprocess_bacteria_pairs_clustering(seq_type=self.srna_seq_type)
+    #         mrna_clstr_dict = self._load_n_preprocess_bacteria_pairs_clustering(seq_type=self.protein_seq_type)
+
+    #     # 2 - save clustering
+    #     self.clustering_data['srna'] = srna_clstr_dict
+    #     self.clustering_data['mrna'] = mrna_clstr_dict
+    
+    # def _get_clustering_path_n_nm(self, seq_type: str) -> tuple:
+    #     _dir = self.clustering_config[f'{seq_type.lower()}_dir']
+    #     _path = join(self.config['clustering_dir'], seq_type, _dir)
+    #     f_name = f"{seq_type}_pairs_clustering"
+    #     return _path, _dir, f_name
+    
+    # def _load_clustering_pickle(self, seq_type: str) -> Dict[tuple, pd.DataFrame]:
+    #     _path, _dir, f_name = self._get_clustering_path_n_nm(seq_type=seq_type)
+    #     self.logger.info(f"loading {seq_type} clustering pickle ({_dir})")
+    #     with open(join(_path, f'{f_name}.pickle'), 'rb') as handle:
+    #         pairs_clustering = pickle.load(handle)
+    #     return pairs_clustering
+
+
+
+
+        # """
+        # Iterates over all nodes in self.BP, self.MF, and self.CC and add their embeddings vectors.
+        # node_id_to_emb: Dict[str, np.ndarray]
+
+        # """
+        # self.logger.info(f"adding PO2Vec embeddings to GO nodes")
+        # # 1 - add PO2Vec embeddings to GO nodes
+        # node_id_to_po2vec_emb = self.go_embeddings_data['po2vec_embeddings']
+        # go_ids = list(node_id_to_po2vec_emb.keys())
+        # embeddings = np.array([node_id_to_po2vec_emb[go_id] for go_id in go_ids])  # Shape: (num_GO, embedding_dim)
+        
+        # # Perform hierarchical clustering (use 'euclidean' distance and 'ward' method)
+        # linkage_method = self.config.get('linkage_method', 'ward')
+        # # Z = linkage(embeddings, method=linkage_method, metric='euclidean')
+        # distance_metric = self.config.get('distance_metric', 'cosine')  #  'cosine', 'dice', 'euclidean'
+        # distances = pdist(X=embeddings, metric=distance_metric)
+        # z = linkage(y=distances, method=linkage_method)
+        # # Determine clusters (you can adjust the threshold as needed)
+        # threshold = self.config.get('clustering_threshold', 1.0)  # You can set this in your config
+        # cluster_labels = fcluster(Z, threshold, criterion='distance')
+
+        # # Map GO IDs to their cluster labels
+        # go_id_to_cluster = dict(zip(go_ids, cluster_labels))
+
+
+    # def _add_po2vec_embeddings_to_go_nodes(self):
+    #     """
+    #     Iterates over all nodes in self.BP, self.MF, and self.CC and add their embeddings vectors.
+    #     node_id_to_emb: Dict[str, np.ndarray]
+
+    #     """
+    #     self.logger.info(f"adding PO2Vec embeddings to GO nodes")
+    #     # 1 - add PO2Vec embeddings to GO nodes
+    #     node_id_to_po2vec_emb = self.go_embeddings_data['po2vec_embeddings']
+    #     for go_id, po2vec_emb in node_id_to_po2vec_emb.items():
+    #         if self.G.has_node(go_id):
+    #             self.G = self.U.add_node_property_po2vec_embedding(self.G, go_id, po2vec_emb)
+    #     # 2 - log stats
+    #     bp_nodes, bp_nodes_w_emb = 0, 0 
+    #     for n, d in self.G.nodes(data=True):
+    #         if d['type'] == self.U.bp:
+    #             bp_nodes += 1
+    #             if self.U.po2vec_emb in d:
+    #                 bp_nodes_with_emb += 1
+    #     self.logger.info(f"BP: out of {bp_nodes} nodes, {bp_nodes_w_emb} have PO2Vec embeddings ({(bp_nodes_w_emb/bp_nodes)*100:.2f}%)")
 
     def _add_po2vec_similarity_edges_between_go_nodes(self):
         self.logger.info(f"adding PO2Vec-based similarity edges between GO nodes")
