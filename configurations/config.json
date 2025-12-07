@@ -40,7 +40,8 @@
 
     "bp_clustering_config": {
       "linkage_method": "single",
-      "distance_metric": "cosine"
+      "distance_metric": "cosine",
+      "threshold_distance_percentile": 5
     }
   },
   "analyzer":{

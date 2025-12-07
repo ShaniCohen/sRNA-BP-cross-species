@@ -322,37 +322,38 @@ class GraphBuilder:
     def _get_bp_clustering_params_dir_n_nm(self) -> tuple:
         linkage_method = self.bp_clustering_config['linkage_method']    # 'single'
         distance_metric = self.bp_clustering_config['distance_metric']  # 'cosine', 'dice', 'euclidean'
+        threshold_dist_prec = self.bp_clustering_config['threshold_distance_percentile']  # 10, 20 ...
         _dir = create_dir_if_not_exists(join(self.config['bp_clustering_dir'], linkage_method))
-        f_name = f"bp_clustering_{linkage_method}_{distance_metric}"
-        return _dir, f_name, linkage_method, distance_metric
+        f_name = f"bp_clustering_{linkage_method}_{distance_metric}_threshold_percentile_{threshold_dist_prec}"
+        return _dir, f_name, linkage_method, distance_metric, threshold_dist_prec
     
     def _cluster_bps_based_on_po2vec_embeddings(self, bp_to_po2vec_emb: Dict[str, np.ndarray]):
         self.logger.info(f"clustering BPs based on PO2Vec embeddings")
         # config params
-        _dir, f_name, linkage_method, distance_metric = self._get_bp_clustering_params_dir_n_nm()
+        _dir, f_name, linkage_method, distance_metric, threshold_dist_prec = self._get_bp_clustering_params_dir_n_nm()
+        self.logger.info(f"clustering params - linkage_method: {linkage_method}, distance_metric: {distance_metric}, threshold_dist_prec: {threshold_dist_prec}")
 
         # perform distance-based hierarchical clustering
         bp_ids = list(bp_to_po2vec_emb.keys())
         embeddings = np.array([bp_to_po2vec_emb[bp] for bp in bp_ids])  # Shape: (num_BPs, embedding_dim)
 
         distances = pdist(X=embeddings, metric=distance_metric)
-        # TODO:
-        distance_threshold = self.config.get('clustering_threshold', 0.03)  # You can set this in your config
+        distance_threshold = np.percentile(a=distances, q=threshold_dist_prec)
 
         Z = linkage(y=distances, method=linkage_method)
         cluster_labels = fcluster(Z, distance_threshold, criterion='distance')
 
         # map GO IDs to their cluster labels
-        # TODO: review clustering
         bp_to_cluster = dict(zip(bp_ids, cluster_labels))
         with open(join(_dir, f'{f_name}.pickle'), 'wb') as handle:
             pickle.dump(bp_to_cluster, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        self.logger.info(f"PO2Vec-based BP clustering saved to pickle: {join(_dir, f'{f_name}.pickle')}")
     
     def _load_n_validate_po2vec_bp_clustering(self, bp_to_po2vec_emb: Dict[str, np.ndarray]) -> Dict[str, int]:
         self.logger.info(f"loading and validating PO2Vec-based BP clustering")
         # load clustering from pickle
-        _dir, f_name, _, _ = self._get_bp_clustering_params_dir_n_nm()
-        self.logger.info(f"loading BP clustering based on PO2Vec embeddings from pickle ({_dir})")
+        _dir, f_name, _, _, _ = self._get_bp_clustering_params_dir_n_nm()
+        self.logger.info(f"loading BP clustering based on PO2Vec embeddings from pickle ({join(_dir, f'{f_name}.pickle')})")
         with open(join(_dir, f'{f_name}.pickle'), 'rb') as handle:
             bp_to_cluster = pickle.load(handle)
         
