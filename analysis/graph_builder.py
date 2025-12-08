@@ -58,7 +58,7 @@ class GraphBuilder:
 
         # ---------  RUNTIME FLAGS  ---------
         self.run_n_dump_stats_of_homology_edges = False   # RNA Homology Detection Between Strain Pairs (Statistics)
-        self.run_n_dump_po2vec_clustering = True   # PO2Vec-based Clustering of BPs
+        self.run_n_dump_po2vec_clustering = False   # PO2Vec-based Clustering of BPs
 
         # #TODO: adjust that (merge with version/ add to conf)
         self.add_ips_annot = True
@@ -110,6 +110,7 @@ class GraphBuilder:
        
         self._add_po2vec_embeddings_and_clusters_to_bp_nodes()
 
+        # TODO: update
         # self._log_graph_info()
         self._log_graph_info(dump=True)
         self.graph_is_built = True
@@ -301,8 +302,8 @@ class GraphBuilder:
         if self.run_n_dump_po2vec_clustering:
             self._cluster_bps_based_on_po2vec_embeddings(bp_to_po2vec_emb)
         bp_to_po2vec_cluster = self._load_n_validate_po2vec_bp_clustering(bp_to_po2vec_emb)
-        # 3 - add PO2Vec-based clusters to BP nodes
-        self._add_po2vec_clusters_to_bp_nodes(bp_to_po2vec_cluster)
+        # 3 - add PO2Vec-based clusters to BP nodes & dump csv
+        self._add_po2vec_clusters_to_bp_nodes_n_dump_csv(bp_to_po2vec_cluster)
     
     def _add_po2vec_embeddings_to_bp_nodes(self) -> Dict[str, np.ndarray]:
         self.logger.info(f"adding PO2Vec embeddings to BP nodes")
@@ -339,6 +340,7 @@ class GraphBuilder:
 
         distances = pdist(X=embeddings, metric=distance_metric)
         distance_threshold = np.percentile(a=distances, q=threshold_dist_prec)
+        self.logger.info(f"distance threshold (at {threshold_dist_prec} percentile): {distance_threshold:.4f}")
 
         Z = linkage(y=distances, method=linkage_method)
         cluster_labels = fcluster(Z, distance_threshold, criterion='distance')
@@ -350,46 +352,30 @@ class GraphBuilder:
         self.logger.info(f"PO2Vec-based BP clustering saved to pickle: {join(_dir, f'{f_name}.pickle')}")
     
     def _load_n_validate_po2vec_bp_clustering(self, bp_to_po2vec_emb: Dict[str, np.ndarray]) -> Dict[str, int]:
-        self.logger.info(f"loading and validating PO2Vec-based BP clustering")
-        # load clustering from pickle
+        # 1 - load clustering from pickle
         _dir, f_name, _, _, _ = self._get_bp_clustering_params_dir_n_nm()
-        self.logger.info(f"loading BP clustering based on PO2Vec embeddings from pickle ({join(_dir, f'{f_name}.pickle')})")
         with open(join(_dir, f'{f_name}.pickle'), 'rb') as handle:
             bp_to_cluster = pickle.load(handle)
-        
-        # validate clustering
+        # 2 - validate clustering
         assert sorted(bp_to_cluster.keys()) == sorted(bp_to_po2vec_emb.keys()), "clustering keys do not match BP ids with PO2Vec embeddings"
+        assert len(set(bp_to_cluster.values())) > 1, "clustering contains only one cluster"
+        self.logger.info(f"loaded and validated PO2Vec-based BP clustering with {len(set(bp_to_cluster.values()))} clusters for {len(bp_to_cluster)} BPs ({f_name})")
         
         return bp_to_cluster
 
-    # def _load_rna_homology_clustering_data(self):
-    #     # 1 - load sRNA and mRNA clustering
-    #     if self.load_pairs_clustering_from_pickle:
-    #         srna_clstr_dict = self._load_clustering_pickle(seq_type=self.srna_seq_type)
-    #         mrna_clstr_dict = self._load_clustering_pickle(seq_type=self.protein_seq_type)
-    #     else:
-    #         srna_clstr_dict = self._load_n_preprocess_bacteria_pairs_clustering(seq_type=self.srna_seq_type)
-    #         mrna_clstr_dict = self._load_n_preprocess_bacteria_pairs_clustering(seq_type=self.protein_seq_type)
-
-    #     # 2 - save clustering
-    #     self.clustering_data['srna'] = srna_clstr_dict
-    #     self.clustering_data['mrna'] = mrna_clstr_dict
-    
-    # def _get_clustering_path_n_nm(self, seq_type: str) -> tuple:
-    #     _dir = self.clustering_config[f'{seq_type.lower()}_dir']
-    #     _path = join(self.config['clustering_dir'], seq_type, _dir)
-    #     f_name = f"{seq_type}_pairs_clustering"
-    #     return _path, _dir, f_name
-    
-    # def _load_clustering_pickle(self, seq_type: str) -> Dict[tuple, pd.DataFrame]:
-    #     _path, _dir, f_name = self._get_clustering_path_n_nm(seq_type=seq_type)
-    #     self.logger.info(f"loading {seq_type} clustering pickle ({_dir})")
-    #     with open(join(_path, f'{f_name}.pickle'), 'rb') as handle:
-    #         pairs_clustering = pickle.load(handle)
-    #     return pairs_clustering
-
-
-
+    def _add_po2vec_clusters_to_bp_nodes_n_dump_csv(self, bp_to_po2vec_cluster: Dict[str, int]):
+        self.logger.info(f"adding PO2Vec-based clusters to BP nodes")               
+        records = []
+        for n, d in self.G.nodes(data=True):
+            if d['type'] == self.U.bp and n in bp_to_po2vec_cluster:
+                bp_cluster = int(bp_to_po2vec_cluster[n])
+                self.G = self.U.add_node_property_po2vec_cluster(self.G, n, bp_cluster)
+                records.append({'GO_ID': n, 'PO2Vec_cluster': bp_cluster, 'GO_label': d['lbl'], 'GO_definition': d['meta'].get('definition', {}).get('val', '')})     
+        df = pd.DataFrame(records).sort_values(by=['PO2Vec_cluster', 'GO_ID'])
+        # dump csv
+        _dir, f_name, _, _, _ = self._get_bp_clustering_params_dir_n_nm()
+        write_df(df, join(_dir, f'summary_{f_name}.csv'))
+        self.logger.info(f"dumped summary_{f_name}.csv")
 
         # """
         # Iterates over all nodes in self.BP, self.MF, and self.CC and add their embeddings vectors.

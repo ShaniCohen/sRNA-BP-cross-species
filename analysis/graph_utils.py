@@ -47,6 +47,7 @@ class GraphUtils:
         # ---  node properties
         #   po2vec_embeddings (optional)
         self.po2vec_emb = 'po2vec_embeddings'
+        self.po2vec_cluster = 'po2vec_cluster'
 
         # ---  edge types
         # GO --> GO  
@@ -195,6 +196,20 @@ class GraphUtils:
         assert G.nodes[go_node_id].get(self.po2vec_emb) is None, f"GO node {go_node_id} already has PO2Vec embedding"
         
         G.nodes[go_node_id][self.po2vec_emb] = po2vec_embedding
+        return G
+
+    def add_node_property_po2vec_cluster(self, G, go_node_id, po2vec_cluster: int):
+        """ Add PO2Vec-based cluster property to a GO node
+
+        Args:
+            go_node_id (str): the GO id (node id)
+            po2vec_cluster (int): the PO2Vec-based cluster
+        """
+        assert G.has_node(go_node_id)
+        assert G.nodes[go_node_id]['type'] in self.go_types
+        assert G.nodes[go_node_id].get(self.po2vec_cluster) is None, f"GO node {go_node_id} already has PO2Vec-based cluster"
+        
+        G.nodes[go_node_id][self.po2vec_cluster] = po2vec_cluster
         return G
     
     def _validate_go_go_similarity(self, G, go_node_id_1, go_node_id_2):
