@@ -40,8 +40,8 @@
 
     "bp_clustering_config": {
       "linkage_method": "complete",
-      "distance_metric": "euclidean",
-      "threshold_distance_percentile": 10
+      "distance_metric": "cosine",
+      "threshold_distance_percentile": 0.01
     }
   },
   "analyzer":{

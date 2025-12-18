@@ -110,7 +110,7 @@ class DataLoader:
         self._load_annotations()
         self._match_annotations_to_mrnas()
         # 4 - GO embeddings
-        self._load_po2vec_go_embeddings()
+        # self._load_po2vec_go_embeddings()
         # 4 - RNA homology clustering
         self._load_rna_homology_clustering_data()
     
