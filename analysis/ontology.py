@@ -11,6 +11,7 @@ import sys
 import os
 import networkx as nx
 # import matplotlib.pyplot as plt
+# https://release.geneontology.org/2025-02-06/index.html
 
 
 ROOT_PATH = str(Path(__file__).resolve().parents[1])

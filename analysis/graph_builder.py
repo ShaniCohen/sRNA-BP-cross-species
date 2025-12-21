@@ -110,11 +110,12 @@ class GraphBuilder:
         self._add_homology_edges()
        
         # self._add_po2vec_embeddings_and_clusters_to_bp_nodes()
-        self._run_wang()
+        # self._run_wang()
+        self._run_wang_w_goatools()
 
         # TODO: update
         # self._log_graph_info()
-        self._log_graph_info(dump=True)
+        # self._log_graph_info(dump=True)
         self.graph_is_built = True
         self.logger.info(f"graph is built")
     
@@ -342,6 +343,61 @@ class GraphBuilder:
         print(f"IRON & IRON    Semantic similarity score: {sim2[0]}")
         sim3 = robjects.r('goSim("GO:0006879", "GO:0006275", semData = hsGObp, measure = "Wang")')
         print(f"IRON & DNA replication    Semantic similarity score: {sim3[0]}")
+    
+    def _run_wang_w_goatools(self):
+
+        from goatools.base import get_godag
+        from goatools.semsim.termwise.wang import SsWang
+
+
+
+        print("start")
+        godag = get_godag("go-basic.obo", optional_attrs={'relationship'})
+        # https://github.com/tanghaibao/goatools/blob/main/notebooks/semantic_similarity_wang.ipynb
+        
+        # Researcher-provided GO terms related to smell
+        go_a = 'GO:0007608'
+        go_b = 'GO:0050911'
+        go_c = 'GO:0042221'
+        goids = {go_a, go_b, go_c}
+
+        # Annotations for plotting
+        go2txt = {
+            go_a:'GO TERM A',
+            go_b:'GO TERM B',
+            go_c:'GO TERM C'}
+
+        # Optional relationships. (Relationship, is_a, is required and always used)
+        relationships = {'part_of'}
+        
+        wang_r1 = SsWang(goids, godag, relationships)
+        pairs = [(go_a, go_b), (go_a, go_c), (go_b, go_c)]
+        for go1, go2 in pairs:
+            sim = wang_r1.get_sim(go1, go2)
+            self.logger.info(f"\n {go1} {godag[go1].name} \n {go2} {godag[go2].name} \n Wang similarity: {sim}")
+
+        # from goatools.gosubdag.gosubdag import GoSubDag
+        # from goatools.gosubdag.plot.gosubdag_plot import GoSubDagPlot
+
+        # r1_png = 'smell_r1.png'
+        # r1_gosubdag = GoSubDag(goids, godag, relationships)
+
+        # GoSubDagPlot(r1_gosubdag, go2txt=go2txt).plt_dag(r1_png)
+
+        # from goatools.semantic import TermCounts, get_info_content, semantic_similarity
+        # from goatools.obo_parser import GODag
+
+        # obo_dag = GODag("go-basic.obo")
+        # # termcounts = TermCounts(obo_dag, assoc)
+        # go_id1 = "GO:0003677"
+        # go_id2 = "GO:0005524"
+
+        # # ic1 = get_info_content(go_id1, termcounts)
+        # # ic2 = get_info_content(go_id2, termcounts)
+
+        # sim = semantic_similarity(go_id1, go_id2, obo_dag, method='wang')
+        # print(f"Semantic similarity score (GOATools): {sim}")
+        print("end")
 
     
     def _add_po2vec_embeddings_to_bp_nodes(self) -> Dict[str, np.ndarray]:
