@@ -35,19 +35,18 @@
   "graph_builder":{
     "version": "k12_curated_ips",
     "all_versions": ["k12_curated_ips", "k12_curated", "k12_ips"],
-    "bp_clustering_dir": "bp_clustering",
-    "builder_output_dir": "builder_output",
-
-    "bp_clustering_config": {
-      "linkage_method": "complete",
-      "distance_metric": "cosine",
-      "threshold_distance_percentile": 0.01
-    }
+    "builder_output_dir": "builder_output"
   },
   "analyzer":{
     "analysis_output_dir": "analysis_output",
     "run_enrichment": false,
     "run_multiple_testing_correction": false,
-    "enrichment_pv_threshold": 0.05
+    "enrichment_pv_threshold": 0.05,
+    "bp_clustering_dir": "bp_clustering",
+
+    "bp_clustering_config": {
+      "linkage_method": "complete",
+      "threshold_distance_percentile": 0.01
+    }
   }
 }

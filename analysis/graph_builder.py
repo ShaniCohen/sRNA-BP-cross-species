@@ -25,7 +25,6 @@ class GraphBuilder:
         self.logger = logger
         self.logger.info(f"initializing GraphBuilder")
         self.config = config
-        self.bp_clustering_config = self.config['bp_clustering_config']
 
         self.ecoli_k12_nm = data_loader.ecoli_k12_nm
         # self.vibrio_nm = data_loader.vibrio_nm
@@ -111,7 +110,7 @@ class GraphBuilder:
        
         # self._add_po2vec_embeddings_and_clusters_to_bp_nodes()
         # self._run_wang()
-        self._run_wang_w_goatools()
+        # self._run_wang_w_goatools()
 
         # TODO: update
         # self._log_graph_info()
@@ -307,49 +306,11 @@ class GraphBuilder:
         bp_to_po2vec_cluster = self._load_n_validate_po2vec_bp_clustering(bp_to_po2vec_emb)
         # 3 - add PO2Vec-based clusters to BP nodes & dump csv
         self._add_po2vec_clusters_to_bp_nodes_n_dump_csv(bp_to_po2vec_cluster)
-    
-    def _run_wang(self):
-        """_summary_
-        """
-        # library(GOSemSim)
-        # hsGO <- godata(ont="MF")
-        # sim <- goSim("GO:0003677", "GO:0005524", semData = hsGO, measure = "Wang")
-        # cat(sim)
-        # https://yulab-smu.top/biomedical-knowledge-mining-book/
 
-        # 6879	intracellular iron ion homeostasis
-        # 6826	iron ion transport
-        # 6275	regulation of DNA replication
-
-
-
-
-        import rpy2.robjects as robjects
-        from rpy2.robjects.packages import importr
-
-        gosms = importr("GOSemSim")
-        robjects.r('''
-            library(GOSemSim)
-            hsGOmf <- godata(ont="MF")
-            hsGObp <- godata(ont="BP")
-        ''')
-
-        # Example: Calculate GO semantic similarity between two GO terms
-        sim = robjects.r('goSim("GO:0003677", "GO:0005524", semData = hsGOmf, measure = "Wang")')
-        print(f"Semantic similarity score: {sim[0]}")
-        sim1 = robjects.r('goSim("GO:0008150", "GO:0009987", semData = hsGObp, measure = "Wang")')
-        print(f"CHAT & CHAT    Semantic similarity score: {sim1[0]}")
-        sim2 = robjects.r('goSim("GO:0006879", "GO:0006826", semData = hsGObp, measure = "Wang")')
-        print(f"IRON & IRON    Semantic similarity score: {sim2[0]}")
-        sim3 = robjects.r('goSim("GO:0006879", "GO:0006275", semData = hsGObp, measure = "Wang")')
-        print(f"IRON & DNA replication    Semantic similarity score: {sim3[0]}")
-    
     def _run_wang_w_goatools(self):
 
         from goatools.base import get_godag
         from goatools.semsim.termwise.wang import SsWang
-
-
 
         print("start")
         godag = get_godag("go-basic.obo", optional_attrs={'relationship'})

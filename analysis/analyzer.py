@@ -1,6 +1,9 @@
 from typing import Tuple, Set, List, Dict
 import pandas as pd
+from scipy.cluster.hierarchy import linkage, dendrogram, fcluster
+from scipy.spatial.distance import squareform
 import numpy as np
+import pickle
 from os.path import join
 import itertools
 from pathlib import Path
@@ -9,7 +12,9 @@ from preprocessing.general_pr import convert_count_to_val
 import networkx as nx
 from pyvis.network import Network
 from scipy.stats import hypergeom, false_discovery_control
-import json
+from goatools.base import get_godag
+from goatools.semsim.termwise.wang import SsWang
+from itertools import combinations
 import ast
 import sys
 import os
@@ -31,6 +36,7 @@ class Analyzer:
         self.logger = logger
         self.logger.info(f"initializing Analyzer")
         self.config = config
+        self.bp_clustering_config = self.config['bp_clustering_config']
         
         # graph and utils
         self.graph_version = graph_builder.get_version()
@@ -103,13 +109,16 @@ class Analyzer:
         # 4.2 - log
         self._log_srna_bp_mapping(srna_bp_mapping)
 
-        # 5 - Enrichment (per strain): per sRNA, find and keep only significant biological processes (BPs) that its targets are invovlved in.
+        # 5 - run Wang similarity on all BPs
+        self._run_wang_similarity_between_bps(bp_rna_mapping)
+        
+        # 6 - Enrichment (per strain): per sRNA, find and keep only significant biological processes (BPs) that its targets are invovlved in.
         if self.run_enrichment:
             self.logger.info("----- After enrichment:")
-            # 5.1 - extract subgraphs
+            # 6.1 - extract subgraphs
             srna_bp_mapping_en, meta_en = self._apply_enrichment(srna_bp_mapping)
             bp_rna_mapping_en = self._generate_bp_rna_mapping(srna_bp_mapping_en)
-            # 5.2 - log and dump
+            # 6.2 - log and dump
             self._log_srna_bp_mapping(srna_bp_mapping_en)
             self._dump_metadata(meta_en)
 
@@ -278,6 +287,102 @@ class Analyzer:
                         bp_rna_mapping[bp][strain][mrna_id] = []
 
         return bp_rna_mapping
+    
+    def _get_bp_clustering_params_dir_n_nm(self) -> tuple:
+        linkage_method = self.bp_clustering_config['linkage_method']    # 'single', 'complete', 'average'
+        threshold_dist_prec = self.bp_clustering_config['threshold_distance_percentile']  # 10, 20 ...
+        _dir = create_dir_if_not_exists(join(self.config['bp_clustering_dir'], linkage_method))
+        f_name = f"bp_clustering_{linkage_method}_threshold_percentile_{threshold_dist_prec}"
+        return _dir, f_name, linkage_method, threshold_dist_prec
+    
+    def _run_wang_similarity_between_bps(self, bp_rna_mapping: dict):
+        """
+        Compute Wang semantic similarity between GO terms (BPs)
+        # https://github.com/tanghaibao/goatools/blob/main/notebooks/semantic_similarity_wang.ipynb
+
+        Args:
+            bp_rna_mapping (dict): A dictionary in the following format:
+            {
+                <bp_id>: {
+                        <strain_id>: {
+                            <mRNA_target_id>: [<sRNA_id1>, <sRNA_id2>, ...],
+                            ...
+                        },
+                        ...
+                },
+                ...
+            }   
+        """
+        # config params
+        _dir, f_name, linkage_method, threshold_dist_prec = self._get_bp_clustering_params_dir_n_nm()
+        self.logger.info(f"clustering params - linkage_method: {linkage_method}, threshold_dist_prec: {threshold_dist_prec}")
+
+        godag = get_godag("go-basic.obo", optional_attrs={'relationship'})
+        # Optional relationships. (Relationship, is_a, is required and always used)
+        relationships = {'part_of'}
+
+        goids_sorted = sorted({f'GO:{bp}'for bp in bp_rna_mapping.keys()})
+        sim_matrix = pd.DataFrame(None, index=goids_sorted, columns=goids_sorted, dtype=float)
+        # set diagonal (self similarity)
+        for g in goids_sorted:
+            sim_matrix.at[g, g] = 1.0
+
+        wang_r1 = SsWang(goids_sorted, godag, relationships)
+
+        records = []
+        for go1, go2 in combinations(goids_sorted, 2):
+            sim = wang_r1.get_sim(go1, go2)
+            records.append({'go1': go1, 'go2': go2, 'similarity': sim, 'distance': 1 - sim, 'go1_name': godag[go1].name, 'go2_name': godag[go2].name})
+            sim_matrix.at[go1, go2] = sim
+            sim_matrix.at[go2, go1] = sim
+        
+        dis_meta = pd.DataFrame(records).sort_values(by='distance').reset_index(drop=True)
+
+        dis_matrix = 1 - sim_matrix
+        distances = squareform(dis_matrix.values)
+        assert sum([0 <= d <= 1 for d in distances]) == len(distances), "Distances not in [0, 1] range"
+
+        distance_threshold = np.percentile(a=distances, q=threshold_dist_prec)
+        self.logger.info(f"distance threshold (at {threshold_dist_prec} percentile): {distance_threshold:.4f}")
+
+        Z = linkage(y=distances, method=linkage_method)
+        cluster_labels = fcluster(Z, distance_threshold, criterion='distance')
+
+        # map GO IDs to their cluster labels
+        bp_to_cluster = dict(zip(goids_sorted, cluster_labels))
+        with open(join(_dir, f'{f_name}.pickle'), 'wb') as handle:
+            pickle.dump(bp_to_cluster, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+        # --- NEW: build full square similarity matrix and save both pairwise and matrix files ---
+        # Ensure deterministic ordering
+        goids_sorted = sorted(goids)
+        # initialize matrix with zeros
+        sim_matrix = pd.DataFrame(0.0, index=goids_sorted, columns=goids_sorted, dtype=float)
+        # set diagonal (self similarity)
+        for g in goids_sorted:
+            sim_matrix.at[g, g] = 1.0
+
+        # fill matrix using pairwise results
+        for _, row in df_sim.iterrows():
+            g1 = row['go1']
+            g2 = row['go2']
+            sim_val = float(row['similarity']) if row['similarity'] is not None else 0.0
+            sim_matrix.at[g1, g2] = sim_val
+            sim_matrix.at[g2, g1] = sim_val
+
+        # save outputs for downstream clustering
+        try:
+            pairs_fp = join(self.out_path_summary_tables, f"GO_similarity_pairs__{self.out_file_suffix}.csv")
+            matrix_fp = join(self.out_path_summary_tables, f"GO_similarity_matrix__{self.out_file_suffix}.csv")
+            df_sim.to_csv(pairs_fp, index=False)
+            sim_matrix.to_csv(matrix_fp, index=True)
+            self.logger.info(f"Saved GO similarity pairs to: {pairs_fp}")
+            self.logger.info(f"Saved GO similarity matrix to: {matrix_fp}")
+        except Exception as e:
+            self.logger.error(f"Failed saving GO similarity outputs: {e}")
+
+        print("end")
 
     def _analysis_1_srna_homologs_to_commom_bps(self, srna_bp_mapping: dict, bp_similarity_method: str):
         self.logger.info(f"##############   Analsis 1 - Cross-Species Conservation of sRNAs' Functionality   ##############")
@@ -755,7 +860,6 @@ class Analyzer:
     def _find_homologs(self, strain_to_rna_list: Dict[str, List[str]], rna_str: str) -> List[Tuple[str]]:
         """
         For each cluster in homologs_df['cluster'], find which RNAs from strain_to_rna_list are homologs, i.e., belong to the same cluster.
-        Return a set of tuples, each tuple contains the RNAs from strain_to_rna_list that belong to the same cluster.
 
         Args:
             strain_to_rna_list (dict): A dictionary in the following format:
@@ -1027,7 +1131,7 @@ class Analyzer:
                         <sRNA_id>: {
                             <BP_id>: {                            
                                 'BP_id': bp,
-                                'BP_lbl': self.G.nodes[bp]['lbl'],
+                                'BP_lbl': bp_lbl,
                                 'M': M,
                                 'n': n,
                                 'N': N,
