@@ -76,9 +76,9 @@ class GraphUtils:
         self.eggnog = "eggnog"
         self.annot_types = [self.curated, self.ips, self.eggnog]
 
-        # ----- Methods
-        # BP similarity methods
-        self.exact_bp = 'exact_bp'
+        # ----- BP definitions
+        self.bp_id = 'bp_id'
+        self.bp_cluster_wang = 'bp_cluster_wang'
 
     def add_node_rna(self, G, id, type, strain, locus_tag, name, synonyms, start, end, strand, rna_seq, protein_seq: str = None, log_warning=True):
         if not G.has_node(id):
@@ -375,11 +375,20 @@ class GraphUtils:
     def get_short_strain_nm(self, strain_nm: str) -> str:
         return self.strain_nm_to_short[strain_nm]
     
-    def get_common_bps(self, bps1: List[str], bps2: List[str], bp_similiarity_method: str) -> List[str]:
-        if bp_similiarity_method == self.exact_bp:
-            return np.intersect1d(bps1, bps2).tolist()
-        else:
-            raise ValueError(f"invalid BP similiarity method -> {bp_similiarity_method}")
+    def get_common_bps(self, bps1: List[str], bps2: List[str]) -> List[str]:
+        return np.intersect1d(bps1, bps2).tolist()
+    
+    def find_common_bps_by_clus(self, bps1: List[Tuple[str, str]], bps2: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
+        common_clus = np.intersect1d([x[0] for x in bps1], [x[0] for x in bps2])
+        common_bps_by_clus = [t for t in set(bps1).union(set(bps2)) if t[0] in common_clus]
+        return common_bps_by_clus
+
+    def find_common_bps(self, bps1: List[Tuple[str, str]], bps2: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
+        common_clus = np.intersect1d([x[0] for x in bps1], [x[0] for x in bps2])
+        common_bps_by_clus = [t for t in set(bps1).union(set(bps2)) if t[0] in common_clus]
+        
+        common_bps = sorted(set(bps1).intersection(set(bps2)))
+        return common_bps, common_bps_by_clus
         
     def _create_3D_visualization(self, G):
         # nx_graph = nx.Graph()

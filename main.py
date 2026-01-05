@@ -45,13 +45,13 @@ class AnalysisRunner:
             configs['ontology'][_dir] = join(configs['runner']['input_data_path'], configs['ontology'][_dir])
         # graph utils
         # graph builder
-        #   input dirs
-        for _dir in ['bp_clustering_dir']:
-            configs['graph_builder'][_dir] = join(configs['runner']['input_data_path'], configs['graph_builder'][_dir])
-        #   output dirs
         for _dir in ['builder_output_dir']:
             configs['graph_builder'][_dir] = join(configs['runner']['output_data_path'], configs['graph_builder'][_dir])
         # analyzer
+        #   input dirs
+        for _dir in ['bp_clustering_dir']:
+            configs['analyzer'][_dir] = join(configs['runner']['input_data_path'], configs['analyzer'][_dir])
+        #   output dirs
         for _dir in ['analysis_output_dir']:
             configs['analyzer'][_dir] = join(configs['runner']['output_data_path'], configs['analyzer'][_dir])
         self.configs = configs
