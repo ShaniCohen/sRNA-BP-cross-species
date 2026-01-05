@@ -493,10 +493,9 @@ class Analyzer:
     def _get_clusters_of_common_bps_added(self, common_bps_by_clus: List[Tuple[str, str]], common_bps: List[Tuple[str, str]]) -> List[str]:
         clusters_of_added = set()
         if len(common_bps_by_clus) > len(common_bps):
-            added = set(common_bps_by_clus) - set(common_bps)
-            clusters_of_added = set([bp_clus for bp_clus, bp in added])
-        return list(clusters_of_added)
-
+            added = sorted(set(common_bps_by_clus) - set(common_bps))
+            clusters_of_added = sorted(set([bp_clus for bp_clus, bp in added]))
+        return clusters_of_added
 
     def _calc_common_bps_n_clusters(self, all_bps: Dict[str, list], bp_to_cluster: Dict[str, str]) -> Tuple[Dict[tuple, list], Dict[tuple, int], int, int]:
         """_summary_
@@ -540,19 +539,20 @@ class Analyzer:
 
                 # 5 - common BPs of rnas by cluster
                 rnas_bps_w_cluster = list(map(all_bps_w_clusters.get, rna_comb))
-                common_bps_by_clus: List[Tuple[str, str]] = rnas_bps_w_cluster[0]
-                _common_bps: List[str] = rnas_bps_w_cluster[0]
+                common_bps_by_clus: List[Tuple[str, str]] = rnas_bps_w_cluster[0].copy()
+                _common_bps: List[str] = rnas_bps_w_cluster[0].copy()
                 for l in rnas_bps_w_cluster[1:]:
                     _common_bps, common_bps_by_clus = self.U.find_common_bps(common_bps_by_clus, l)
                 #TODO: remove later
-                assert len(common_bps) != len(_common_bps)
+                if len(common_bps) != len(_common_bps):
+                    print()
 
                 # check which new common BPs were added by clustering
                 common_bps_added_per_srna = {}
                 clus_of_added = self._get_clusters_of_common_bps_added(common_bps_by_clus, _common_bps)
                 if clus_of_added:
                     for srna in rna_comb:
-                        common_bps_added = [(clus, bp) for clus, bp in all_bps_w_clusters[srna] if clus in clus_of_added]
+                        common_bps_added = sorted([(clus, f"{bp}__{self.G.nodes[bp]['lbl'].replace(" ", "_")}") for clus, bp in all_bps_w_clusters[srna] if clus in clus_of_added])
                         if common_bps_added:
                             common_bps_added_per_srna[srna] = common_bps_added
                     common_bps_added_by_clustering[rna_comb] = common_bps_added_per_srna
