@@ -491,11 +491,14 @@ class Analyzer:
         return rec
     
     def _get_clusters_of_common_bps_added(self, common_bps_by_clus: List[Tuple[str, str]], common_bps: List[Tuple[str, str]]) -> List[str]:
-        clusters_of_added = set()
+        relevant_clusters = set()
         if len(common_bps_by_clus) > len(common_bps):
-            added = sorted(set(common_bps_by_clus) - set(common_bps))
-            clusters_of_added = sorted(set([bp_clus for bp_clus, bp in added]))
-        return clusters_of_added
+            new_bp = sorted(set(common_bps_by_clus) - set(common_bps))
+            new_clusters = sorted(set([clus for clus, bp in common_bps_by_clus]) - set([clus for clus, bp in common_bps])) 
+            
+            relevant_clusters = new_clusters
+            # relevant_clusters = sorted(set([bp_clus for bp_clus, bp in new_bp]))
+        return relevant_clusters
 
     def _calc_common_bps_n_clusters(self, all_bps: Dict[str, list], bp_to_cluster: Dict[str, str]) -> Tuple[Dict[tuple, list], Dict[tuple, int], int, int]:
         """_summary_
@@ -543,7 +546,7 @@ class Analyzer:
                 _common_bps: List[str] = rnas_bps_w_cluster[0].copy()
                 for l in rnas_bps_w_cluster[1:]:
                     _common_bps, common_bps_by_clus = self.U.find_common_bps(common_bps_by_clus, l)
-                #TODO: remove later
+                #TODO: check where is the BUG!!
                 if len(common_bps) != len(_common_bps):
                     print()
 
