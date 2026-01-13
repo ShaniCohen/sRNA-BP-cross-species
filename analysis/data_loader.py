@@ -89,7 +89,7 @@ class DataLoader:
 
         # ---------  RUNTIME FLAGS  ---------
         self.dump_rna_and_inter_data_summary = True
-        self.generate_clean_rna_fasta = False
+        self.generate_clean_rna_fasta = True
         self.load_pairs_clustering_from_pickle = True
     
     def get_strains(self) -> List[str]:
@@ -165,9 +165,12 @@ class DataLoader:
 
         # 3 - Salmonella enterica serovar Typhimurium strain SL1344,  Genome: NC_016810.1  (Matera 2022)
         salmonella_dir = self.config[f'{self.salmonella_nm}_dir']
-        salmonella_mrna = read_df(file_path=join(self.config['rna_dir'], salmonella_dir, "matera_salmonella_all_mRNA_molecules.csv"))
-        salmonella_srna = read_df(file_path=join(self.config['rna_dir'], salmonella_dir, "matera_salmonella_all_sRNA_molecules.csv"))
-        salmonella_inter = read_df(file_path=join(self.config['interactions_dir'], salmonella_dir, "matera_salmonella_interactions.csv"))
+        salmonella_mrna = read_df(file_path=join(self.config['rna_dir'], salmonella_dir, "matera_liu_salmonella_all_mRNA_molecules.csv"))
+        salmonella_srna = read_df(file_path=join(self.config['rna_dir'], salmonella_dir, "matera_liu_salmonella_all_sRNA_molecules.csv"))
+
+        salmonella_inter_matera = read_df(file_path=join(self.config['interactions_dir'], salmonella_dir, "matera_salmonella_interactions.csv"))
+        salmonella_inter_liu = read_df(file_path=join(self.config['interactions_dir'], salmonella_dir, "liu_salmonella_interactions.csv"))
+        salmonella_inter = pd.concat([salmonella_inter_matera, salmonella_inter_liu], ignore_index=True)
 
         salmonella_mrna, salmonella_srna, salmonella_inter = \
             ap.preprocess_salmonella_inter(mrna_data=salmonella_mrna, srna_data=salmonella_srna, inter_data=salmonella_inter)
@@ -266,7 +269,7 @@ class DataLoader:
 
         if self.dump_rna_and_inter_data_summary:
             self.logger.info(f"Dumping a summary table of all strains data")
-            summary_df = pd.concat([k12_sum, epec_sum, salmo_sum, vibrio_sum, klebsiella_sum, pseudomonas_sum], ignore_index=True)
+            summary_df = pd.concat([k12_sum, epec_sum, salmo_sum, klebsiella_sum, vibrio_sum, pseudomonas_sum], ignore_index=True)
             summary_df['No.'] = list(range(1, len(summary_df) + 1))
             _rename = {
                 'strain_short': 'Bacterial Strain', 
@@ -337,7 +340,7 @@ class DataLoader:
 
             srna_fasta_clean = srna_fasta_clean[['cleaned_header','seq']]
             mrna_fasta_clean = mrna_fasta_clean[['cleaned_header','seq']]
-            assert not pd.isnull(srna_fasta_clean).y(), f"{strain} - missing sequences in sRNA fasta after cleaning"
+            assert not pd.isnull(srna_fasta_clean).values.any(), f"{strain} - missing sequences in sRNA fasta after cleaning"
             assert not pd.isnull(mrna_fasta_clean).values.any(), f"{strain} - missing sequences in mRNA fasta after cleaning"
 
             # 4 - write clean fasta files
