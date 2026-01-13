@@ -89,7 +89,7 @@ class DataLoader:
 
         # ---------  RUNTIME FLAGS  ---------
         self.dump_rna_and_inter_data_summary = True
-        self.generate_clean_rna_fasta = True
+        self.generate_clean_rna_fasta = False
         self.load_pairs_clustering_from_pickle = True
     
     def get_strains(self) -> List[str]:
