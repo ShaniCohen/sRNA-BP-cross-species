@@ -111,6 +111,7 @@ class Analyzer:
 
         # 5 - run Wang similarity on all BPs
         bp_to_cluster = self._run_wang_similarity_between_bps(bp_rna_mapping)
+        self._log_bp_clustering_stats(bp_to_cluster)
         
         # 6 - Enrichment (per strain): per sRNA, find and keep only significant biological processes (BPs) that its targets are invovlved in.
         if self.run_enrichment:
@@ -295,7 +296,7 @@ class Analyzer:
         f_name = f"bp_clustering_{linkage_method}_threshold_percentile_{threshold_dist_prec}"
         return _dir, f_name, linkage_method, threshold_dist_prec
     
-    def _run_wang_similarity_between_bps(self, bp_rna_mapping: dict) -> dict:
+    def _run_wang_similarity_between_bps(self, bp_rna_mapping: dict) -> Dict[str, int]:
         """
         Compute Wang semantic similarity between GO terms (BPs)
         # https://github.com/tanghaibao/goatools/blob/main/notebooks/semantic_similarity_wang.ipynb
@@ -311,7 +312,9 @@ class Analyzer:
                         ...
                 },
                 ...
-            }   
+            }
+        Returns:
+            dict: A dictionary mapping BP IDs to their cluster labels.   
         """
         # config params
         _dir, f_name, linkage_method, threshold_dist_prec = self._get_bp_clustering_params_dir_n_nm()
@@ -360,7 +363,39 @@ class Analyzer:
         bp_to_cluster = dict(zip(bp_clusters['bp_id'].apply(lambda x: x.replace('GO:', '')), bp_clusters['cluster']))
 
         return bp_to_cluster
-
+    
+    def _log_bp_clustering_stats(self, bp_to_cluster: dict):
+        self.logger.info(f"##############   BP Clustering Statistics   ##############")
+        self.logger.info(f"Number of BPs in sub-graph: {len(bp_to_cluster)}")
+        cluster_sizes = pd.Series(list(bp_to_cluster.values())).value_counts().sort_index().reset_index(drop=False).rename(
+            columns={'index': 'cluster_id', 'count': 'cluster_size'})
+        
+        self.logger.info("------------------------- INCLUDING singletones")
+        # 1 - number of clusters
+        num_clusters = len(cluster_sizes)
+        self.logger.info(f"Number of BP clusters: {num_clusters}")
+        # 2 - cluster size distribution
+        unq, counts = np.unique(cluster_sizes['cluster_size'], return_counts=True)
+        sorted_dict = dict(sorted(dict(zip(unq, counts)).items(), key=lambda item: item[1], reverse=True))
+        cluster_size_dist = "\n   ".join([f"{counts} with size = {unq} ({int(round(counts/num_clusters, 3)*100)} %)" for unq, counts in sorted_dict.items()])
+        self.logger.info(
+            f"-------   Cluster Size Distribution: \n"
+            f"   {cluster_size_dist}"
+        )
+        
+        self.logger.info("------------------------- NO singletones")
+        cluster_sizes_no_singletons = cluster_sizes[cluster_sizes['cluster_size'] > 1]
+        # 1 - number of clusters
+        num_clusters = len(cluster_sizes_no_singletons)
+        self.logger.info(f"Number of BP clusters: {num_clusters}")
+        # 2 - cluster size distribution
+        unq, counts = np.unique(cluster_sizes_no_singletons['cluster_size'], return_counts=True)
+        sorted_dict = dict(sorted(dict(zip(unq, counts)).items(), key=lambda item: item[1], reverse=True))
+        cluster_size_dist = "\n   ".join([f"{counts} with size = {unq} ({round(counts/num_clusters, 3)*100} %)" for unq, counts in sorted_dict.items()])
+        self.logger.info(
+            f"-------   Cluster Size Distribution: \n"
+            f"   {cluster_size_dist}"
+        )
 
     def _analysis_1_srna_homologs_to_commom_bps(self, srna_bp_mapping: dict, bp_to_cluster: dict):
         self.logger.info(f"##############   Analsis 1 - Cross-Species Conservation of sRNAs' Functionality   ##############")
