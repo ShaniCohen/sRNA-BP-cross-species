@@ -58,7 +58,7 @@ class GraphBuilder:
 
         # ---------  RUNTIME FLAGS  ---------
         self.run_n_dump_stats_of_homology_edges = False   # RNA Homology Detection Between Strain Pairs (Statistics)
-        self.run_n_dump_po2vec_clustering = True   # PO2Vec-based Clustering of BPs
+        self.run_n_dump_po2vec_clustering = False   # PO2Vec-based Clustering of BPs
 
         # #TODO: adjust that (merge with version/ add to conf)
         self.add_ips_annot = True
