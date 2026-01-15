@@ -28,7 +28,7 @@ def parse_header_to_acc_locus_and_name(df: pd.DataFrame, df_header_col: str, acc
     return df
 
 
-def convert_count_to_val(count: int, denominator: int, val_type: str):
+def convert_count_to_val(count: int, denominator: int, val_type: str, ndigits: int = 2):
         """
         Args:
             count (int):
@@ -38,9 +38,9 @@ def convert_count_to_val(count: int, denominator: int, val_type: str):
             float or int: desired val
         """
         if val_type == 'ratio':
-            val = float(round(count/denominator, 2))
+            val = float(round(count/denominator, ndigits))
         elif val_type == 'percentage':
-            val = int(round(count/denominator, 2)*100)
+            val = int(round(count/denominator, ndigits)*100)
         else:
             raise ValueError(f"val_type {val_type} is not supported")
         return val

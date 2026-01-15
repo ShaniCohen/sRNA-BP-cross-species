@@ -44,10 +44,10 @@ class Analyzer:
         self.U = graph_utils
 
         # ---------  RUNTIME FLAGS  ---------
-        self.run_clustering_of_rna_homologs = False
-        self.run_clustering_of_rna_paralogs_only = False
+        self.run_clustering_of_rna_homologs = False        # Chapter 4.3.3: Clustering of RNA Homologs Across Multiple Strains
+        self.run_clustering_of_rna_paralogs_only = False   # Chapter 4.3.3: Clustering of RNA Homologs Across Multiple Strains
 
-        self.run_homolog_clusters_stats = True   # Chapter 4.3.3: Clustering of RNA Homologs Across Multiple Strains
+        self.run_homolog_clusters_stats = True            # Chapter 4.3.3: Clustering of RNA Homologs Across Multiple Strains
         
         # ---------  CONFIGURATIONS  ---------
         self.run_enrichment = self.config['run_enrichment']
@@ -99,7 +99,7 @@ class Analyzer:
         if self.run_homolog_clusters_stats:
             self._dump_stats_rna_orthologs_n_paralogs_per_strain(val_type = 'ratio')
             self._dump_stats_rna_homolog_clusters_size(val_type = 'ratio')
-            self._dump_stats_rna_homolog_clusters_strains_composition(val_type = 'ratio', min_val_limit = 0.02)
+            self._dump_stats_rna_homolog_clusters_strains_composition(val_type = 'ratio', min_val_limit = 0.020)
 
         # 4 - Map sRNAs to biological processes (BPs)
         self.logger.info("----- Before enrichment:")
@@ -777,7 +777,7 @@ class Analyzer:
                 if s1 == s2 and self.U.are_paralogs(self.G, n1, n2, s1):
                     paralog_pairs.append((n1, n2))
                     paralog_pairs_w_meta.append((f"{s1}__{n1}__{self.G.nodes[n1]['name']}", f"{s2}__{n2}__{self.G.nodes[n2]['name']}"))
-                elif (self.U.are_ortholog_by_seq(self.G, n1, n2, s1, s2) or self.U.are_ortholog_by_name(self.G, n1, n2, s1, s2)):
+                elif (self.U.are_orthologs_by_seq(self.G, n1, n2, s1, s2) or self.U.are_orthologs_by_name(self.G, n1, n2, s1, s2)):
                     ortholog_pairs.append((n1, n2))
                     ortholog_pairs_w_meta.append((f"{s1}__{n1}__{self.G.nodes[n1]['name']}", f"{s2}__{n2}__{self.G.nodes[n2]['name']}"))
                 else:
@@ -841,7 +841,7 @@ class Analyzer:
             # 2.2 - list of tuples (cluster_size , val) **sorted by cluster_size**
             size_to_val = dict(zip(unq, vals))
             cluster_sizes_vals = [(size, size_to_val.get(size, 0)) for size in range(2, max(unq) + 1)]
-            self.logger.debug(f"{rna_type} cluster_sizes_vals ({len(cluster_sizes_vals)}): {cluster_sizes_vals}")
+            self.logger.debug(f"{rna_type} No. Clusters = {num_clusters}, cluster_sizes_vals ({len(cluster_sizes_vals)}): {cluster_sizes_vals}")
             # 2.3 - limit vals
             if min_val_limit:
                 cluster_sizes_vals = [(x, val) for (x, val) in cluster_sizes_vals if val >= min_val_limit]
@@ -881,14 +881,14 @@ class Analyzer:
             # 2.1 - get distributoin values per strains composition
             unq, counts = np.unique(all_homologs_df['strains'], return_counts=True)
             unq = self._convert_strain_names(list(unq))
-            vals = [convert_count_to_val(count, num_clusters, val_type) for count in counts]
+            vals = [convert_count_to_val(count, num_clusters, val_type, ndigits=3) for count in counts]
 
             # 2.2 - list of tuples (strains_composition , val) **sorted by val** in descending order  
             cluster_compositions_vals = sorted(list(zip(unq, vals)), key=lambda x: x[1], reverse=True)
             self.logger.debug(f"{rna_type} cluster_compositions_vals ({len(cluster_compositions_vals)})")
             # 2.3 - limit vals
             if min_val_limit:
-                cluster_compositions_vals = [(x, val) for (x, val) in cluster_compositions_vals if val >= min_val_limit]
+                cluster_compositions_vals = [(x, val) for (x, val) in cluster_compositions_vals if val > min_val_limit]
                 self.logger.debug(f"{rna_type} cluster_compositions_vals AFTER limit (val >= {min_val_limit}) ({len(cluster_compositions_vals)})")
             cluster_compositions_vals_str = str(cluster_compositions_vals).replace("('", "{(").replace("'), ", ")},").replace("', '", ", ").replace("), (", ") (").replace("[", "{").replace("]", "}")
             # 2.4 - get compositions
