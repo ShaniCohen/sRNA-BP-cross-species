@@ -358,8 +358,8 @@ class Analyzer:
 
         # map GO IDs to their cluster labels
         bp_clusters = pd.DataFrame({'bp_id': goids_sorted, 'cluster': cluster_labels, 'bp_name': [godag[g].name for g in goids_sorted]}).sort_values(by='cluster').reset_index(drop=True)
-        write_df(bp_clusters, join(_dir, f"{f_name}__bp_clusters.csv"))
-        write_df(dis_meta, join(_dir, f"{f_name}__dis_meta.csv"))
+        write_df(bp_clusters, join(_dir, f"{f_name}__bp_clusters___{self.out_file_suffix}.csv"))
+        write_df(dis_meta, join(_dir, f"{f_name}__dis_meta___{self.out_file_suffix}.csv"))
         bp_to_cluster = dict(zip(bp_clusters['bp_id'].apply(lambda x: x.replace('GO:', '')), bp_clusters['cluster']))
 
         return bp_to_cluster
@@ -370,18 +370,18 @@ class Analyzer:
         cluster_sizes = pd.Series(list(bp_to_cluster.values())).value_counts().sort_index().reset_index(drop=False).rename(
             columns={'index': 'cluster_id', 'count': 'cluster_size'})
         
-        self.logger.info("------------------------- INCLUDING singletones")
-        # 1 - number of clusters
-        num_clusters = len(cluster_sizes)
-        self.logger.info(f"Number of BP clusters: {num_clusters}")
-        # 2 - cluster size distribution
-        unq, counts = np.unique(cluster_sizes['cluster_size'], return_counts=True)
-        sorted_dict = dict(sorted(dict(zip(unq, counts)).items(), key=lambda item: item[1], reverse=True))
-        cluster_size_dist = "\n   ".join([f"{counts} with size = {unq} ({int(round(counts/num_clusters, 3)*100)} %)" for unq, counts in sorted_dict.items()])
-        self.logger.info(
-            f"-------   Cluster Size Distribution: \n"
-            f"   {cluster_size_dist}"
-        )
+        # self.logger.info("------------------------- INCLUDING singletones")
+        # # 1 - number of clusters
+        # num_clusters = len(cluster_sizes)
+        # self.logger.info(f"Number of BP clusters: {num_clusters}")
+        # # 2 - cluster size distribution
+        # unq, counts = np.unique(cluster_sizes['cluster_size'], return_counts=True)
+        # sorted_dict = dict(sorted(dict(zip(unq, counts)).items(), key=lambda item: item[1], reverse=True))
+        # cluster_size_dist = "\n   ".join([f"{counts} with size = {unq} ({int(round(counts/num_clusters, 3)*100)} %)" for unq, counts in sorted_dict.items()])
+        # self.logger.info(
+        #     f"-------   Cluster Size Distribution: \n"
+        #     f"   {cluster_size_dist}"
+        # )
         
         self.logger.info("------------------------- NO singletones")
         cluster_sizes_no_singletons = cluster_sizes[cluster_sizes['cluster_size'] > 1]
@@ -1011,8 +1011,9 @@ class Analyzer:
                 f"Strain: {strain} \n"
                 f"  Number of sRNA keys: {srna_count} \n"
                 f"  Number of unique mRNA targets with BPs: {len(unique_mrna_targets)} \n"
-                f"  Number of BP annotations: {len(bp_list)} \n"
-                f"  Number of unique BPs: {len(unique_bps)}"
+                f"  Number of mRNA-BP annotations (edges): {len(bp_list)} \n"
+                f"  Number of unique BPs: {len(unique_bps)} \n"
+                f"  & {srna_count} & {len(unique_mrna_targets)} & {len(bp_list)} & {len(unique_bps)}"
             )
     
     def _find_homologs(self, strain_to_rna_list: Dict[str, List[str]], rna_str: str) -> List[Tuple[str]]:
