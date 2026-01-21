@@ -68,6 +68,10 @@ class Analyzer:
 
         # file names suffix
         self.out_file_suffix = f"v_{conf_str}"
+        
+        # analysis 1 params
+        self.srna_cluster_id_col = 'srna_homologs_cluster_id'
+        self.srna_subgroup_id_col = 'subgroup_id'
 
         # TODO: remove after testing
         self.strains_data = graph_builder.strains_data
@@ -397,19 +401,72 @@ class Analyzer:
             f"   {cluster_size_dist}"
         )
 
-    def _analysis_1_srna_homologs_to_commom_bps(self, srna_bp_mapping: dict, bp_to_cluster: dict):
+    def _analysis_1_srna_homologs_to_commom_bps(self, srna_bp_mapping: dict, bp_to_cluster: dict, add_pairs_info: bool = False):
         self.logger.info(f"##############   Analsis 1 - Cross-Species Conservation of sRNAs' Functionality   ##############")
         # 1 - load clusters of sRNA homologs
         df = self.srna_homologs.copy()
 
+        dfs = []
+        for index, row in df.iterrows():
+            cluster_id = index + 1
+            cluster = ast.literal_eval(row['cluster'])
+            # 2 - dump a csv of the cluster subgraph (tree)
+            cluster_srnas_to_targets_to_bps = {}
+            cluster_srnas_to_bps = {}
+            for srna_id in cluster:
+                strain = self.G.nodes[srna_id]['strain']
+                srna_targets = srna_bp_mapping[strain].get(srna_id)
+                if srna_targets:
+                    srna_complete = f"{strain}__{srna_id}__{self.G.nodes[srna_id]['name']}" 
+                    # sRNAs to targets to BPs with clusters
+                    targets_to_bps = {f"{target_id}__{self.G.nodes[target_id]['name']}": sorted([(bp_to_cluster[bp_id], bp_id, self.G.nodes[bp_id]['lbl']) for bp_id in bps]) for target_id, bps in srna_targets.items()}
+                    cluster_srnas_to_targets_to_bps[srna_complete] = targets_to_bps
+                    # sRNAs to all its BPs with clusters
+                    all_unq_bps = sorted({(bp_to_cluster[bp_id], bp_id, self.G.nodes[bp_id]['lbl']) for bps in srna_targets.values() for bp_id in bps})
+                    cluster_srnas_to_bps[srna_complete] = all_unq_bps
+
+            #TODO: dump the tree as a csv (srnas_to_targets_to_bps)
+
+            # 3 - generate cluster df
+            # 3.1 - generate the cluster record
+            rec = {
+                 self.srna_cluster_id_col: cluster_id,
+                'cluster': cluster,
+                'cluster_size': row['cluster_size'],
+                'strains': ast.literal_eval(row['strains']),
+                'num_strains': row['num_strains']
+            }
+            if add_pairs_info:
+                rec.update({
+                    'ortholog_pairs': ast.literal_eval(row['ortholog_pairs']),
+                    'num_ortholog_pairs': row['num_ortholog_pairs'],
+                    'paralog_pairs': ast.literal_eval(row['paralog_pairs']),
+                    'num_paralog_pairs': row['num_paralog_pairs']
+                })
+            rec.update({self.srna_subgroup_id_col: 0})
+            # 3.2 - add subgroups records
+            cluster_df = self._get_cluster_df(rec, cluster_srnas_to_bps, srna_bp_mapping)
+            dfs.append(cluster_df)
+
         # 2 - analyze common BPs of sRNA homologs
-        records = []
-        for cluster in df['cluster'].apply(ast.literal_eval):
+        cluster_id_col, subgroup_id_col = 'srna_homologs_cluster_id', 'subgroup_id'
+        dfs = []
+        for _id, cluster in enumerate(df['cluster'].apply(ast.literal_eval)):
             # rec = self._get_common_bps_of_srna_orthologs(cluster, srna_bp_mapping, bp_to_cluster)
             # records.append(rec)
-            recs = self._get_records_of_srna_orthologs_cluster(cluster, srna_bp_mapping, bp_to_cluster)
-            records= records + recs
-        df[list(records[0].keys())] = pd.DataFrame(records)
+            curr_df = self._get_df_of_srna_orthologs_cluster(_id + 1, cluster, srna_bp_mapping, bp_to_cluster, add_pairs_info)
+            dfs.append(curr_df)
+        out_df = pd.concat(dfs, ignore_index=True)
+        # df[list(records[0].keys())] = pd.DataFrame(records)
+
+                # 'cluster': cluster,
+                # 'cluster_size': len(cluster),
+                # 'strains': tuple(sorted(strains)),
+                # 'num_strains': len(strains),
+                # 'ortholog_pairs': sorted(ortholog_pairs_w_meta),
+                # 'num_ortholog_pairs': len(ortholog_pairs_w_meta),
+                # 'paralog_pairs': sorted(paralog_pairs_w_meta),
+                # 'num_paralog_pairs': len(paralog_pairs_w_meta)
         
         # 3 - score
         max_of_max_filtered_homolog_cluster_size = df['max_filtered_homolog_cluster_size'].max() if df['max_filtered_homolog_cluster_size'].max() > 0 else 1
@@ -450,86 +507,177 @@ class Analyzer:
                 f"   {max_common_dist}"
             )
     
-    def _get_records_of_srna_orthologs_cluster(self, orthologs_cluster: Tuple[str], srna_bp_mapping: dict, bp_to_cluster: dict) -> List[dict]:
-        recs = []
-        # 1 - all BPs
-        all_bps, num_all_bps = {}, {}
-        all_bp_clusters, num_all_bp_clusters = {}, {}
-        # 2 - sRNAs to targets to BPs w clusters (complete)
-        srnas_to_targets_to_bps_w_clusters = {}
-        # for orthologs clusters of targets
-        strain_to_mrna_list = {}
+    def _PREV_analysis_1_srna_homologs_to_commom_bps(self, srna_bp_mapping: dict, bp_to_cluster: dict):
+        self.logger.info(f"##############   Analsis 1 - Cross-Species Conservation of sRNAs' Functionality   ##############")
+        # 1 - load clusters of sRNA homologs
+        df = self.srna_homologs.copy()
 
-        for srna_id in orthologs_cluster:
-            strain = self.G.nodes[srna_id]['strain']
-            srna_targets = srna_bp_mapping[strain].get(srna_id)
-            if srna_targets:
-                unq_bps = sorted({bp for bps in srna_targets.values() for bp in bps})
-                all_bps[f'{strain}__{srna_id}'] = unq_bps
-                num_all_bps[f'{strain}__{srna_id}'] = len(unq_bps)
+        # 2 - analyze common BPs of sRNA homologs
+        records = []
+        for cluster in df['cluster'].apply(ast.literal_eval):
+            rec = self._get_common_bps_of_srna_orthologs(cluster, srna_bp_mapping, bp_to_cluster)
+            records.append(rec)
+        df[list(records[0].keys())] = pd.DataFrame(records)
+        
+        # 3 - score
+        max_of_max_filtered_homolog_cluster_size = df['max_filtered_homolog_cluster_size'].max() if df['max_filtered_homolog_cluster_size'].max() > 0 else 1
+        df['score'] = 100 * df['max_strains_with_common_BPs'] + 10 * (df['max_filtered_homolog_cluster_size'] / max_of_max_filtered_homolog_cluster_size)
+        df = df.sort_values(by=['score'], ascending=False).reset_index(drop=True)
+
+        # 4 - dump results
+        # 4.1 - csv
+        write_df(df, join(self.out_path_analysis_tool_1, f"Tool_1__sRNA_homologs_to_common_BPs_w_clusters__{self.out_file_suffix}.csv"))
+        # 4.2 - manual txt
+        clusters_for_txt = [('E2348C_ncR46', 'G0-8867', 'GcvB', 'gcvB', 'ncRNA0016'), ('E2348C_ncR22', 'G0-8863', 'gene-SGH10_RS11370', 'ncRNA0059'), ('E2348C_ncR58', 'G0-8871', 'arcZ', 'ncRNA0002'), ('E2348C_ncR33', 'G0-8878', 'cyaR', 'ncRNA0009'), ('E2348C_ncR60', 'G0-8872', 'RyhB', 'ncRNA0030', 'ncRNA0069', 'ryhB-1', 'ryhB-2'), ('E2348C_ncR66', 'EG30098', 'Spot42', 'ncRNA0077', 'spf'), ('E2348CN_0008', 'G0-10671', 'mgrR', 'ncRNA0046'), ('E2348CN_0007', 'G0-10677', 'fnrS', 'ncRNA0015'), ('E2348CN_0013', 'G0-16649', 'cpxQ', 'ncRNA0206'), ('E2348C_ncR48', 'G0-8882', 'ncRNA0052', 'omrB')]
+        dump_manual_txt = True
+        if dump_manual_txt:
+            with open(join(self.out_path_analysis_tool_1, f"Tool_1__Manual_{self.graph_version}.txt"), 'w', encoding='utf-8') as f:
+                for _, row in df.iterrows():
+                    cluster = row['cluster'] if type(row['cluster']) == tuple else ast.literal_eval(row['cluster'])
+                    if cluster in clusters_for_txt:
+                        f.write(f"{row['cluster']}\n")
+                        # f.write(f"{row['srnas_to_targets_to_BPs']}\n\n")
+                        f.write(f"{row['srnas_to_targets_to_BPs_w_clusters']}\n\n")
+
+        # 5 - log statistics
+        num_clusters = len(df)
+        self.logger.info(
+            f"----------------   sRNA homologs \n"
+            f"Number of sRNA homolog clusters: {len(df)}"
+        )
+        # 5.1 - max common BPs distribution
+        for bp_definition, max_common_col in [(self.U.bp_id, 'max_common_BPs')]:
+
+            unq, counts = np.unique(df[max_common_col], return_counts=True)
+            sorted_dict = dict(sorted(dict(zip(unq, counts)).items(), key=lambda item: item[1], reverse=True))
+            max_common_dist = "\n   ".join([f"{counts} with {max_common_col} = {unq} ({int(round(counts/num_clusters, 2)*100)} %)" for unq, counts in sorted_dict.items()])
+            
+            self.logger.info(
+                f"-------   BP definition = {bp_definition} \n"
+                f"{max_common_col} distribution: \n"
+                f"   {max_common_dist}"
+            )
+
+    def _get_cluster_df(self, rec: dict, cluster_srnas_to_bps: dict, srna_bp_mapping: dict) -> pd.DataFrame:
+        sub_recs = []
+
+        #cluster_id_col: str, subgroup_id_col: str, cluster_id: int, orthologs_cluster: Tuple[str]
+        cluster_id = rec[self.srna_cluster_id_col]
+        orthologs_cluster = rec['cluster']
+        
+        # _all_common_bps, _num_common_bps = {}, {}
+
+        
+        # _all_common_bp_clusters, _num_common_bp_clusters = {}, {}
+
+
+        # _new_common_bps_added_by_clustering = {}
+        # _common_bps_extended_by_clustering = {}
+
+
+        out_df = pd.DataFrame([rec])
+
+        for size in range(2, len(cluster_srnas_to_bps.keys()) + 1):
+            for rna_comb in itertools.combinations(cluster_srnas_to_bps.keys(), size):
+                # RNAs info
+                rnas_strains = set([rna.split('__')[0] for rna in rna_comb])
+                rnas_bps_w_cluster = list(map(cluster_srnas_to_bps.get, rna_comb))
                 
-                unq_bp_clusters = sorted({bp_to_cluster[bp_id] for bp_id in unq_bps})
-                all_bp_clusters[f'{strain}__{srna_id}'] = unq_bp_clusters
-                num_all_bp_clusters[f'{strain}__{srna_id}'] = len(unq_bp_clusters)
+                # 1 - common BPs of RNAs
+                _common_bps: List[Tuple[str, str]] = rnas_bps_w_cluster[0]
+                for l in rnas_bps_w_cluster[1:]:
+                    _common_bps = self.U.find_common_bps(_common_bps, l)
+                
+                if _common_bps:
+                    _all_common_bps[rna_comb] = [(clus, bp, self.G.nodes[bp]['lbl']) for clus, bp in _common_bps]
+                    NUM_COMMON_BPS = len(_common_bps)
+                    _num_common_bps[rna_comb] = NUM_COMMON_BPS
+                    _max_strains_w_common_bps = max(_max_strains_w_common_bps, len(rnas_strains))
+                    _max_common_bps = max(_max_common_bps, NUM_COMMON_BPS)
 
-                # sRNAs to targets to BPs (complete)
-                srna_complete = f"{strain}__{srna_id}__{self.G.nodes[srna_id]['name']}" 
-                targets_to_bps_complete = {f"{target_id}__{self.G.nodes[target_id]['name']}": sorted([(bp_to_cluster[bp_id], bp_id, self.G.nodes[bp_id]['lbl']) for bp_id in bps]) for target_id, bps in srna_targets.items()}
-                srnas_to_targets_to_bps_w_clusters[srna_complete] = targets_to_bps_complete
+                # 2 - common BPs of RNAs by cluster
+                _common_bp_clusters: List[Tuple[str, str]] = rnas_bps_w_cluster[0]
+                for l in rnas_bps_w_cluster[1:]:
+                    _common_bp_clusters = self.U.find_common_bps_by_cluster(_common_bp_clusters, l)
+                
+                if _common_bp_clusters:
+                    _all_common_bp_clusters[rna_comb] = [(clus, bp, self.G.nodes[bp]['lbl']) for clus, bp in _common_bp_clusters]
+                    NUM_COMMON_BP_CLUSTERS = len(set([clus for clus, bp in _common_bp_clusters]))
+                    _num_common_bp_clusters[rna_comb] = NUM_COMMON_BP_CLUSTERS
+                    _max_strains_w_common_bp_clusters = max(_max_strains_w_common_bp_clusters, len(rnas_strains))
+                    _max_common_bp_clusters = max(_max_common_bp_clusters, NUM_COMMON_BP_CLUSTERS)
 
-                # for orthologs clusters of targets
-                if strain not in strain_to_mrna_list.keys():
-                    strain_to_mrna_list[strain] = []
-                strain_to_mrna_list[strain].extend(list(srna_targets.keys()))
+                # check which new common BPs were added by clustering
+                new_clusters_added, new_bps_of_clusters = self._get_clusters_of_common_bps_added(_common_bp_clusters, _common_bps)
+                
+                if new_clusters_added:
+                    common_bps_added_per_srna = {}
+                    for srna in rna_comb:
+                        common_bps_added = sorted([(clus, bp, self.G.nodes[bp]['lbl']) for clus, bp, nm in cluster_srnas_to_bps[srna] if clus in new_clusters_added])
+                        if common_bps_added:
+                            common_bps_added_per_srna[srna] = common_bps_added
+                    _new_common_bps_added_by_clustering[rna_comb] = common_bps_added_per_srna
+                
+                if new_bps_of_clusters:
+                    common_bps_extended_per_srna = {}
+                    for srna in rna_comb:
+                        common_bps_extended = sorted([(clus, bp, self.G.nodes[bp]['lbl']) for clus, bp, nm in cluster_srnas_to_bps[srna] if (clus, bp) in new_bps_of_clusters])
+                        if common_bps_extended:
+                            common_bps_extended_per_srna[srna] = common_bps_extended
+                    _common_bps_extended_by_clustering[rna_comb] = common_bps_extended_per_srna
 
-        num_srna_w_bps = len(all_bps)
-        srnas_to_targets_to_bps_w_clusters = dict(sorted(srnas_to_targets_to_bps_w_clusters.items()))
-
-        out_rec = {'num_srna_w_bps': num_srna_w_bps}
+                
         
-        # 3 - common BPs
-        # all_common_bps, num_common_bps, max_strains_w_common_bps, all_common_bps_of_max_strains, max_common_bps = self._calc_common_bps(all_bps)
-        all_bps_w_clusters = {}
-        for srna, bps in all_bps.items():
-            all_bps_w_clusters[srna] = [(bp_to_cluster[bp], bp) for bp in bps]
-        rec = self._calc_common_bps_n_clusters(all_bps_w_clusters)
-        out_rec.update(rec)
+                subbgroup_rec = {
+                    'all_common_BPs': _all_common_bps,
+                    'num_common_BPs': _num_common_bps,
 
-        # 4 - homolog clusters of targets (cross-strains)
-        # complete clusters
-        complete_homolog_clusters_of_targets = self._find_homologs(strain_to_mrna_list, 'mRNA')
-        # filtered clusters - only those that contain at least two targets of sRNAs in the cluster
-        relevant_mrnas = set()
-        for rna_list in strain_to_mrna_list.values():
-            relevant_mrnas.update(rna_list)
+                    'new_common_BPs_added_by_clustering': _new_common_bps_added_by_clustering,
+                    'common_BPs_extended_by_clustering': _common_bps_extended_by_clustering,
+
+                    'all_common_BP_clusters': _all_common_bp_clusters,
+                    'num_common_BP_clusters': _num_common_bp_clusters,
+                }
+
+        ###############################
+        ###############################
+        # out_rec.update(rec)
+
+        # # 4 - homolog clusters of targets (cross-strains)
+        # # complete clusters
+        # complete_homolog_clusters_of_targets = self._find_homologs(strain_to_mrna_list, 'mRNA')
+        # # filtered clusters - only those that contain at least two targets of sRNAs in the cluster
+        # relevant_mrnas = set()
+        # for rna_list in strain_to_mrna_list.values():
+        #     relevant_mrnas.update(rna_list)
         
-        filtered_homolog_clusters_of_targets = set()
-        for cluster in complete_homolog_clusters_of_targets:
-            rna_homologs = tuple(sorted(set(cluster).intersection(relevant_mrnas)))
-            if len(rna_homologs) >= 2:
-                filtered_homolog_clusters_of_targets.add(rna_homologs)
-        # add info + sort clusters by size (length) from largest to smallest
-        complete_homolog_clusters_of_targets = sorted([tuple(sorted([f"{self.G.nodes[rna]['strain']}__{rna}__{self.G.nodes[rna]['name']}" for rna in cluster])) for cluster in complete_homolog_clusters_of_targets], key=lambda x: len(x), reverse=True)
-        filtered_homolog_clusters_of_targets = sorted([tuple(sorted([f"{self.G.nodes[rna]['strain']}__{rna}__{self.G.nodes[rna]['name']}" for rna in cluster])) for cluster in filtered_homolog_clusters_of_targets], key=lambda x: len(x), reverse=True)
+        # filtered_homolog_clusters_of_targets = set()
+        # for cluster in complete_homolog_clusters_of_targets:
+        #     rna_homologs = tuple(sorted(set(cluster).intersection(relevant_mrnas)))
+        #     if len(rna_homologs) >= 2:
+        #         filtered_homolog_clusters_of_targets.add(rna_homologs)
+        # # add info + sort clusters by size (length) from largest to smallest
+        # complete_homolog_clusters_of_targets = sorted([tuple(sorted([f"{self.G.nodes[rna]['strain']}__{rna}__{self.G.nodes[rna]['name']}" for rna in cluster])) for cluster in complete_homolog_clusters_of_targets], key=lambda x: len(x), reverse=True)
+        # filtered_homolog_clusters_of_targets = sorted([tuple(sorted([f"{self.G.nodes[rna]['strain']}__{rna}__{self.G.nodes[rna]['name']}" for rna in cluster])) for cluster in filtered_homolog_clusters_of_targets], key=lambda x: len(x), reverse=True)
 
-        # 5 - max filtered homolog cluster size
-        max_filtered_homolog_cluster_size = max([len(c) for c in filtered_homolog_clusters_of_targets], default=0)
+        # # 5 - max filtered homolog cluster size
+        # max_filtered_homolog_cluster_size = max([len(c) for c in filtered_homolog_clusters_of_targets], default=0)
 
-        # 6 - output record
-        out_rec.update({
-            # 'all_BPs': all_bps,  # REMOVED
-            'all_BPs_w_clusters': all_bps_w_clusters,  # NEW
-            'num_all_BPs': num_all_bps,
-            'num_all_BP_clusters': num_all_bp_clusters, # NEW
-            'complete_homolog_clusters_of_targets': complete_homolog_clusters_of_targets,
-            'filtered_homolog_clusters_of_targets': filtered_homolog_clusters_of_targets,
-            'max_filtered_homolog_cluster_size': max_filtered_homolog_cluster_size,
-            # 'srnas_to_targets_to_BPs': srnas_to_targets_to_bps,  # REMOVED
-            'srnas_to_targets_to_BPs_w_clusters': srnas_to_targets_to_bps_w_clusters,  # NEW
-        })
+        # # 6 - output record
+        # out_rec.update({
+        #     # 'all_BPs': all_bps,  # REMOVED
+        #     'all_BPs_w_clusters': all_bps_w_clusters,  # NEW
+        #     'num_all_BPs': num_all_bps,
+        #     'num_all_BP_clusters': num_all_bp_clusters, # NEW
+        #     'complete_homolog_clusters_of_targets': complete_homolog_clusters_of_targets,
+        #     'filtered_homolog_clusters_of_targets': filtered_homolog_clusters_of_targets,
+        #     'max_filtered_homolog_cluster_size': max_filtered_homolog_cluster_size,
+        #     # 'srnas_to_targets_to_BPs': srnas_to_targets_to_bps,  # REMOVED
+        #     'srnas_to_targets_to_BPs_w_clusters': srnas_to_targets_to_bps_w_clusters,  # NEW
+        # })
 
-        recs.append(out_rec)
-        return recs
+        # recs.append(out_rec)
+        return out_df
 
     def _get_common_bps_of_srna_orthologs(self, orthologs_cluster: Tuple[str], srna_bp_mapping: dict, bp_to_cluster: dict) -> dict:
         # 1 - all BPs
