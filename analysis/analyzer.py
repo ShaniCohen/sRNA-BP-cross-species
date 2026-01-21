@@ -448,25 +448,19 @@ class Analyzer:
             cluster_df = self._get_cluster_df(rec, cluster_srnas_to_bps, srna_bp_mapping)
             dfs.append(cluster_df)
 
-        # 2 - analyze common BPs of sRNA homologs
-        cluster_id_col, subgroup_id_col = 'srna_homologs_cluster_id', 'subgroup_id'
-        dfs = []
-        for _id, cluster in enumerate(df['cluster'].apply(ast.literal_eval)):
-            # rec = self._get_common_bps_of_srna_orthologs(cluster, srna_bp_mapping, bp_to_cluster)
-            # records.append(rec)
-            curr_df = self._get_df_of_srna_orthologs_cluster(_id + 1, cluster, srna_bp_mapping, bp_to_cluster, add_pairs_info)
-            dfs.append(curr_df)
         out_df = pd.concat(dfs, ignore_index=True)
-        # df[list(records[0].keys())] = pd.DataFrame(records)
+        # TODO: add sort and reset cluster id ?
 
-                # 'cluster': cluster,
-                # 'cluster_size': len(cluster),
-                # 'strains': tuple(sorted(strains)),
-                # 'num_strains': len(strains),
-                # 'ortholog_pairs': sorted(ortholog_pairs_w_meta),
-                # 'num_ortholog_pairs': len(ortholog_pairs_w_meta),
-                # 'paralog_pairs': sorted(paralog_pairs_w_meta),
-                # 'num_paralog_pairs': len(paralog_pairs_w_meta)
+
+
+
+        ######### prev
+        # 2 - analyze common BPs of sRNA homologs
+        records = []
+        for cluster in df['cluster'].apply(ast.literal_eval):
+            rec = self._get_common_bps_of_srna_orthologs(cluster, srna_bp_mapping, bp_to_cluster)
+            records.append(rec)
+        df[list(records[0].keys())] = pd.DataFrame(records)
         
         # 3 - score
         max_of_max_filtered_homolog_cluster_size = df['max_filtered_homolog_cluster_size'].max() if df['max_filtered_homolog_cluster_size'].max() > 0 else 1
@@ -626,8 +620,6 @@ class Analyzer:
                             common_bps_extended_per_srna[srna] = common_bps_extended
                     _common_bps_extended_by_clustering[rna_comb] = common_bps_extended_per_srna
 
-                
-        
                 subbgroup_rec = {
                     'all_common_BPs': _all_common_bps,
                     'num_common_BPs': _num_common_bps,
