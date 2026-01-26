@@ -572,64 +572,58 @@ class Analyzer:
         out_df = pd.DataFrame([rec])
 
         for size in range(2, len(cluster_srnas_to_bps.keys()) + 1):
-            for rna_comb in itertools.combinations(cluster_srnas_to_bps.keys(), size):
-                # RNAs info
-                rnas_strains = set([rna.split('__')[0] for rna in rna_comb])
-                rnas_bps_w_cluster = list(map(cluster_srnas_to_bps.get, rna_comb))
+            for srna_subgroup in itertools.combinations(cluster_srnas_to_bps.keys(), size):
+                bps_of_srnas = list(map(cluster_srnas_to_bps.get, srna_subgroup))
                 
-                # 1 - common BPs of RNAs
-                _common_bps: List[Tuple[str, str]] = rnas_bps_w_cluster[0]
-                for l in rnas_bps_w_cluster[1:]:
-                    _common_bps = self.U.find_common_bps(_common_bps, l)
-                
-                if _common_bps:
-                    _all_common_bps[rna_comb] = [(clus, bp, self.G.nodes[bp]['lbl']) for clus, bp in _common_bps]
-                    NUM_COMMON_BPS = len(_common_bps)
-                    _num_common_bps[rna_comb] = NUM_COMMON_BPS
-                    _max_strains_w_common_bps = max(_max_strains_w_common_bps, len(rnas_strains))
-                    _max_common_bps = max(_max_common_bps, NUM_COMMON_BPS)
+                # 1 - common BP clusters of sRNAs
+                common_bp_clusters: List[Tuple[str, str, str]] = bps_of_srnas[0]
+                for l in bps_of_srnas[1:]:
+                    common_bp_clusters = self._find_common_bps_by_cluster(common_bp_clusters, l)
 
-                # 2 - common BPs of RNAs by cluster
-                _common_bp_clusters: List[Tuple[str, str]] = rnas_bps_w_cluster[0]
-                for l in rnas_bps_w_cluster[1:]:
-                    _common_bp_clusters = self.U.find_common_bps_by_cluster(_common_bp_clusters, l)
-                
-                if _common_bp_clusters:
-                    _all_common_bp_clusters[rna_comb] = [(clus, bp, self.G.nodes[bp]['lbl']) for clus, bp in _common_bp_clusters]
-                    NUM_COMMON_BP_CLUSTERS = len(set([clus for clus, bp in _common_bp_clusters]))
-                    _num_common_bp_clusters[rna_comb] = NUM_COMMON_BP_CLUSTERS
-                    _max_strains_w_common_bp_clusters = max(_max_strains_w_common_bp_clusters, len(rnas_strains))
-                    _max_common_bp_clusters = max(_max_common_bp_clusters, NUM_COMMON_BP_CLUSTERS)
+                if common_bp_clusters:
+                    # 2 - add subgroup to out df
+                    subgroup_size = len(srna_subgroup)
+                    subgroup_strains = sorted(set([rna.split('__')[0] for rna in srna_subgroup]))
+                    subgroup_num_strains = len(subgroup_strains)
 
-                # check which new common BPs were added by clustering
-                new_clusters_added, new_bps_of_clusters = self._get_clusters_of_common_bps_added(_common_bp_clusters, _common_bps)
-                
-                if new_clusters_added:
-                    common_bps_added_per_srna = {}
-                    for srna in rna_comb:
-                        common_bps_added = sorted([(clus, bp, self.G.nodes[bp]['lbl']) for clus, bp, nm in cluster_srnas_to_bps[srna] if clus in new_clusters_added])
-                        if common_bps_added:
-                            common_bps_added_per_srna[srna] = common_bps_added
-                    _new_common_bps_added_by_clustering[rna_comb] = common_bps_added_per_srna
-                
-                if new_bps_of_clusters:
-                    common_bps_extended_per_srna = {}
-                    for srna in rna_comb:
-                        common_bps_extended = sorted([(clus, bp, self.G.nodes[bp]['lbl']) for clus, bp, nm in cluster_srnas_to_bps[srna] if (clus, bp) in new_bps_of_clusters])
-                        if common_bps_extended:
-                            common_bps_extended_per_srna[srna] = common_bps_extended
-                    _common_bps_extended_by_clustering[rna_comb] = common_bps_extended_per_srna
+                    num_common_bp_clusters = len(set([clus for clus, bp, nm in common_bp_clusters]))
 
-                subbgroup_rec = {
-                    'all_common_BPs': _all_common_bps,
-                    'num_common_BPs': _num_common_bps,
+                    # 3 - common BP ids of sRNAs
+                    common_bp_ids: List[Tuple[str, str, str]] = bps_of_srnas[0]
+                    for l in bps_of_srnas[1:]:
+                        common_bp_ids = self._find_common_bp_ids(common_bp_ids, l)
+                    
+                    # 4 - get expanded and emergent BP clusters
+                    expanded_bp_clusters, emergent_bp_clusters = self._get_expanded_and_emergent_bp_clusters(common_bp_clusters, common_bp_ids)
+                    num_emergent_bp_clusters = len(set([clus for clus, bp, nm in emergent_bp_clusters]))
 
-                    'new_common_BPs_added_by_clustering': _new_common_bps_added_by_clustering,
-                    'common_BPs_extended_by_clustering': _common_bps_extended_by_clustering,
 
-                    'all_common_BP_clusters': _all_common_bp_clusters,
-                    'num_common_BP_clusters': _num_common_bp_clusters,
-                }
+
+                    #  - srnas_to_targets_to_common_BP_clusters
+                    #TODO
+                    # srnas_to_targets_to_common_bp_clusters  - dump as json file (beautifier?)
+
+                    #  - homolog clusters of targets
+                    #TODO
+                    # homolog_clusters_of_targets
+
+
+                    subbgroup_rec = {
+                        'srna_subgroup': srna_subgroup,
+                        'subgroup_size': subgroup_size,
+                        'subgroup_strains': subgroup_strains,
+                        'subgroup_num_strains': subgroup_num_strains,
+                        'common_bp_clusters': common_bp_clusters,
+                        'num_common_bp_clusters': num_common_bp_clusters,
+                        'common_bp_ids': common_bp_ids,
+                        'expanded_bp_clusters': expanded_bp_clusters,
+                        'emergent_bp_clusters': emergent_bp_clusters,
+                        'num_emergent_bp_clusters': num_emergent_bp_clusters,
+                        'homolog_clusters_of_targets': None,  # TODO
+                    }
+
+        # TODO: - add subgroup id after sort by subgroup size
+
 
         ###############################
         ###############################
@@ -670,8 +664,37 @@ class Analyzer:
 
         # recs.append(out_rec)
         return out_df
+    
+    def _find_common_bps_by_cluster(self, bps1: List[Tuple[str, str, str]], bps2: List[Tuple[str, str, str]]) -> List[Tuple[str, str, str]]:
+        common_clus = np.intersect1d([x[0] for x in bps1], [x[0] for x in bps2])
+        common_bps_by_clus = [t for t in set(bps1).union(set(bps2)) if t[0] in common_clus]
+        return common_bps_by_clus
 
-    def _get_common_bps_of_srna_orthologs(self, orthologs_cluster: Tuple[str], srna_bp_mapping: dict, bp_to_cluster: dict) -> dict:
+    def _find_common_bp_ids(self, bps1: List[Tuple[str, str, str]], bps2: List[Tuple[str, str, str]]) -> List[Tuple[str, str, str]]:
+        common_bps = sorted(set(bps1).intersection(set(bps2)))
+        return common_bps
+    
+    def _get_expanded_and_emergent_bp_clusters(self, common_bp_clusters: List[Tuple[str, str, str]], common_bp_ids: List[Tuple[str, str, str]]) -> Tuple[List[Tuple[str, str, str]], List[Tuple[str, str, str]]]:
+        """_summary_
+
+        Args:
+            common_bp_clusters (List[Tuple[str, str, str]]): list of tuples (cluster_id, bp_id)
+            common_bp_ids (List[Tuple[str, str, str]]): list of tuples (cluster_id, bp_id)
+
+        Returns:
+            expanded_bp_clusters  (List[Tuple[str, str, str]])
+            emergent_bp_clusters  (List[Tuple[str, str, str]])
+        """
+        expanded_bp_clusters, emergent_bp_clusters = [], []
+        if len(common_bp_clusters) > len(common_bp_ids):
+            new_bps = sorted(set(common_bp_clusters) - set(common_bp_ids))
+            new_clusters = sorted(set([clus for clus, bp, nm in common_bp_clusters]) - set([clus for clus, bp, nm in common_bp_ids])) 
+            expanded_bp_clusters = [(clus, bp, nm) for clus, bp, nm in new_bps if clus not in new_clusters]
+            emergent_bp_clusters = [(clus, bp, nm) for clus, bp, nm in new_bps if clus in new_clusters]
+        
+        return expanded_bp_clusters, emergent_bp_clusters
+    
+    def PREV_get_common_bps_of_srna_orthologs(self, orthologs_cluster: Tuple[str], srna_bp_mapping: dict, bp_to_cluster: dict) -> dict:
         # 1 - all BPs
         all_bps, num_all_bps = {}, {}
         all_bp_clusters, num_all_bp_clusters = {}, {}
@@ -750,25 +773,7 @@ class Analyzer:
 
         return out_rec
 
-    def _get_clusters_of_common_bps_added(self, common_bps_by_clus: List[Tuple[str, str]], common_bps: List[Tuple[str, str]]) -> Tuple[List[str], List[Tuple[str, str]]]:
-        """_summary_
-
-        Args:
-            common_bps_by_clus (List[Tuple[str, str]]): list of tuples (cluster_id, bp_id)
-            common_bps (List[Tuple[str, str]]): list of tuples (cluster_id, bp_id)
-
-        Returns:
-            List[str]
-            List[Tuple[str, str]]
-        """
-        new_clusters, new_bps_extended_only = set(), set()
-        if len(common_bps_by_clus) > len(common_bps):
-            new_clusters = sorted(set([clus for clus, bp in common_bps_by_clus]) - set([clus for clus, bp in common_bps])) 
-            new_bps = sorted(set(common_bps_by_clus) - set(common_bps))
-            new_bps_extended_only = [(clus, bp) for clus, bp in new_bps if clus not in new_clusters]
-        return new_clusters, new_bps_extended_only
-
-    def _calc_common_bps_n_clusters(self, all_bps_w_clusters: Dict[str, List[Tuple[str, str]]]) -> dict:
+    def PREV_calc_common_bps_n_clusters(self, all_bps_w_clusters: Dict[str, List[Tuple[str, str]]]) -> dict:
         """_summary_
 
         Args:

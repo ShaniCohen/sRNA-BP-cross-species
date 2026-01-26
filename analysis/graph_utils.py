@@ -375,17 +375,10 @@ class GraphUtils:
     def get_short_strain_nm(self, strain_nm: str) -> str:
         return self.strain_nm_to_short[strain_nm]
     
-    def get_common_bps(self, bps1: List[str], bps2: List[str]) -> List[str]:
-        return np.intersect1d(bps1, bps2).tolist()
+    # def get_common_bps(self, bps1: List[str], bps2: List[str]) -> List[str]:
+    #     return np.intersect1d(bps1, bps2).tolist()
     
-    def find_common_bps_by_cluster(self, bps1: List[Tuple[str, str]], bps2: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
-        common_clus = np.intersect1d([x[0] for x in bps1], [x[0] for x in bps2])
-        common_bps_by_clus = [t for t in set(bps1).union(set(bps2)) if t[0] in common_clus]
-        return common_bps_by_clus
 
-    def find_common_bps(self, bps1: List[Tuple[str, str]], bps2: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
-        common_bps = sorted(set(bps1).intersection(set(bps2)))
-        return common_bps
         
     def _create_3D_visualization(self, G):
         # nx_graph = nx.Graph()
