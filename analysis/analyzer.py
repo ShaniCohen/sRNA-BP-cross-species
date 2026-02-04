@@ -61,7 +61,8 @@ class Analyzer:
         self.out_path_clustering_homologs = create_dir_if_not_exists(join(parent_dir, "Clustering_homologs"))
         self.out_path_clustering_paralogs_only = create_dir_if_not_exists(join(parent_dir, "Clustering_paralogs_only"))
         self.out_path_rna_homologs_multi_strains = create_dir_if_not_exists(join(parent_dir, "RNA_homologs_multi_strains"))
-        self.out_path_enrichment = create_dir_if_not_exists(join(parent_dir, "Enrichment"))
+        if self.run_enrichment:
+            self.out_path_enrichment_metadata = create_dir_if_not_exists(join(parent_dir, "Enrichment_metadata"))
         self.out_path_summary_tables = create_dir_if_not_exists(join(parent_dir, "Summary_tables"))
         self.out_path_analysis_tool_1 = create_dir_if_not_exists(join(parent_dir, "Analysis_tool_1"))
         self.out_path_analysis_tool_1_trees = create_dir_if_not_exists(join(self.out_path_analysis_tool_1, "sRNA_subgroups_trees"))
@@ -108,7 +109,6 @@ class Analyzer:
             self._dump_stats_rna_homolog_clusters_strains_composition(val_type = 'ratio', min_val_limit = 0.020)
 
         # 4 - Map sRNAs to biological processes (BPs)
-        self.logger.info("----- Before enrichment:")
         # 4.1 - extract subgraphs
         srna_bp_mapping = self._generate_srna_bp_mapping()
         bp_rna_mapping = self._generate_bp_rna_mapping(srna_bp_mapping)
@@ -121,21 +121,23 @@ class Analyzer:
         
         # 6 - Enrichment (per strain): per sRNA, find and keep only significant biological processes (BPs) that its targets are invovlved in.
         if self.run_enrichment:
-            self.logger.info("----- After enrichment:")
             # 6.1 - extract subgraphs
             srna_bp_mapping_en, meta_en = self._apply_enrichment(srna_bp_mapping)
             bp_rna_mapping_en = self._generate_bp_rna_mapping(srna_bp_mapping_en)
             # 6.2 - log and dump
+            self.logger.info(f"--------------   Enrichment Results   --------------")
             self._log_srna_bp_mapping(srna_bp_mapping_en)
             self._dump_metadata(meta_en)
+            # 6.3 - update mappings for further analysis
+            srna_bp_mapping = srna_bp_mapping_en
+            bp_rna_mapping = bp_rna_mapping_en
 
         self.logger.info(f"--------------   Analysis Tools   --------------")
         # ------   Analysis 1 - Cross-Species Conservation of sRNAs' Functionality
         self._analysis_1_srna_homologs_to_commom_bps(srna_bp_mapping, bp_to_cluster)
 
         # ------   Analysis 2 - sRNA Regulation of Biological Processes (BPs)
-        self._analysis_2_bp_rna_mapping(bp_rna_mapping)
-        # self._analysis_2_bp_rna_mapping(bp_rna_mapping_en)  # TODO: add indication when dumping results
+        # self._analysis_2_bp_rna_mapping(bp_rna_mapping)
     
     def _run_ad_hoc_outputs_analysis_1(self, srnas_cluster: Tuple[str], bp_str: str):
         self.logger.info(f"Running Ad-hoc Analysis...")
@@ -427,14 +429,18 @@ class Analyzer:
                     all_unq_bps = sorted({(bp_to_cluster[bp_id], bp_id, self.G.nodes[bp_id]['lbl']) for bps in srna_targets.values() for bp_id in bps})
                     cluster_srnas_to_bps[srna_complete] = all_unq_bps
 
-            # 3 - generate and dump the cluster tree JSON
-            cluster_tree = {}
+            # 3 - generate and dump the cluster tree JSON 
+            cluster_tree, srna_info = {}, {}
             for srna_id in cluster:
                 strain = self.G.nodes[srna_id]['strain']
                 srna_complete = f"{strain}__{srna_id}__{self.G.nodes[srna_id]['name']}" 
                 srna_targets = srna_bp_mapping[strain].get(srna_id, {})
                 targets_to_bps = {f"{target_id}__{self.G.nodes[target_id]['name']}": sorted([(bp_to_cluster[bp_id], bp_id, self.G.nodes[bp_id]['lbl']) for bp_id in bps]) for target_id, bps in srna_targets.items()}
                 cluster_tree[srna_complete] = targets_to_bps
+                srna_info[srna_complete] = {
+                    'num_targets': len(srna_targets),
+                    'num_bp_ids': len(cluster_srnas_to_bps.get(srna_complete, []))
+                }
             with open(join(self.out_path_analysis_tool_1_trees, f"Tool_1__Cluster_{cluster_id}__All.json"), 'w') as f:
                 json.dump(cluster_tree, f, indent=4, sort_keys=True)
 
@@ -445,7 +451,8 @@ class Analyzer:
                 'cluster': cluster,
                 'cluster_size': row['cluster_size'],
                 'strains': ast.literal_eval(row['strains']),
-                'num_strains': row['num_strains']
+                'num_strains': row['num_strains'],
+                'sRNA_info': dict(sorted(srna_info.items()))
             }
             if add_pairs_info:
                 rec.update({
@@ -1509,7 +1516,7 @@ class Analyzer:
                     })
 
             df = pd.DataFrame(rows)
-            df.to_csv(join(self.out_path_enrichment, f"metadata_per_srna_{strain}.csv"), index=False)
+            df.to_csv(join(self.out_path_enrichment_metadata, f"metadata_per_srna_{strain}.csv"), index=False)
     
     def compare_bp_to_accociated_mrnas(self, bp_to_accociated_mrnas, bp_to_accociated_mrnas_g):
         # Check if keys are the same
