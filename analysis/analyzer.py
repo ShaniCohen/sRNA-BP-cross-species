@@ -1140,6 +1140,16 @@ class Analyzer:
 
     #     return lst_strain_to_mrna_to_focus_srnas, lst_focus_srnas_flat, lst_targets_of_focus_srnas_flat
 
+    def _add_strains_to_rnas(self, rna_list: List[str]) -> Dict[str, List[str]]:
+        d = {}
+        for rna in rna_list:
+            strain = self.G.nodes[rna]['strain']
+            if strain not in d:
+                d[strain] = []
+            d[strain].append(rna)
+        d = dict(sorted({strain: sorted(rnas) for strain, rnas in d.items()}.items()))
+        return d
+
     def _process_strain_dict(self, strain_dict: dict, srna_clusters: List[Tuple[str]], srnas_no_orthologs: List[str]) -> Tuple[dict, dict]:
         """_summary_
 
@@ -1180,9 +1190,14 @@ class Analyzer:
             related_sRNAs[strain] = sorted(srna_set_comp)
             num_related_sRNAs[strain] = len(srna_set_comp)
 
-        bp_emergent_srnas = self._get_bp_emergent_srnas(all_bp_related_srnas, srna_clusters)
-        bp_emergent_srnas_no_orthologs = sorted(set(bp_emergent_srnas).intersection(set(srnas_no_orthologs)))
-        assert bp_emergent_srnas_no_orthologs == sorted(set(all_bp_related_srnas).intersection(set(srnas_no_orthologs)))
+        bp_emergent_srnas_lst = self._get_bp_emergent_srnas(all_bp_related_srnas, srna_clusters)
+        num_bp_emergent_srnas = len(bp_emergent_srnas_lst)
+        bp_emergent_srnas = self._add_strains_to_rnas(bp_emergent_srnas_lst)
+        
+        bp_emergent_srnas_no_orthologs_lst = sorted(set(bp_emergent_srnas_lst).intersection(set(srnas_no_orthologs)))
+        assert bp_emergent_srnas_no_orthologs_lst == sorted(set(all_bp_related_srnas).intersection(set(srnas_no_orthologs)))
+        num_bp_emergent_srnas_no_orthologs = len(bp_emergent_srnas_no_orthologs_lst)
+        bp_emergent_srnas_no_orthologs = self._add_strains_to_rnas(bp_emergent_srnas_no_orthologs_lst)
 
         info = {
             'strains': strains,
@@ -1190,6 +1205,10 @@ class Analyzer:
             'num_related_mRNAs': num_related_mRNAs,
             'related_sRNAs': related_sRNAs,
             'num_related_sRNAs': num_related_sRNAs,
+            'BP-emergent_sRNAs': bp_emergent_srnas,
+            'num_BP-emergent_sRNAs': num_bp_emergent_srnas,
+            'BP-emergent_sRNAs_no_orthologs': bp_emergent_srnas_no_orthologs,
+            'num_BP-emergent_sRNAs_no_orthologs': num_bp_emergent_srnas_no_orthologs
         }
 
         return tree, info
