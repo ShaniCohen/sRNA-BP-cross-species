@@ -488,6 +488,7 @@ class Analyzer:
                     common_bp_clusters = self._find_common_bps_by_cluster(common_bp_clusters, l)
 
                 if common_bp_clusters:
+                    common_bp_clusters = sorted(set(common_bp_clusters))
                     # 2 - add subgroup to out df
                     subgroup_size = len(srna_subgroup)
                     subgroup_strains = sorted(set([rna.split('__')[0] for rna in srna_subgroup]))
