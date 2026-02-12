@@ -77,9 +77,6 @@ class Analyzer:
         self.srna_subgroup_id_col = 'subgroup_id'
         self.srna_subgroup_tree_col = 'subgroup_tree'
 
-        # analysis 2 params
-        self.temp_prfx = "temp__"
-
         # TODO: remove after testing
         self.strains_data = graph_builder.strains_data
         self.ips_go_annotations = graph_builder.get_ips_go_annotations()
@@ -1071,74 +1068,6 @@ class Analyzer:
         bp_emergent_srnas = all_bp_related_srnas - ortholog_srnas_related_to_bp
 
         return bp_emergent_srnas
-    
-    def _identify_n_process_bp_emergent_srnas(self, df: pd.DataFrame, srnas_no_orthologs: List[str]) -> pd.DataFrame:
-        srna_clusters = self.srna_homologs[self.srna_homologs['num_strains'] > 1]['cluster'].apply(ast.literal_eval).tolist()
-
-        
-        
-        lst_strain_to_mrna_to_focus_srnas = []
-        lst_focus_srnas_flat = []
-        lst_targets_of_focus_srnas_flat = []
-        
-        for strain_dict, all_bp_related_srnas in zip(df[f'{self.temp_prfx}strain_dict'], df[f'{self.temp_prfx}all_bp_related_srnas']):
-            srnas_with_bp_related_orthologs = self._get_bp_emergent_srnas(all_bp_related_srnas, srna_clusters)
-            bp_emergent_srnas = all_bp_related_srnas - srnas_with_bp_related_orthologs
-            bp_emergent_srnas_no_orthologs = sorted(set(bp_emergent_srnas).intersection(set(srnas_no_orthologs)))
-            assert bp_emergent_srnas_no_orthologs == sorted(set(all_bp_related_srnas).intersection(set(srnas_no_orthologs)))
-            
-            # strain_to_mrna_to_focus_srnas = {}
-            # focus_srnas_flat = []
-            # targets_of_focus_srnas_flat = []
-            
-            # for strain, mrna_to_srnas in strain_dict.items():
-            #     strain_to_mrna_to_focus_srnas[strain] = {}
-            #     for mrna, srnas in mrna_to_srnas.items():
-            #         focus_srnas = sorted(set(srnas).intersection(all_focus_srnas))
-            #         if len(focus_srnas) > 0:
-            #             focus_srnas = [f"{srna}__{self.G.nodes[srna]['name']}" for srna in focus_srnas]
-            #             strain_to_mrna_to_focus_srnas[strain][f"{mrna}__{self.G.nodes[mrna]['name']}"] = focus_srnas
-            #             focus_srnas_flat.extend(focus_srnas)
-            #             targets_of_focus_srnas_flat.append(mrna)  # use only mrna id
-            
-            # strain_to_mrna_to_focus_srnas = {strain: v for strain, v in strain_to_mrna_to_focus_srnas.items() if v}  # remove strains with empty dict
-            # focus_srnas_flat = sorted(set(focus_srnas_flat))
-            # targets_of_focus_srnas_flat = sorted(set(targets_of_focus_srnas_flat))
-
-            # lst_strain_to_mrna_to_focus_srnas.append(strain_to_mrna_to_focus_srnas)
-            # lst_focus_srnas_flat.append(focus_srnas_flat)
-            # lst_targets_of_focus_srnas_flat.append(targets_of_focus_srnas_flat)
-
-        return lst_strain_to_mrna_to_focus_srnas, lst_focus_srnas_flat, lst_targets_of_focus_srnas_flat
-    
-    # def _get_strain_to_mrna_to_focus_srnas(self, strain_dict_series, all_focus_srnas: List[str]) -> Tuple[Dict[str, Dict[str, List[str]]], List[str], List[str]]:
-    #     lst_strain_to_mrna_to_focus_srnas = []
-    #     lst_focus_srnas_flat = []
-    #     lst_targets_of_focus_srnas_flat = []
-    #     for strain_dict in strain_dict_series:
-    #         strain_to_mrna_to_focus_srnas = {}
-    #         focus_srnas_flat = []
-    #         targets_of_focus_srnas_flat = []
-            
-    #         for strain, mrna_to_srnas in strain_dict.items():
-    #             strain_to_mrna_to_focus_srnas[strain] = {}
-    #             for mrna, srnas in mrna_to_srnas.items():
-    #                 focus_srnas = sorted(set(srnas).intersection(all_focus_srnas))
-    #                 if len(focus_srnas) > 0:
-    #                     focus_srnas = [f"{srna}__{self.G.nodes[srna]['name']}" for srna in focus_srnas]
-    #                     strain_to_mrna_to_focus_srnas[strain][f"{mrna}__{self.G.nodes[mrna]['name']}"] = focus_srnas
-    #                     focus_srnas_flat.extend(focus_srnas)
-    #                     targets_of_focus_srnas_flat.append(mrna)  # use only mrna id
-            
-    #         strain_to_mrna_to_focus_srnas = {strain: v for strain, v in strain_to_mrna_to_focus_srnas.items() if v}  # remove strains with empty dict
-    #         focus_srnas_flat = sorted(set(focus_srnas_flat))
-    #         targets_of_focus_srnas_flat = sorted(set(targets_of_focus_srnas_flat))
-
-    #         lst_strain_to_mrna_to_focus_srnas.append(strain_to_mrna_to_focus_srnas)
-    #         lst_focus_srnas_flat.append(focus_srnas_flat)
-    #         lst_targets_of_focus_srnas_flat.append(targets_of_focus_srnas_flat)
-
-    #     return lst_strain_to_mrna_to_focus_srnas, lst_focus_srnas_flat, lst_targets_of_focus_srnas_flat
 
     def _add_strains_to_rnas(self, rna_list: List[str]) -> Dict[str, List[str]]:
         d = {}
@@ -1296,7 +1225,6 @@ class Analyzer:
                             if mrna not in uni_strain_dict[strain]:
                                 uni_strain_dict[strain][mrna] = set()
                             uni_strain_dict[strain][mrna].update(srnas)
-                cluster_rec[f'{self.temp_prfx}strain_dict'] = uni_strain_dict
                 # 1.3 - tree and info
                 tree, tree_emergent, info = self._process_strain_dict(uni_strain_dict, srna_clusters, srnas_no_orthologs)
                 cluster_rec.update(info)
@@ -1316,7 +1244,6 @@ class Analyzer:
                     'bp_id': bp_id,
                     'bp_lbl': self.G.nodes[bp_id]['lbl'],
                     'bp_definition': self.G.nodes[bp_id]['meta']['definition']['val'],
-                    f'{self.temp_prfx}strain_dict': strain_dict
                 }
                 # 2.2 - tree and info
                 tree, tree_emergent, info = self._process_strain_dict(strain_dict, srna_clusters, srnas_no_orthologs)
