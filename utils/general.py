@@ -54,7 +54,7 @@ def write_df(df, file_path, encoding='utf-8', keep_index=False):
     create_dir_if_not_exists(dirname(file_path))
     if ".csv" in basename(file_path):
         with open(file_path, 'w') as handle:
-            df.to_csv(handle, encoding=encoding, index=keep_index)
+            df.to_csv(handle, encoding=encoding, index=keep_index, lineterminator='\n')
     else:
         raise ValueError(f"{basename(file_path)} NOT SUPPORTED - only .csv")
     return

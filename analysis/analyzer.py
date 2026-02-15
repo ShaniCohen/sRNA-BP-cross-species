@@ -419,8 +419,31 @@ class Analyzer:
             dfs.append(cluster_df)
         out_df = pd.concat(dfs, ignore_index=True)
 
-        # 5 - dump final output to CSV
+        # 4 - dump final output to CSV
         write_df(out_df, join(self.out_path_analysis_tool_1, f"Tool_1__sRNA_homologs_to_common_BP_clusters__{self.out_file_suffix}.csv"))
+
+        # 5 - generate supllementay table and dump
+        sup_df = out_df[[self.srna_cluster_id_col, 'cluster', 'sRNA_info']][pd.notnull(out_df['sRNA_info'])].copy().reset_index(drop=True)
+        records = []
+        for _, row in sup_df.iterrows():
+            rec = {
+                self.srna_cluster_id_col: row[self.srna_cluster_id_col],
+                'cluster': row['cluster'],
+            }
+            strain_to_num_targets, strain_to_num_bp_ids = {}, {}
+            for srna_complete, info in row['sRNA_info'].items():
+                strain, _, _ = srna_complete.split('__')
+                strain_to_num_targets[strain] = strain_to_num_targets.get(strain, 0) + info['num_targets']
+                strain_to_num_bp_ids[strain] = strain_to_num_bp_ids.get(strain, 0) + info['num_bp_ids']
+
+            for strain in self.U.strains:
+                rec[f"num_targets__{strain}"] = strain_to_num_targets.get(strain, 0)
+            for strain in self.U.strains:
+                rec[f"num_bp_ids__{strain}"] = strain_to_num_bp_ids.get(strain, 0)
+            records.append(rec)
+        sup_df = pd.DataFrame(records)
+
+        write_df(sup_df, join(self.out_path_analysis_tool_1, f"Tool_1__sRNA_homologs_supplementary__{self.out_file_suffix}.csv"))
         self.logger.info(f"Dumped Analysis 1 results")
 
     def _get_cluster_df(self, rec: dict, cluster_srnas_to_bps: dict, srna_bp_mapping: dict) -> pd.DataFrame:
@@ -456,10 +479,9 @@ class Analyzer:
                     num_emergent_bp_clusters = len(set([clus for clus, bp, nm in emergent_bp_clusters]))
 
                     # 5 - srnas_to_targets_to_common_BP_clusters
-                    srnas_to_targets_to_common_bp_clusters, all_targets = self._get_srna_to_common_bps_of_subgroup(srna_subgroup, srna_bp_mapping, common_bp_clusters)
+                    srnas_to_targets_to_common_bp_clusters, srna_num_targets, all_targets = self._get_srna_to_common_bps_of_subgroup(srna_subgroup, srna_bp_mapping, common_bp_clusters)
 
                     # 6 - homolog clusters of targets
-                    num_targets_annotated_with_common_bps = len(all_targets)
                     homolog_clusters_of_targets_annotated_with_common_bps = self._find_homolog_targets(all_targets, 'mRNA')
 
                     subbgroup_rec = {
@@ -474,12 +496,12 @@ class Analyzer:
                         'expanded_bp_clusters': expanded_bp_clusters,
                         'emergent_bp_clusters': emergent_bp_clusters,
                         'num_emergent_bp_clusters': num_emergent_bp_clusters,
-                        'num_targets_annotated_with_common_bps': num_targets_annotated_with_common_bps,
+                        'num_targets_annotated_with_common_bps': srna_num_targets,
                         'homolog_clusters_of_targets_annotated_with_common_bps': homolog_clusters_of_targets_annotated_with_common_bps,
                         self.srna_subgroup_tree_col: srnas_to_targets_to_common_bp_clusters
                     }
                     records.append(subbgroup_rec)
-        
+
         if len(records) > 0:
             sub_df = pd.DataFrame(records)
             # add subgroup id
@@ -495,21 +517,22 @@ class Analyzer:
 
         return out_df
 
-    def _get_srna_to_common_bps_of_subgroup(self, srna_subgroup: Tuple[str], srna_bp_mapping: dict, common_bp_clusters: List[Tuple[str, str, str]]) -> Tuple[dict, Set[str]]:
+    def _get_srna_to_common_bps_of_subgroup(self, srna_subgroup: Tuple[str], srna_bp_mapping: dict, common_bp_clusters: List[Tuple[str, str, str]]) -> Tuple[dict, dict, Set[str]]:
         srnas_to_targets_to_common_bp_clusters = {}
+        srna_num_targets = {}
         all_targets = set()
         for srna_complete in srna_subgroup:
             strain, srna_id, srna_name = srna_complete.split('__')
             srna_targets = srna_bp_mapping[strain].get(srna_id)
-
             targets_to_bps = {}
             for target_id, bp_ids in srna_targets.items():
                 bps_in_common = np.intersect1d(bp_ids, [bp for clus, bp, nm in common_bp_clusters])
                 if len(bps_in_common)> 0:
                     targets_to_bps[f"{target_id}__{self.G.nodes[target_id]['name']}"] = sorted([(clus, bp, nm) for clus, bp, nm in common_bp_clusters if bp in bps_in_common])
+                    srna_num_targets[srna_complete] = srna_num_targets.get(srna_complete, 0) + 1
                     all_targets.add(target_id)
             srnas_to_targets_to_common_bp_clusters[srna_complete] = targets_to_bps
-        return srnas_to_targets_to_common_bp_clusters, all_targets
+        return srnas_to_targets_to_common_bp_clusters, srna_num_targets, all_targets
 
     def _find_common_bps_by_cluster(self, bps1: List[Tuple[str, str, str]], bps2: List[Tuple[str, str, str]]) -> List[Tuple[str, str, str]]:
         common_clus = np.intersect1d([x[0] for x in bps1], [x[0] for x in bps2])

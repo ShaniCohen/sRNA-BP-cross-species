@@ -73,9 +73,6 @@ class AnalysisRunner:
 
         analyzer = Analyzer(self.configs['analyzer'], self.logger, graph_builder, graph_utils)
         analyzer.run_analysis()
-        # Ad-hoc outputs
-        # analyzer._run_ad_hoc_outputs_analysis_1(srnas_cluster = ('E2348C_ncR46', 'G0-8867', 'GcvB', 'gcvB', 'ncRNA0016'), 
-        #                                         bp_str = "0006865__amino acid transport")
         
         self.logger.info(f"--------------   run completed   --------------")
 
