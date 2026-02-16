@@ -985,13 +985,13 @@ class Analyzer:
 
         return bp_emergent_srnas
 
-    def _add_strains_to_rnas(self, rna_list: List[str]) -> Dict[str, List[str]]:
+    def _add_strains_n_names_to_rnas(self, rna_list: List[str]) -> Dict[str, List[str]]:
         d = {}
         for rna in rna_list:
             strain = self.G.nodes[rna]['strain']
             if strain not in d:
                 d[strain] = []
-            d[strain].append(rna)
+            d[strain].append(f"{rna}__{self.G.nodes[rna]['name']}")
         d = dict(sorted({strain: sorted(rnas) for strain, rnas in d.items()}.items()))
         return d
     
@@ -1045,36 +1045,38 @@ class Analyzer:
             # related mRNAs
             num_related_mRNAs[strain] = len(mrna_to_srnas)
             # related sRNAs - flatten sRNA lists for all mRNAs in this strain
-            srna_set_comp = set()
+            srna_set = set()
             for srna_list in mrna_to_srnas.values():
-                srna_set_comp.update([f"{srna}__{self.G.nodes[srna]['name']}" for srna in srna_list])
+                srna_set.update([f"{srna}__{self.G.nodes[srna]['name']}" for srna in srna_list])
                 all_bp_related_srnas.update(srna_list)
-            related_sRNAs[strain] = sorted(srna_set_comp)
-            num_related_sRNAs[strain] = len(srna_set_comp)
+            related_sRNAs[strain] = sorted(srna_set)
+            num_related_sRNAs[strain] = len(srna_set)
 
+        num_strains_related_srnas = len([s for s in strains if num_related_sRNAs[s] > 0])
         bp_emergent_srnas_lst = self._get_bp_emergent_srnas(all_bp_related_srnas, srna_clusters)
         num_bp_emergent_srnas = len(bp_emergent_srnas_lst)
-        bp_emergent_srnas = self._add_strains_to_rnas(bp_emergent_srnas_lst)
+        bp_emergent_srnas = self._add_strains_n_names_to_rnas(bp_emergent_srnas_lst)
         
         bp_emergent_srnas_no_orthologs_lst = sorted(set(bp_emergent_srnas_lst).intersection(set(srnas_no_orthologs)))
         assert bp_emergent_srnas_no_orthologs_lst == sorted(set(all_bp_related_srnas).intersection(set(srnas_no_orthologs)))
         num_bp_emergent_srnas_no_orthologs = len(bp_emergent_srnas_no_orthologs_lst)
-        bp_emergent_srnas_no_orthologs = self._add_strains_to_rnas(bp_emergent_srnas_no_orthologs_lst)
+        bp_emergent_srnas_no_orthologs = self._add_strains_n_names_to_rnas(bp_emergent_srnas_no_orthologs_lst)
 
         info = {
             'strains': strains,
-            'num_strains': num_strains,
             'num_related_mRNAs': num_related_mRNAs,
+            'num_strains_related_mRNAs': num_strains,
             'related_sRNAs': related_sRNAs,
             'num_related_sRNAs': num_related_sRNAs,
+            'num_strains_related_sRNAs': num_strains_related_srnas,
             
             'BP-emergent_sRNAs': bp_emergent_srnas,
             'num_BP-emergent_sRNAs': num_bp_emergent_srnas,
-            'num_strains_with_BP-emergent_sRNAs': len(bp_emergent_srnas),
+            'num_strains_BP-emergent_sRNAs': len(bp_emergent_srnas),
 
             'BP-emergent_sRNAs_no_orthologs': bp_emergent_srnas_no_orthologs,
             'num_BP-emergent_sRNAs_no_orthologs': num_bp_emergent_srnas_no_orthologs,
-            'num_strains_with_BP-emergent_sRNAs_no_orthologs': len(bp_emergent_srnas_no_orthologs),
+            'num_strains_BP-emergent_sRNAs_no_orthologs': len(bp_emergent_srnas_no_orthologs),
         }
 
         tree_of_bp_emergent_srnas, targets, ortholog_clusters_of_targets = self._analyze_targets_of_specific_srnas(strain_dict, bp_emergent_srnas_lst)
