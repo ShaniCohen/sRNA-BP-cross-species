@@ -1123,6 +1123,7 @@ class Analyzer:
 
         records = []
         for cluster_id, bps in cluster_to_bps.items():
+            bps = np.intersect1d(bps, list(bp_rna_mapping.keys()))  # consider only BPs that are included in bp_rna_mapping (e.g., post enrichement)
             # 1 - if cluster has more than 1 BP, generate a unified record for the cluster
             if len(bps) > 1:
                 # 1.1 - cluster record
