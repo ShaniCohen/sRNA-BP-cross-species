@@ -115,6 +115,7 @@ class Analyzer:
         bp_rna_mapping = self._generate_bp_rna_mapping(srna_bp_mapping)
         # 4.2 - log
         self._log_srna_bp_mapping(srna_bp_mapping)
+        self._log_bp_rna_mapping(bp_rna_mapping)
 
         # 5 - run Wang similarity on all BPs
         bp_to_cluster, cluster_to_bps = self._run_wang_similarity_between_bps(bp_rna_mapping)
@@ -165,6 +166,7 @@ class Analyzer:
                 ...
             }               
         """
+        self.logger.info(f"Generating sRNA to BP mapping...")
         bp_mapping = {}  
         for strain in self.U.strains:
             unq_targets_without_bp = set()
@@ -190,7 +192,7 @@ class Analyzer:
 
         return bp_mapping
     
-    def _generate_bp_rna_mapping(self, srna_bp_mapping: dict):
+    def _generate_bp_rna_mapping(self, srna_bp_mapping: dict, log: bool = True) -> dict:
         """Generate a mapping of BP to mRNAs and sRNAs based on the srna_bp_mapping.
 
         Args:
@@ -220,6 +222,7 @@ class Analyzer:
                 ...
             }   
         """
+        self.logger.info(f"Generating BP to RNA mapping...")
         # 1 - get all unique BP ids
         unq_bps = set()
         for strain_dict in srna_bp_mapping.values():
@@ -227,6 +230,10 @@ class Analyzer:
                 for mrna_bps in srna_targets.values():
                     unq_bps.update(mrna_bps)
         unq_bps = sorted(unq_bps)
+
+        # info for log
+        if log:
+            strain_info = {s: {'srnas': set(), 'mrnas': set(),'mrnas_annotated': set(), 'bps': set() , 'num_mrna_bp_edges': 0} for s in self.U.strains}
 
         # 2 - build mapping
         bp_rna_mapping = {}
@@ -242,6 +249,12 @@ class Analyzer:
                             if mrna_id not in strain_mrna_to_srnas:
                                 strain_mrna_to_srnas[mrna_id] = []
                             strain_mrna_to_srnas[mrna_id].append(srna_id)
+                            if log:
+                                # update info for log
+                                strain_info[strain]['srnas'].add(srna_id)
+                                strain_info[strain]['mrnas'].add(mrna_id)
+                                strain_info[strain]['bps'].add(bp)
+                                strain_info[strain]['num_mrna_bp_edges'] += 1
                 if strain_mrna_to_srnas:
                     bp_rna_mapping[bp][strain] = strain_mrna_to_srnas
                 # (2.2) add also strain's annotated mRNAs that do not interact with sRNAs
@@ -255,6 +268,13 @@ class Analyzer:
                         bp_rna_mapping[bp][strain] = {}
                     if mrna_id not in bp_rna_mapping[bp][strain].keys():
                         bp_rna_mapping[bp][strain][mrna_id] = []
+                    if log:
+                        # update info for log
+                        strain_info[strain]['mrnas_annotated'].add(mrna_id)
+                        strain_info[strain]['num_mrna_bp_edges'] += 1
+        if log:
+            for strain, info in strain_info.items():
+                self.logger.info(f"Strain {strain} - # sRNAs with BP annotations: {len(info['srnas'])}, # mRNAs with sRNA interactions: {len(info['mrnas'])}, # mRNAs annotated with BPs: {len(info['mrnas_annotated'])}, # all mRNAs: {len(info['mrnas'].union(info['mrnas_annotated']))}, # BPs: {len(info['bps'])}, # mRNA-BP edges: {info['num_mrna_bp_edges']}")
 
         return bp_rna_mapping
     
@@ -479,7 +499,7 @@ class Analyzer:
                     num_emergent_bp_clusters = len(set([clus for clus, bp, nm in emergent_bp_clusters]))
 
                     # 5 - srnas_to_targets_to_common_BP_clusters
-                    srnas_to_targets_to_common_bp_clusters, srna_num_targets, all_targets = self._get_srna_to_common_bps_of_subgroup(srna_subgroup, srna_bp_mapping, common_bp_clusters)
+                    srnas_to_targets_to_common_bp_clusters, srna_num_targets, all_targets = self._get_srna_to_common_bp_clusters_of_subgroup(srna_subgroup, srna_bp_mapping, common_bp_clusters)
 
                     # 6 - homolog clusters of targets
                     homolog_clusters_of_targets_annotated_with_common_bps = self._find_homolog_targets(all_targets, 'mRNA')
@@ -517,7 +537,7 @@ class Analyzer:
 
         return out_df
 
-    def _get_srna_to_common_bps_of_subgroup(self, srna_subgroup: Tuple[str], srna_bp_mapping: dict, common_bp_clusters: List[Tuple[str, str, str]]) -> Tuple[dict, dict, Set[str]]:
+    def _get_srna_to_common_bp_clusters_of_subgroup(self, srna_subgroup: Tuple[str], srna_bp_mapping: dict, common_bp_clusters: List[Tuple[str, str, str]]) -> Tuple[dict, dict, Set[str]]:
         srnas_to_targets_to_common_bp_clusters = {}
         srna_num_targets = {}
         all_targets = set()
@@ -878,6 +898,28 @@ class Analyzer:
                 f"  Number of unique BPs: {len(unique_bps)} \n"
                 f"  & {srna_count} & {len(unique_mrna_targets)} & {len(bp_list)} & {len(unique_bps)}"
             )
+    
+    def _log_bp_rna_mapping(self, mapping: dict):
+        self.logger.info(f"--------- BP to sRNA mapping")
+        strain_to_info = {s: {'num_bp_nodes': 0, 'num_mrna_bp_edges': 0} for s in self.U.strains}
+        strain_to_rnas = {s: {'mrnas': set(), 'srnas': set()} for s in self.U.strains}
+        for bp, strain_to_mrna_mapping in mapping.items():
+            for strain, mrna_list in strain_to_mrna_mapping.items():
+                strain_to_info[strain]['num_bp_nodes'] += 1
+                strain_to_info[strain]['num_mrna_bp_edges'] += len(mrna_list)
+                for mrna, srna_list in strain_to_mrna_mapping.items():
+                    strain_to_rnas[strain]['mrnas'].add(mrna)
+                    strain_to_rnas[strain]['srnas'].update(set(srna_list))
+
+        for strain in self.U.strains:
+            self.logger.info(
+                f"Strain: {strain} \n"
+                f"  Number of sRNA keys: {len(strain_to_rnas[strain]['srnas'])} \n"
+                f"  Number of unique mRNA targets annotated to BPs: {len(strain_to_rnas[strain]['mrnas'])} \n"
+                f"  Number of mRNA-BP annotations (edges): {strain_to_info[strain]['num_mrna_bp_edges']} \n"
+                f"  Number of unique BPs: {strain_to_info[strain]['num_bp_nodes']} \n"
+                f"  & {len(strain_to_rnas[strain]['srnas'])} & {len(strain_to_rnas[strain]['mrnas'])} & {strain_to_info[strain]['num_mrna_bp_edges']} & {strain_to_info[strain]['num_bp_nodes']}"
+            )
         
     # def _get_orthologs_clusters(self, rna_list: List[str], rna_str: str) -> List[Tuple[str]]:
     #     """
@@ -974,14 +1016,14 @@ class Analyzer:
 
         return rnas_with_max_orthologs
 
-    def _get_bp_emergent_srnas(self, all_bp_related_srnas: Set[str], srna_clusters: List[Set[str]]) -> Set[str]:
-        ortholog_srnas_related_to_bp = set()
+    def _get_bp_emergent_srnas(self, all_bp_associated_srnas: Set[str], srna_clusters: List[Set[str]]) -> Set[str]:
+        ortholog_srnas_associated_to_bp = set()
         for cluster in srna_clusters:
-            bp_related_cluster = set(cluster).intersection(all_bp_related_srnas)
-            if len(bp_related_cluster) > 1:  # sRNA orthologs are related to the BP
-                ortholog_srnas_related_to_bp.update(bp_related_cluster)
+            bp_associated_cluster = set(cluster).intersection(all_bp_associated_srnas)
+            if len(bp_associated_cluster) > 1:  # sRNA orthologs are associated to the BP
+                ortholog_srnas_associated_to_bp.update(bp_associated_cluster)
         
-        bp_emergent_srnas = all_bp_related_srnas - ortholog_srnas_related_to_bp
+        bp_emergent_srnas = all_bp_associated_srnas - ortholog_srnas_associated_to_bp
 
         return bp_emergent_srnas
 
@@ -1006,10 +1048,10 @@ class Analyzer:
                     tree[strain][f"{mrna}__{self.G.nodes[mrna]['name']}"] = sorted(list([f"{srna}__{self.G.nodes[srna]['name']}" for srna in srnas if srna in specific_srnas]))
                     targets.add(mrna)
 
-        ortholog_clusters_of_targets = self._find_homolog_targets(targets, 'mRNA')
+        homolog_clusters_of_targets = self._find_homolog_targets(targets, 'mRNA')
         targets = sorted(targets)
 
-        return tree, targets, ortholog_clusters_of_targets
+        return tree, targets, homolog_clusters_of_targets
 
     def _process_strain_dict(self, strain_dict: dict, srna_clusters: List[Tuple[str]], srnas_no_orthologs: List[str]) -> Tuple[dict, dict]:
         """_summary_
@@ -1034,41 +1076,41 @@ class Analyzer:
         num_strains = len(strains)
 
         tree = {}
-        num_related_mRNAs = {}
-        related_sRNAs = {}
-        num_related_sRNAs = {}
-        all_bp_related_srnas = set()  # for BP-emergent sRNAs identification
+        num_annotated_mRNAs = {}
+        associated_sRNAs = {}
+        num_associated_sRNAs = {}
+        all_bp_associated_srnas = set()  # for BP-emergent sRNAs identification
 
         for strain, mrna_to_srnas in strain_dict.items():
             # tree
             tree[strain] = {f"{mrna}__{self.G.nodes[mrna]['name']}": sorted(list([f"{srna}__{self.G.nodes[srna]['name']}" for srna in srnas])) for mrna, srnas in mrna_to_srnas.items()}
-            # related mRNAs
-            num_related_mRNAs[strain] = len(mrna_to_srnas)
-            # related sRNAs - flatten sRNA lists for all mRNAs in this strain
+            # annotated mRNAs
+            num_annotated_mRNAs[strain] = len(mrna_to_srnas)
+            # associated sRNAs - flatten sRNA lists for all mRNAs in this strain
             srna_set = set()
             for srna_list in mrna_to_srnas.values():
                 srna_set.update([f"{srna}__{self.G.nodes[srna]['name']}" for srna in srna_list])
-                all_bp_related_srnas.update(srna_list)
-            related_sRNAs[strain] = sorted(srna_set)
-            num_related_sRNAs[strain] = len(srna_set)
+                all_bp_associated_srnas.update(srna_list)
+            associated_sRNAs[strain] = sorted(srna_set)
+            num_associated_sRNAs[strain] = len(srna_set)
 
-        num_strains_related_srnas = len([s for s in strains if num_related_sRNAs[s] > 0])
-        bp_emergent_srnas_lst = self._get_bp_emergent_srnas(all_bp_related_srnas, srna_clusters)
+        num_strains_associated_srnas = len([s for s in strains if num_associated_sRNAs[s] > 0])
+        bp_emergent_srnas_lst = self._get_bp_emergent_srnas(all_bp_associated_srnas, srna_clusters)
         num_bp_emergent_srnas = len(bp_emergent_srnas_lst)
         bp_emergent_srnas = self._add_strains_n_names_to_rnas(bp_emergent_srnas_lst)
         
         bp_emergent_srnas_no_orthologs_lst = sorted(set(bp_emergent_srnas_lst).intersection(set(srnas_no_orthologs)))
-        assert bp_emergent_srnas_no_orthologs_lst == sorted(set(all_bp_related_srnas).intersection(set(srnas_no_orthologs)))
+        assert bp_emergent_srnas_no_orthologs_lst == sorted(set(all_bp_associated_srnas).intersection(set(srnas_no_orthologs)))
         num_bp_emergent_srnas_no_orthologs = len(bp_emergent_srnas_no_orthologs_lst)
         bp_emergent_srnas_no_orthologs = self._add_strains_n_names_to_rnas(bp_emergent_srnas_no_orthologs_lst)
 
         info = {
             'strains': strains,
-            'num_related_mRNAs': num_related_mRNAs,
-            'num_strains_related_mRNAs': num_strains,
-            'related_sRNAs': related_sRNAs,
-            'num_related_sRNAs': num_related_sRNAs,
-            'num_strains_related_sRNAs': num_strains_related_srnas,
+            'num_annotated_mRNAs': num_annotated_mRNAs,
+            'num_strains_annotated_mRNAs': num_strains,
+            'associated_sRNAs': associated_sRNAs,
+            'num_associated_sRNAs': num_associated_sRNAs,
+            'num_strains_associated_sRNAs': num_strains_associated_srnas,
             
             'BP-emergent_sRNAs': bp_emergent_srnas,
             'num_BP-emergent_sRNAs': num_bp_emergent_srnas,
@@ -1079,23 +1121,23 @@ class Analyzer:
             'num_strains_BP-emergent_sRNAs_no_orthologs': len(bp_emergent_srnas_no_orthologs),
         }
 
-        tree_of_bp_emergent_srnas, targets, ortholog_clusters_of_targets = self._analyze_targets_of_specific_srnas(strain_dict, bp_emergent_srnas_lst)
+        tree_of_bp_emergent_srnas, targets, homolog_clusters_of_targets = self._analyze_targets_of_specific_srnas(strain_dict, bp_emergent_srnas_lst)
         info.update({
             'targets_of_BP-emergent_sRNAs': targets,
-            'ortholog_clusters_of_targets_of_BP-emergent_sRNAs': ortholog_clusters_of_targets,
+            'homolog_clusters_of_targets_BP-emergent_sRNAs': homolog_clusters_of_targets,
         })
        
-        _, targets, ortholog_clusters_of_targets = self._analyze_targets_of_specific_srnas(strain_dict, bp_emergent_srnas_no_orthologs_lst)
+        _, targets, homolog_clusters_of_targets = self._analyze_targets_of_specific_srnas(strain_dict, bp_emergent_srnas_no_orthologs_lst)
         info.update({
             'targets_of_BP-emergent_sRNAs_no_orthologs': targets,
-            'ortholog_clusters_of_targets_of_BP-emergent_sRNAs_no_orthologs': ortholog_clusters_of_targets,
+            'homolog_clusters_of_targets_BP-emergent_sRNAs_no_orthologs': homolog_clusters_of_targets,
         })  
 
         return tree, tree_of_bp_emergent_srnas, info
 
     def _analysis_2_bp_rna_mapping(self, bp_rna_mapping: dict, cluster_to_bps: dict) -> pd.DataFrame:
         """
-        Generate a DataFrame with information about BPs and their related mRNAs and sRNAs
+        Generate a DataFrame with information about BPs and their annotated mRNAs and sRNAs
 
         Args:
             bp_rna_mapping (dict): A dictionary in the following format:
