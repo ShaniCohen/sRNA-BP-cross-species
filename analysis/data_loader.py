@@ -456,14 +456,14 @@ class DataLoader:
             # self._load_eggnog_annotations(strain=strain)
     
     def _load_uniprot_annotations(self, strain: str):
-        _path = join(self.config['go_annotations_dir'], 'Curated')
+        _path = join(self.config['go_annotations_dir'], 'UniProt')
         if os.path.exists(join(_path, f'{strain}.goa')):
-            self.logger.info(f"loading curated annotations for {strain}")
+            self.logger.info(f"loading UniProt annotations for {strain}")
             # 1 - load and preprocess
             annot_uniprot = load_goa(file_path=join(_path, f'{strain}.goa'))
             annot_map_uniprot_to_locus = read_df(file_path=join(_path, f'{strain}_idmapping.dat'))
             annot_map_uniprot_to_locus.columns = ['UniProt_ID', 'Database', 'Mapped_ID']
-            curated_annot, c_locus_col = ap_annot.preprocess_curated_annot(strain, annot_uniprot, annot_map_uniprot_to_locus)
+            curated_annot, c_locus_col = ap_annot.preprocess_uniprot_annot(strain, annot_uniprot, annot_map_uniprot_to_locus)
             # 2 - update info
             if strain not in self.strains_data:
                 self.strains_data[strain] = {}
