@@ -423,6 +423,7 @@ def analyze_ecoli_k12_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, in
     # --------------  interactions  --------------
     logger.info(f"FINAL - ecoli_k12 - interactions: {len(inter_data)}, "
                 f"unique interactions: {len(inter_data.groupby(['sRNA_accession_id_Eco', 'mRNA_accession_id_Eco']).count())}")
+    
     # -------------- complete cols
     inter_data['count'] = 1
 
@@ -940,7 +941,7 @@ def get_ecoli_srna_to_nm() -> Dict[str, str]:
     return ecoli_srna_nm_to_nm
 
 
-def preprocess_ecoli_k12_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, inter_data: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def preprocess_ecoli_k12_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame, inter_data: pd.DataFrame, log_lt_ht: bool = False) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     "Escherichia coli str. K-12 substr. MG1655"    (4332) srna = 61, mrna = 2095
 
@@ -990,6 +991,10 @@ def preprocess_ecoli_k12_inter(mrna_data: pd.DataFrame, srna_data: pd.DataFrame,
                    'Pain 2015', 'Wright 2013', 'sRNATarBase3.0']  # 'sRNATarBase3.0'
     logger.info(f"using interaction from: {experiments}")
     inter_data = inter_data[inter_data['dir'].isin(experiments)].reset_index(drop=True)
+
+    if log_lt_ht:
+        lt_srnas = set(inter_data[inter_data['dir'].isin(['Wright 2013', 'sRNATarBase3.0'])]['sRNA_accession_id_Eco'])
+        ht_srnas = set(inter_data[inter_data['dir'].isin(['Melamed 2016 (RIL-seq)', 'Melamed 2020 (RIL-seq)', 'Iosub 2020 (CLASH)'])]['sRNA_accession_id_Eco'])
 
     # 4 - filter out negative interactions
     mask_negative_interactions = inter_data['interaction_label'] == 0

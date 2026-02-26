@@ -218,7 +218,7 @@ def _load_eggnog_annot_file(annot_file_path) -> Tuple[pd.DataFrame, str]:
     return annot_df, out_col_header
 
 
-def preprocess_curated_annot(strain_nm: str, annot_uniport: Dict[str, Set[str]], annot_map_uniport_to_locus: pd.DataFrame):
+def preprocess_uniprot_annot(strain_nm: str, annot_uniport: Dict[str, Set[str]], annot_map_uniport_to_locus: pd.DataFrame):
     """
     Args:
         annot_uniport (Dict[str, Set[str]]): _description_
