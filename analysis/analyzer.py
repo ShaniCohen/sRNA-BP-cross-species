@@ -192,7 +192,7 @@ class Analyzer:
 
         return bp_mapping
     
-    def _generate_bp_rna_mapping(self, srna_bp_mapping: dict, log: bool = True) -> dict:
+    def _generate_bp_rna_mapping(self, srna_bp_mapping: dict, log: bool = False) -> dict:
         """Generate a mapping of BP to mRNAs and sRNAs based on the srna_bp_mapping.
 
         Args:
@@ -413,8 +413,9 @@ class Analyzer:
                 }
                 if len(all_unq_bps) > 0:
                     cluster_srnas_to_bps[srna_complete] = all_unq_bps
+            cluster_tree_w_meta = self._add_metadata_to_tree(cluster_tree)
             with open(join(self.out_path_analysis_tool_1_trees, f"Tool_1__Cluster_{cluster_id}__All.json"), 'w') as f:
-                json.dump(cluster_tree, f, indent=4, sort_keys=True)
+                json.dump(cluster_tree_w_meta, f, indent=4, sort_keys=False)
 
             # 3 - generate cluster df
             # 3.1 - generate the cluster record
@@ -502,11 +503,17 @@ class Analyzer:
                     srnas_to_targets_to_common_bp_clusters, srna_num_targets, all_targets = self._get_srna_to_common_bp_clusters_of_subgroup(srna_subgroup, srna_bp_mapping, common_bp_clusters)
 
                     # 6 - homolog clusters of targets
-                    homolog_clusters_of_targets_annotated_with_common_bps = self._find_homolog_targets(all_targets, 'mRNA')
+                    homolog_clusters_of_targets_annotated_with_common_bps, all_homolog_targets = self._find_homolog_targets(all_targets, 'mRNA')
+
+                    # 7 - num targets in homolog clusters
+                    num_targets_in_homolog_clusters = {}
+                    for srna_complete, targets_to_bps in srnas_to_targets_to_common_bp_clusters.items():
+                        targets_in_homolog_clusters = np.intersect1d(list(targets_to_bps.keys()), all_homolog_targets)
+                        num_targets_in_homolog_clusters[srna_complete] = len(targets_in_homolog_clusters)
 
                     subbgroup_rec = {
                         self.srna_cluster_id_col: cluster_id,
-                        'srna_subgroup': srna_subgroup,
+                        'srna_subgroup': tuple(sorted(srna_subgroup)),
                         'subgroup_size': subgroup_size,
                         'subgroup_strains': subgroup_strains,
                         'subgroup_num_strains': subgroup_num_strains,
@@ -518,6 +525,8 @@ class Analyzer:
                         'num_emergent_bp_clusters': num_emergent_bp_clusters,
                         'num_targets_annotated_with_common_bps': srna_num_targets,
                         'homolog_clusters_of_targets_annotated_with_common_bps': homolog_clusters_of_targets_annotated_with_common_bps,
+                        'num_homolog_clusters_of_targets': len(homolog_clusters_of_targets_annotated_with_common_bps),
+                        'num_targets_in_homolog_clusters': num_targets_in_homolog_clusters,
                         self.srna_subgroup_tree_col: srnas_to_targets_to_common_bp_clusters
                     }
                     records.append(subbgroup_rec)
@@ -530,12 +539,31 @@ class Analyzer:
             # dump tree of each subgroup (and remove col from df)
             for i, row in sub_df.iterrows():
                 with open(join(self.out_path_analysis_tool_1_trees, f"Tool_1__Cluster_{cluster_id}__Subgroup_{row[self.srna_subgroup_id_col]}.json"), 'w') as f:
-                    json.dump(row[self.srna_subgroup_tree_col], f, indent=4, sort_keys=True)
+                    tree_w_meta = self._add_metadata_to_tree(row[self.srna_subgroup_tree_col])
+                    json.dump(tree_w_meta, f, indent=4, sort_keys=False)
             sub_df = sub_df[[self.srna_subgroup_id_col] + [c for c in sub_df.columns if c not in [self.srna_subgroup_id_col, self.srna_subgroup_tree_col]]]
             # merge with out df
             out_df = pd.concat([out_df, sub_df], ignore_index=True)
 
         return out_df
+
+    def _add_metadata_to_tree(self, tree: dict) -> dict:
+        tree_w_meta = {}
+        s_srnas = sorted(tree.keys())
+        for srna_complete in s_srnas:
+            targets_to_bps = tree[srna_complete]
+            targets_info = {}
+            for target, bps in targets_to_bps.items():
+                targets_info[target] = {
+                    'num_BP_IDs': len(bps),
+                    'num_BP_clusters': len(set([clus for clus, bp, nm in bps])),
+                    'BP_info': bps
+                }
+            tree_w_meta[srna_complete] = {
+                'num_targets': len(targets_to_bps),
+                'targets_info': targets_info
+            }
+        return tree_w_meta
 
     def _get_srna_to_common_bp_clusters_of_subgroup(self, srna_subgroup: Tuple[str], srna_bp_mapping: dict, common_bp_clusters: List[Tuple[str, str, str]]) -> Tuple[dict, dict, Set[str]]:
         srnas_to_targets_to_common_bp_clusters = {}
@@ -968,7 +996,7 @@ class Analyzer:
     #             all_rna_homologs.append(rna_orthologs)
     #     return sorted(set(all_rna_homologs))
     
-    def _find_homolog_targets(self, all_targets: Set[str], rna_str: str) -> List[Tuple[str]]:
+    def _find_homolog_targets(self, all_targets: Set[str], rna_str: str) -> Tuple[List[Tuple[str]], List[str]]:
         """
         For each cluster in homologs_df['cluster'], find which RNAs from strain_to_rna_list are homologs, i.e., belong to the same cluster.
 
@@ -977,14 +1005,16 @@ class Analyzer:
         """
         homologs_df = self.srna_homologs if rna_str == 'sRNA' else self.mrna_homologs
         # Iterate over clusters
+        all_rna_homolog_clusters = []
         all_rna_homologs = []
         for cluster in homologs_df['cluster']:
             cluster = cluster if type(cluster) == tuple else ast.literal_eval(cluster)
             # Find intersection with all_rnas
             rna_orthologs = tuple(sorted(set(cluster).intersection(all_targets)))
             if len(rna_orthologs) > 1:
-                all_rna_homologs.append(tuple([f"{x}__{self.G.nodes[x]['name']}" for x in rna_orthologs]))
-        return sorted(set(all_rna_homologs))
+                all_rna_homolog_clusters.append(tuple([f"{self.G.nodes[x]['strain']}__{self.G.nodes[x]['name']}" for x in rna_orthologs]))
+                all_rna_homologs.extend([f"{x}__{self.G.nodes[x]['name']}" for x in rna_orthologs])
+        return sorted(set(all_rna_homolog_clusters)), all_rna_homologs
 
     def _find_rnas_with_max_orthologs(self, rna_str: str, max_orthologs: int = 0) -> List[str]:
         """
@@ -1048,7 +1078,7 @@ class Analyzer:
                     tree[strain][f"{mrna}__{self.G.nodes[mrna]['name']}"] = sorted(list([f"{srna}__{self.G.nodes[srna]['name']}" for srna in srnas if srna in specific_srnas]))
                     targets.add(mrna)
 
-        homolog_clusters_of_targets = self._find_homolog_targets(targets, 'mRNA')
+        homolog_clusters_of_targets, _ = self._find_homolog_targets(targets, 'mRNA')
         targets = sorted(targets)
 
         return tree, targets, homolog_clusters_of_targets
