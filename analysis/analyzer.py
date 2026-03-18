@@ -510,6 +510,7 @@ class Analyzer:
                     for srna_complete, targets_to_bps in srnas_to_targets_to_common_bp_clusters.items():
                         targets_in_homolog_clusters = np.intersect1d(list(targets_to_bps.keys()), all_homolog_targets)
                         num_targets_in_homolog_clusters[srna_complete] = len(targets_in_homolog_clusters)
+                    num_targets_in_homolog_clusters['all'] = sum(num_targets_in_homolog_clusters.values())
 
                     subbgroup_rec = {
                         self.srna_cluster_id_col: cluster_id,
@@ -580,6 +581,7 @@ class Analyzer:
                     srna_num_targets[srna_complete] = srna_num_targets.get(srna_complete, 0) + 1
                     all_targets.add(target_id)
             srnas_to_targets_to_common_bp_clusters[srna_complete] = targets_to_bps
+        srna_num_targets['all'] = sum(srna_num_targets.values())
         return srnas_to_targets_to_common_bp_clusters, srna_num_targets, all_targets
 
     def _find_common_bps_by_cluster(self, bps1: List[Tuple[str, str, str]], bps2: List[Tuple[str, str, str]]) -> List[Tuple[str, str, str]]:

@@ -169,7 +169,9 @@ class DataLoader:
         salmonella_srna = read_df(file_path=join(self.config['rna_dir'], salmonella_dir, "matera_liu_salmonella_all_sRNA_molecules.csv"))
 
         salmonella_inter_matera = read_df(file_path=join(self.config['interactions_dir'], salmonella_dir, "matera_salmonella_interactions.csv"))
+        self.logger.debug(f"matera {len(salmonella_inter_matera.groupby(['sRNA_accession_id', 'mRNA_accession_id']).count())} unique interactions")
         salmonella_inter_liu = read_df(file_path=join(self.config['interactions_dir'], salmonella_dir, "liu_salmonella_interactions.csv"))
+        self.logger.debug(f"liu {len(salmonella_inter_liu.groupby(['sRNA_accession_id', 'mRNA_accession_id']).count())} unique interactions")
         salmonella_inter = pd.concat([salmonella_inter_matera, salmonella_inter_liu], ignore_index=True)
 
         salmonella_mrna, salmonella_srna, salmonella_inter = \
