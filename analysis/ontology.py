@@ -134,6 +134,18 @@ class Ontology:
         # <is a> '0031503'  protein-containing complex localization
         # <is a> '0031623'  receptor internalization
 
+    def _analyse_bp_node_neighborhood(self, bp_go_number):
+        """
+        Example for BP node '0019856'  
+        - in neighbors (parents): 
+        - out neighbors (children): 
+        """
+        in_neighbors = self.BP.in_edges(bp_go_number, data=True)
+        out_neighbors = self.BP.out_edges(bp_go_number, data=True)
+        self.logger.info(f"BP node {bp_go_number} {self.BP.nodes[bp_go_number]['lbl']} has {len(in_neighbors)} in neighbors and {len(out_neighbors)} out neighbors")
+        self.logger.info(f"in neighbors: {[f'{e[0]} {self.BP.nodes[e[0]]["lbl"]} ({e[2]['type']})' for e in in_neighbors]}")
+        self.logger.info(f"out neighbors: {[f'{e[1]} {self.BP.nodes[e[1]]["lbl"]} ({e[2]['type']})' for e in out_neighbors]}")
+
     def _map_edge_id_to_type(self):
         self.edge_id_to_type = {
        "http://purl.obolibrary.org/obo/BFO_0000050": self.type_part_of,  # 6583 edges

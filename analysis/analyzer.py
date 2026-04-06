@@ -1252,6 +1252,41 @@ class Analyzer:
         df = pd.DataFrame(records)
         write_df(df, join(self.out_path_analysis_tool_2, f"Tool_2__BP-emergent_sRNAs__{self.out_file_suffix}.csv"))
 
+    def _bp_clustering_effect_on_bp_emergent_srnas(self):
+        df = read_df(join(self.out_path_analysis_tool_2, f"Tool_2__BP-emergent_sRNAs__{self.out_file_suffix}.csv"))
+        
+        relevant_cluster_ids = df['bp_cluster'][df['bp_id']==0].tolist()
+        num_clusters = len(relevant_cluster_ids)
+        clusters_union, clusters_less_than_union = set(), set()
+        
+        for cluster_id in relevant_cluster_ids:
+            c_df = df[df['bp_cluster'] == cluster_id]
+            c_dict = ast.literal_eval(c_df[c_df['bp_id'] == 0]['BP-emergent_sRNAs'][c_df.index[0]])
+            
+            u_dict = {}
+            bp_df = c_df[c_df['bp_id'] != 0]
+            for bp_dict in bp_df['BP-emergent_sRNAs']:
+                bp_dict = ast.literal_eval(bp_dict)
+                for strain, srnas in bp_dict.items():
+                    if strain not in u_dict:
+                        u_dict[strain] = set()
+                    u_dict[strain].update(set(srnas))
+            u_dict = {s: sorted(srnas) for s, srnas in u_dict.items()}
+
+            strains = sorted(set(list(c_dict.keys()) + list(u_dict.keys())))
+            for strain in strains:
+                c_srnas = c_dict.get(strain, [])
+                u_srnas = u_dict.get(strain, [])
+                if len(c_srnas) < len(u_srnas):
+                    self.logger.info(f"NOTE!  cluster id {cluster_id}: strain {strain}. removed {set(u_srnas) - set(c_srnas)}")
+                    clusters_less_than_union.add(cluster_id)
+                elif set(c_srnas) == set(u_srnas):
+                    continue
+                else:
+                    raise ValueError(f"unexpected: cluster id {cluster_id}: strain {strain}. c_srnas: {c_srnas}, u_srnas: {u_srnas}")
+        self.logger.info(f"out of {num_clusters} BP-clusters (size > 1), in {len(clusters_less_than_union)} BP-clusters the number of BP-emergent sRNAs (in some or all strains) is less than the union of BP-emergent sRNAs of the BPs in the cluster.")
+        print()
+
     def _dump_bps_of_annotated_mrnas(self):
         # 1 - Find all BP nodes that are annotated to at least one mRNA
         bp_nodes_with_annotation = [
