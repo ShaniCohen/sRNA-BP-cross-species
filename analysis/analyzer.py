@@ -360,18 +360,18 @@ class Analyzer:
         cluster_sizes = pd.Series(list(bp_to_cluster.values())).value_counts().sort_index().reset_index(drop=False).rename(
             columns={'index': 'cluster_id', 'count': 'cluster_size'})
         
-        # self.logger.info("------------------------- INCLUDING singletones")
-        # # 1 - number of clusters
-        # num_clusters = len(cluster_sizes)
-        # self.logger.info(f"Number of BP clusters: {num_clusters}")
-        # # 2 - cluster size distribution
-        # unq, counts = np.unique(cluster_sizes['cluster_size'], return_counts=True)
-        # sorted_dict = dict(sorted(dict(zip(unq, counts)).items(), key=lambda item: item[1], reverse=True))
-        # cluster_size_dist = "\n   ".join([f"{counts} with size = {unq} ({int(round(counts/num_clusters, 3)*100)} %)" for unq, counts in sorted_dict.items()])
-        # self.logger.info(
-        #     f"-------   Cluster Size Distribution: \n"
-        #     f"   {cluster_size_dist}"
-        # )
+        self.logger.info("------------------------- INCLUDING singletones")
+        # 1 - number of clusters
+        num_clusters = len(cluster_sizes)
+        self.logger.info(f"Number of BP clusters: {num_clusters}")
+        # 2 - cluster size distribution
+        unq, counts = np.unique(cluster_sizes['cluster_size'], return_counts=True)
+        sorted_dict = dict(sorted(dict(zip(unq, counts)).items(), key=lambda item: item[1], reverse=True))
+        cluster_size_dist = "\n   ".join([f"{counts} with size = {unq} ({int(round(counts/num_clusters, 3)*100)} %)" for unq, counts in sorted_dict.items()])
+        self.logger.info(
+            f"-------   Cluster Size Distribution: \n"
+            f"   {cluster_size_dist}"
+        )
         
         self.logger.info("------------------------- NO singletones")
         cluster_sizes_no_singletons = cluster_sizes[cluster_sizes['cluster_size'] > 1]
@@ -389,6 +389,7 @@ class Analyzer:
 
     def _analysis_1_srna_homologs_to_commom_bps(self, srna_bp_mapping: dict, bp_to_cluster: dict, add_pairs_info: bool = False):
         self.logger.info(f"##############   Analsis 1 - Cross-Species Conservation of sRNAs' Functionality   ##############")
+        self.logger.debug("Main output")
         # 1 - load clusters of sRNA homologs
         df = self.srna_homologs.copy()
         df = df.sort_values(by=['num_strains', 'cluster_size'], ascending=False).reset_index(drop=True)
@@ -443,13 +444,17 @@ class Analyzer:
         # 4 - dump final output to CSV
         write_df(out_df, join(self.out_path_analysis_tool_1, f"Tool_1__sRNA_homologs_to_common_BP_clusters__{self.out_file_suffix}.csv"))
 
-        # 5 - generate supllementay table and dump
-        sup_df = out_df[[self.srna_cluster_id_col, 'cluster', 'sRNA_info']][pd.notnull(out_df['sRNA_info'])].copy().reset_index(drop=True)
+        # 5 - generate supplementay table and dump
+        self.logger.debug("Supplementay output")
+        sup_df = out_df[[self.srna_cluster_id_col, 'cluster', 'num_strains', 'sRNA_info']][pd.notnull(out_df['sRNA_info'])].copy().reset_index(drop=True)
+        expanded_clusters = set(out_df[self.srna_cluster_id_col][out_df['expanded_bp_clusters'].apply(lambda x: isinstance(x, list) and len(x) > 0)])
+        emergent_clusters = set(out_df[self.srna_cluster_id_col][out_df['emergent_bp_clusters'].apply(lambda x: isinstance(x, list) and len(x) > 0)])
         records = []
         for _, row in sup_df.iterrows():
             rec = {
                 self.srna_cluster_id_col: row[self.srna_cluster_id_col],
                 'cluster': row['cluster'],
+                'num_strains': row['num_strains']
             }
             strain_to_num_targets, strain_to_num_bp_ids = {}, {}
             for srna_complete, info in row['sRNA_info'].items():
@@ -457,10 +462,20 @@ class Analyzer:
                 strain_to_num_targets[strain] = strain_to_num_targets.get(strain, 0) + info['num_targets']
                 strain_to_num_bp_ids[strain] = strain_to_num_bp_ids.get(strain, 0) + info['num_bp_ids']
 
+            rec["num_targets"] = sum(strain_to_num_targets.values())
+            rec["num_strains_with_targets"] = sum(1 for v in strain_to_num_targets.values() if v > 0)
+            num_strains_with_bp_ids = sum(1 for v in strain_to_num_bp_ids.values() if v > 0)
+            rec["num_bp_ids"] = sum(strain_to_num_bp_ids.values())
+            rec["num_strains_with_bp_ids"] = num_strains_with_bp_ids
+            rec["at_least_two_strains_with_bp_ids"] = num_strains_with_bp_ids >= 2
+            rec["has_expanded_bp_clusters"] = row[self.srna_cluster_id_col] in expanded_clusters
+            rec["has_emergent_bp_clusters"] = row[self.srna_cluster_id_col] in emergent_clusters
+
             for strain in self.U.strains:
                 rec[f"num_targets__{strain}"] = strain_to_num_targets.get(strain, 0)
             for strain in self.U.strains:
                 rec[f"num_bp_ids__{strain}"] = strain_to_num_bp_ids.get(strain, 0)
+
             records.append(rec)
         sup_df = pd.DataFrame(records)
 
@@ -1081,7 +1096,7 @@ class Analyzer:
                     targets.add(mrna)
 
         homolog_clusters_of_targets, _ = self._find_homolog_targets(targets, 'mRNA')
-        targets = sorted(targets)
+        targets = sorted([f"{self.G.nodes[t]['strain']}__{t}" for t in targets])
 
         return tree, targets, homolog_clusters_of_targets
 
@@ -1137,32 +1152,32 @@ class Analyzer:
         bp_emergent_srnas_no_orthologs = self._add_strains_n_names_to_rnas(bp_emergent_srnas_no_orthologs_lst)
 
         info = {
-            'strains': strains,
             'num_annotated_mRNAs': num_annotated_mRNAs,
-            'num_strains_annotated_mRNAs': num_strains,
+            'num_strains_mRNAs': num_strains,
+            'strains_mRNAs': strains,
             'associated_sRNAs': associated_sRNAs,
             'num_associated_sRNAs': num_associated_sRNAs,
-            'num_strains_associated_sRNAs': num_strains_associated_srnas,
+            'num_strains_sRNAs': num_strains_associated_srnas,
             
             'BP-emergent_sRNAs': bp_emergent_srnas,
             'num_BP-emergent_sRNAs': num_bp_emergent_srnas,
             'num_strains_BP-emergent_sRNAs': len(bp_emergent_srnas),
 
-            'BP-emergent_sRNAs_no_orthologs': bp_emergent_srnas_no_orthologs,
-            'num_BP-emergent_sRNAs_no_orthologs': num_bp_emergent_srnas_no_orthologs,
-            'num_strains_BP-emergent_sRNAs_no_orthologs': len(bp_emergent_srnas_no_orthologs),
+            'BP-emergent_lineage-specific_sRNAs': bp_emergent_srnas_no_orthologs,
+            'num_BP-emergent_lineage-specific_sRNAs': num_bp_emergent_srnas_no_orthologs,
+            'num_strains_BP-emergent_lineage-specific_sRNAs': len(bp_emergent_srnas_no_orthologs),
         }
 
         tree_of_bp_emergent_srnas, targets, homolog_clusters_of_targets = self._analyze_targets_of_specific_srnas(strain_dict, bp_emergent_srnas_lst)
         info.update({
-            'targets_of_BP-emergent_sRNAs': targets,
-            'homolog_clusters_of_targets_BP-emergent_sRNAs': homolog_clusters_of_targets,
+            'targets_BP-emergent_sRNAs': targets,
+            'target_homolog_clusters_BP-emergent_sRNAs': homolog_clusters_of_targets,
         })
        
         _, targets, homolog_clusters_of_targets = self._analyze_targets_of_specific_srnas(strain_dict, bp_emergent_srnas_no_orthologs_lst)
         info.update({
-            'targets_of_BP-emergent_sRNAs_no_orthologs': targets,
-            'homolog_clusters_of_targets_BP-emergent_sRNAs_no_orthologs': homolog_clusters_of_targets,
+            'targets_BP-emergent_lineage-specific_sRNAs': targets,
+            'target_homolog_clusters_BP-emergent_lineage-specific_sRNAs': homolog_clusters_of_targets,
         })  
 
         return tree, tree_of_bp_emergent_srnas, info
@@ -1202,9 +1217,9 @@ class Analyzer:
             if len(bps) > 1:
                 # 1.1 - cluster record
                 cluster_rec = {
-                    'bp_cluster': cluster_id,
+                    'bp_cluster_id': cluster_id,
                     'bp_id': 0,
-                    'bp_lbl': None,
+                    'bp_label': None,
                     'bp_definition': None
                 }
                 # 1.2 - unified strain_dict for the cluster + dump tree
@@ -1233,9 +1248,9 @@ class Analyzer:
                 # 2.1 - bp record
                 strain_dict = bp_rna_mapping[bp_id]
                 bp_rec = {
-                    'bp_cluster': cluster_id,
+                    'bp_cluster_id': cluster_id,
                     'bp_id': bp_id,
-                    'bp_lbl': self.G.nodes[bp_id]['lbl'],
+                    'bp_label': self.G.nodes[bp_id]['lbl'],
                     'bp_definition': self.G.nodes[bp_id]['meta']['definition']['val'],
                 }
                 # 2.2 - tree and info
