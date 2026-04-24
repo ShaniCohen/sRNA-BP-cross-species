@@ -410,12 +410,12 @@ class Analyzer:
                 cluster_tree[srna_complete] = targets_to_bps
                 srna_info[srna_complete] = {
                     'num_targets': len(srna_targets),
-                    'num_bp_ids': len(all_unq_bps)
+                    'num_bp_terms': len(all_unq_bps)
                 }
                 if len(all_unq_bps) > 0:
                     cluster_srnas_to_bps[srna_complete] = all_unq_bps
             cluster_tree_w_meta = self._add_metadata_to_tree(cluster_tree)
-            with open(join(self.out_path_analysis_tool_1_trees, f"Tool_1__Cluster_{cluster_id}__All.json"), 'w') as f:
+            with open(join(self.out_path_analysis_tool_1_trees, f"sRNA-to-BP__Mappings__Cluster_{cluster_id}__All.json"), 'w') as f:
                 json.dump(cluster_tree_w_meta, f, indent=4, sort_keys=False)
 
             # 3 - generate cluster df
@@ -442,7 +442,7 @@ class Analyzer:
         out_df = pd.concat(dfs, ignore_index=True)
 
         # 4 - dump final output to CSV
-        write_df(out_df, join(self.out_path_analysis_tool_1, f"Tool_1__sRNA_homologs_to_common_BP_clusters__{self.out_file_suffix}.csv"))
+        write_df(out_df, join(self.out_path_analysis_tool_1, f"sRNA-to-BP__Output__{self.out_file_suffix}.csv"))
 
         # 5 - generate supplementay table and dump
         self.logger.debug("Supplementay output")
@@ -461,14 +461,14 @@ class Analyzer:
             for srna_complete, info in row['sRNA_info'].items():
                 strain, _, _ = srna_complete.split('__')
                 strain_to_num_targets[strain] = strain_to_num_targets.get(strain, 0) + info['num_targets']
-                strain_to_num_bp_ids[strain] = strain_to_num_bp_ids.get(strain, 0) + info['num_bp_ids']
+                strain_to_num_bp_ids[strain] = strain_to_num_bp_ids.get(strain, 0) + info['num_bp_terms']
 
             rec["num_targets"] = sum(strain_to_num_targets.values())
             rec["num_strains_with_targets"] = sum(1 for v in strain_to_num_targets.values() if v > 0)
             num_strains_with_bp_ids = sum(1 for v in strain_to_num_bp_ids.values() if v > 0)
-            rec["num_bp_ids"] = sum(strain_to_num_bp_ids.values())
-            rec["num_strains_with_bp_ids"] = num_strains_with_bp_ids
-            rec["at_least_two_strains_with_bp_ids"] = num_strains_with_bp_ids >= 2
+            rec["num_bp_terms"] = sum(strain_to_num_bp_ids.values())
+            rec["num_strains_with_bp_terms"] = num_strains_with_bp_ids
+            rec["at_least_two_strains_with_bp_terms"] = num_strains_with_bp_ids >= 2
             rec["has_shared_bp_clusters"] = row[self.srna_cluster_id_col] in shared_clusters
             rec["has_expanded_bp_clusters"] = row[self.srna_cluster_id_col] in expanded_clusters
             rec["has_emergent_bp_clusters"] = row[self.srna_cluster_id_col] in emergent_clusters
@@ -476,12 +476,12 @@ class Analyzer:
             for strain in self.U.strains:
                 rec[f"num_targets__{strain}"] = strain_to_num_targets.get(strain, 0)
             for strain in self.U.strains:
-                rec[f"num_bp_ids__{strain}"] = strain_to_num_bp_ids.get(strain, 0)
+                rec[f"num_bp_terms__{strain}"] = strain_to_num_bp_ids.get(strain, 0)
 
             records.append(rec)
         sup_df = pd.DataFrame(records)
 
-        write_df(sup_df, join(self.out_path_analysis_tool_1, f"Tool_1__sRNA_homologs_supplementary__{self.out_file_suffix}.csv"))
+        write_df(sup_df, join(self.out_path_analysis_tool_1, f"sRNA-to-BP__Metadata__{self.out_file_suffix}.csv"))
         self.logger.info(f"Dumped Analysis 1 results")
 
     def _get_cluster_df(self, rec: dict, cluster_srnas_to_bps: dict, srna_bp_mapping: dict) -> pd.DataFrame:
@@ -556,7 +556,7 @@ class Analyzer:
             sub_df[self.srna_subgroup_id_col] = sub_df.index + 1
             # dump tree of each subgroup (and remove col from df)
             for i, row in sub_df.iterrows():
-                with open(join(self.out_path_analysis_tool_1_trees, f"Tool_1__Cluster_{cluster_id}__Subgroup_{row[self.srna_subgroup_id_col]}.json"), 'w') as f:
+                with open(join(self.out_path_analysis_tool_1_trees, f"sRNA-to-BP__Mappings__Cluster_{cluster_id}__Subgroup_{row[self.srna_subgroup_id_col]}.json"), 'w') as f:
                     tree_w_meta = self._add_metadata_to_tree(row[self.srna_subgroup_tree_col])
                     json.dump(tree_w_meta, f, indent=4, sort_keys=False)
             sub_df = sub_df[[self.srna_subgroup_id_col] + [c for c in sub_df.columns if c not in [self.srna_subgroup_id_col, self.srna_subgroup_tree_col]]]
@@ -573,7 +573,7 @@ class Analyzer:
             targets_info = {}
             for target, bps in targets_to_bps.items():
                 targets_info[target] = {
-                    'num_BP_IDs': len(bps),
+                    'num_BP_terms': len(bps),
                     'num_BP_clusters': len(set([clus for clus, bp, nm in bps])),
                     'BP_info': bps
                 }
@@ -1239,9 +1239,9 @@ class Analyzer:
                 # 1.3 - tree and info
                 tree, tree_emergent, info = self._process_strain_dict(uni_strain_dict, srna_clusters, srnas_no_orthologs)
                 cluster_rec.update(info)
-                with open(join(self.out_path_analysis_tool_2_trees, f"Tool_2__BP_Cluster_{cluster_id}__All.json"), 'w') as f:
+                with open(join(self.out_path_analysis_tool_2_trees, f"BP-to-sRNA__Mappings__BP_Cluster_{cluster_id}__All.json"), 'w') as f:
                     json.dump(tree, f, indent=4, sort_keys=True)
-                with open(join(self.out_path_analysis_tool_2_trees, f"Tool_2__BP_Cluster_{cluster_id}__All__BP-emergent.json"), 'w') as f:
+                with open(join(self.out_path_analysis_tool_2_trees, f"BP-to-sRNA__Mappings__BP_Cluster_{cluster_id}__All__BP-emergent.json"), 'w') as f:
                     json.dump(tree_emergent, f, indent=4, sort_keys=True)
                 # 1.4 - add record
                 records.append(cluster_rec)
@@ -1259,19 +1259,19 @@ class Analyzer:
                 # 2.2 - tree and info
                 tree, tree_emergent, info = self._process_strain_dict(strain_dict, srna_clusters, srnas_no_orthologs)
                 bp_rec.update(info)
-                with open(join(self.out_path_analysis_tool_2_trees, f"Tool_2__BP_Cluster_{cluster_id}__BP_id_{bp_id}.json"), 'w') as f:
+                with open(join(self.out_path_analysis_tool_2_trees, f"BP-to-sRNA__Mappings__BP_Cluster_{cluster_id}__BP_id_{bp_id}.json"), 'w') as f:
                     json.dump(tree, f, indent=4, sort_keys=True)
-                with open(join(self.out_path_analysis_tool_2_trees, f"Tool_2__BP_Cluster_{cluster_id}__BP_id_{bp_id}__BP-emergent.json"), 'w') as f:
+                with open(join(self.out_path_analysis_tool_2_trees, f"BP-to-sRNA__Mappings__BP_Cluster_{cluster_id}__BP_id_{bp_id}__BP-emergent.json"), 'w') as f:
                     json.dump(tree_emergent, f, indent=4, sort_keys=True)
                 # 2.3 - add record
                 records.append(bp_rec)
 
         # 3 - dump results
         df = pd.DataFrame(records)
-        write_df(df, join(self.out_path_analysis_tool_2, f"Tool_2__BP-emergent_sRNAs__{self.out_file_suffix}.csv"))
+        write_df(df, join(self.out_path_analysis_tool_2, f"BP-to-sRNA__Output__{self.out_file_suffix}.csv"))
 
     def _bp_clustering_effect_on_bp_emergent_srnas(self, field: str):
-        df = read_df(join(self.out_path_analysis_tool_2, f"Tool_2__BP-emergent_sRNAs__{self.out_file_suffix}.csv"))
+        df = read_df(join(self.out_path_analysis_tool_2, f"BP-to-sRNA__Output__{self.out_file_suffix}.csv"))
         
         # ------------------- BP-emergent sRNAs stats -------------------
         num_bp_clusters = len(df['bp_cluster_id'].unique())
@@ -1311,7 +1311,7 @@ class Analyzer:
         self.logger.info(f"out of {num_clusters} BP-clusters (size > 1), in {len(clusters_less_than_union)} BP-clusters the number of {field} (in some or all strains) is less than the union of {field} of the BPs in the cluster.")
 
     def _specific_examples(self):
-        df = read_df(join(self.out_path_analysis_tool_2, f"Tool_2__BP-emergent_sRNAs__{self.out_file_suffix}.csv"))
+        df = read_df(join(self.out_path_analysis_tool_2, f"BP-to-sRNA__Output__{self.out_file_suffix}.csv"))
         # -- Convergent regulation of iron ion transport
         mask = (df['num_strains_sRNAs'] >= 5) & (df['BP-emergent_lineage-specific_sRNAs'].apply(lambda x: sorted(ast.literal_eval(x).keys()) == ['pseudomonas', 'vibrio']))
         relevant_bp_clusters = df[mask]['bp_cluster_id'].unique()
