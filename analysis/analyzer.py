@@ -346,11 +346,11 @@ class Analyzer:
         cluster_labels = fcluster(Z, distance_threshold, criterion='distance')
 
         # map GO IDs to their cluster labels
-        bp_clusters = pd.DataFrame({'bp_id': goids_sorted, 'cluster': cluster_labels, 'bp_name': [godag[g].name for g in goids_sorted]}).sort_values(by='cluster').reset_index(drop=True)
+        bp_clusters = pd.DataFrame({'bp_go_id': goids_sorted, 'cluster': cluster_labels, 'bp_name': [godag[g].name for g in goids_sorted]}).sort_values(by='cluster').reset_index(drop=True)
         write_df(bp_clusters, join(_dir, f"{f_name}__bp_clusters___{self.out_file_suffix}.csv"))
         write_df(dis_meta, join(_dir, f"{f_name}__dis_meta___{self.out_file_suffix}.csv"))
-        bp_to_cluster = dict(zip(bp_clusters['bp_id'].apply(lambda x: x.replace('GO:', '')), bp_clusters['cluster']))
-        cluster_to_bps = bp_clusters.groupby('cluster')['bp_id'].apply(lambda x: [bp.replace('GO:', '') for bp in x.tolist()]).to_dict()
+        bp_to_cluster = dict(zip(bp_clusters['bp_go_id'].apply(lambda x: x.replace('GO:', '')), bp_clusters['cluster']))
+        cluster_to_bps = bp_clusters.groupby('cluster')['bp_go_id'].apply(lambda x: [bp.replace('GO:', '') for bp in x.tolist()]).to_dict()
 
         return bp_to_cluster, cluster_to_bps
     
@@ -447,6 +447,7 @@ class Analyzer:
         # 5 - generate supplementay table and dump
         self.logger.debug("Supplementay output")
         sup_df = out_df[[self.srna_cluster_id_col, 'cluster', 'num_strains', 'sRNA_info']][pd.notnull(out_df['sRNA_info'])].copy().reset_index(drop=True)
+        shared_clusters = set(out_df[self.srna_cluster_id_col][out_df['shared_bp_clusters'].apply(lambda x: isinstance(x, list) and len(x) > 0)])
         expanded_clusters = set(out_df[self.srna_cluster_id_col][out_df['expanded_bp_clusters'].apply(lambda x: isinstance(x, list) and len(x) > 0)])
         emergent_clusters = set(out_df[self.srna_cluster_id_col][out_df['emergent_bp_clusters'].apply(lambda x: isinstance(x, list) and len(x) > 0)])
         records = []
@@ -468,6 +469,7 @@ class Analyzer:
             rec["num_bp_ids"] = sum(strain_to_num_bp_ids.values())
             rec["num_strains_with_bp_ids"] = num_strains_with_bp_ids
             rec["at_least_two_strains_with_bp_ids"] = num_strains_with_bp_ids >= 2
+            rec["has_shared_bp_clusters"] = row[self.srna_cluster_id_col] in shared_clusters
             rec["has_expanded_bp_clusters"] = row[self.srna_cluster_id_col] in expanded_clusters
             rec["has_emergent_bp_clusters"] = row[self.srna_cluster_id_col] in emergent_clusters
 
@@ -533,14 +535,14 @@ class Analyzer:
                         'subgroup_size': subgroup_size,
                         'subgroup_strains': subgroup_strains,
                         'subgroup_num_strains': subgroup_num_strains,
-                        'common_bp_clusters': common_bp_clusters,
-                        'num_common_bp_clusters': num_common_bp_clusters,
-                        'common_bp_ids': common_bp_ids,
+                        'shared_bp_clusters': common_bp_clusters,
+                        'num_shared_bp_clusters': num_common_bp_clusters,
+                        'shared_bp_terms': common_bp_ids,
                         'expanded_bp_clusters': expanded_bp_clusters,
                         'emergent_bp_clusters': emergent_bp_clusters,
                         'num_emergent_bp_clusters': num_emergent_bp_clusters,
-                        'num_targets_annotated_with_common_bps': srna_num_targets,
-                        'homolog_clusters_of_targets_annotated_with_common_bps': homolog_clusters_of_targets_annotated_with_common_bps,
+                        'num_targets_annotated_with_shared_bp_clusters': srna_num_targets,
+                        'homolog_clusters_of_targets_annotated_with_shared_bp_clusters': homolog_clusters_of_targets_annotated_with_common_bps,
                         'num_homolog_clusters_of_targets': len(homolog_clusters_of_targets_annotated_with_common_bps),
                         'num_targets_in_homolog_clusters': num_targets_in_homolog_clusters,
                         self.srna_subgroup_tree_col: srnas_to_targets_to_common_bp_clusters
@@ -1138,10 +1140,11 @@ class Analyzer:
             for srna_list in mrna_to_srnas.values():
                 srna_set.update([f"{srna}__{self.G.nodes[srna]['name']}" for srna in srna_list])
                 all_bp_associated_srnas.update(srna_list)
-            associated_sRNAs[strain] = sorted(srna_set)
-            num_associated_sRNAs[strain] = len(srna_set)
+            if len(srna_set) > 0:
+                associated_sRNAs[strain] = sorted(srna_set)
+                num_associated_sRNAs[strain] = len(srna_set)
 
-        num_strains_associated_srnas = len([s for s in strains if num_associated_sRNAs[s] > 0])
+        num_strains_associated_srnas = len([s for s in strains if num_associated_sRNAs.get(s)])
         bp_emergent_srnas_lst = self._get_bp_emergent_srnas(all_bp_associated_srnas, srna_clusters)
         num_bp_emergent_srnas = len(bp_emergent_srnas_lst)
         bp_emergent_srnas = self._add_strains_n_names_to_rnas(bp_emergent_srnas_lst)
@@ -1218,7 +1221,7 @@ class Analyzer:
                 # 1.1 - cluster record
                 cluster_rec = {
                     'bp_cluster_id': cluster_id,
-                    'bp_id': 0,
+                    'bp_go_id': 0,
                     'bp_label': None,
                     'bp_definition': None
                 }
@@ -1249,7 +1252,7 @@ class Analyzer:
                 strain_dict = bp_rna_mapping[bp_id]
                 bp_rec = {
                     'bp_cluster_id': cluster_id,
-                    'bp_id': bp_id,
+                    'bp_go_id': bp_id,
                     'bp_label': self.G.nodes[bp_id]['lbl'],
                     'bp_definition': self.G.nodes[bp_id]['meta']['definition']['val'],
                 }
@@ -1276,16 +1279,16 @@ class Analyzer:
         self.logger.info(f"out of {num_bp_clusters} BP-clusters, {num_bp_clusters_with_emergent_srnas} ({num_bp_clusters_with_emergent_srnas/num_bp_clusters*100:.2f}%) include a BP ID with {field}.")
 
         # ------------------- clustering effect on BP-emergent sRNAs -------------------
-        relevant_cluster_ids = df['bp_cluster_id'][df['bp_id']==0].tolist()
+        relevant_cluster_ids = df['bp_cluster_id'][df['bp_go_id']==0].tolist()
         num_clusters = len(relevant_cluster_ids)
         clusters_union, clusters_less_than_union = set(), set()
         
         for cluster_id in relevant_cluster_ids:
             c_df = df[df['bp_cluster_id'] == cluster_id]
-            c_dict = ast.literal_eval(c_df[c_df['bp_id'] == 0][field][c_df.index[0]])
+            c_dict = ast.literal_eval(c_df[c_df['bp_go_id'] == 0][field][c_df.index[0]])
             
             u_dict = {}
-            bp_df = c_df[c_df['bp_id'] != 0]
+            bp_df = c_df[c_df['bp_go_id'] != 0]
             for bp_dict in bp_df[field]:
                 bp_dict = ast.literal_eval(bp_dict)
                 for strain, srnas in bp_dict.items():
@@ -1307,25 +1310,25 @@ class Analyzer:
                     raise ValueError(f"unexpected: cluster id {cluster_id}: strain {strain}. c_srnas: {c_srnas}, u_srnas: {u_srnas}")
         self.logger.info(f"out of {num_clusters} BP-clusters (size > 1), in {len(clusters_less_than_union)} BP-clusters the number of {field} (in some or all strains) is less than the union of {field} of the BPs in the cluster.")
 
-    def _ad_hoc(self):
+    def _specific_examples(self):
         df = read_df(join(self.out_path_analysis_tool_2, f"Tool_2__BP-emergent_sRNAs__{self.out_file_suffix}.csv"))
         # -- Convergent regulation of iron ion transport
         mask = (df['num_strains_sRNAs'] >= 5) & (df['BP-emergent_lineage-specific_sRNAs'].apply(lambda x: sorted(ast.literal_eval(x).keys()) == ['pseudomonas', 'vibrio']))
         relevant_bp_clusters = df[mask]['bp_cluster_id'].unique()
         num_relevant = len(relevant_bp_clusters)
-        num_relevant_not_singletons = len(df[(df['bp_cluster_id'].isin(relevant_bp_clusters)) & (df['bp_id'] == 0)])
+        num_relevant_not_singletons = len(df[(df['bp_cluster_id'].isin(relevant_bp_clusters)) & (df['bp_go_id'] == 0)])
 
         # -- Lineage-specific Functional Specialization of Bacterial sRNA Networks 
         # --- by sRNA
         mask = (df['associated_sRNAs'].apply(lambda x: 'vibrio' in sorted(ast.literal_eval(x).keys())) & df['num_strains_sRNAs'] == 1)
         relevant_bp_clusters = df[mask]['bp_cluster_id'].unique()
         num_relevant = len(relevant_bp_clusters)
-        num_relevant_not_singletons = len(df[(df['bp_cluster_id'].isin(relevant_bp_clusters)) & (df['bp_id'] == 0)])
+        num_relevant_not_singletons = len(df[(df['bp_cluster_id'].isin(relevant_bp_clusters)) & (df['bp_go_id'] == 0)])
         # --- by mRNA
         mask = (df['associated_sRNAs'].apply(lambda x: sorted(ast.literal_eval(x).keys()) == ['vibrio']))
         relevant_bp_clusters = df[mask]['bp_cluster_id'].unique()
         num_relevant = len(relevant_bp_clusters)
-        num_relevant_not_singletons = len(df[(df['bp_cluster_id'].isin(relevant_bp_clusters)) & (df['bp_id'] == 0)])
+        num_relevant_not_singletons = len(df[(df['bp_cluster_id'].isin(relevant_bp_clusters)) & (df['bp_go_id'] == 0)])
 
     def _dump_bps_of_annotated_mrnas(self):
         # 1 - Find all BP nodes that are annotated to at least one mRNA
@@ -1343,7 +1346,7 @@ class Analyzer:
         # 2 - Create a DataFrame with the BP IDs, labels, and definitions
         records = []
         for bp in sorted(bp_nodes_with_annotation):
-            records.append({'bp_id': bp, 'lbl': self.G.nodes[bp]['lbl'], 'definition': self.G.nodes[bp]['meta']['definition']['val']})
+            records.append({'bp_go_id': bp, 'lbl': self.G.nodes[bp]['lbl'], 'definition': self.G.nodes[bp]['meta']['definition']['val']})
         bps_of_annotated_mrnas = pd.DataFrame(records)
         # 3 - Dump the DataFrame to a CSV file
         write_df(bps_of_annotated_mrnas, join(self.out_path_summary_tables, f"BPs_of_annotated_mrnas__{self.out_file_suffix}.csv"))
