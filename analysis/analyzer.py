@@ -1267,20 +1267,26 @@ class Analyzer:
         df = pd.DataFrame(records)
         write_df(df, join(self.out_path_analysis_tool_2, f"Tool_2__BP-emergent_sRNAs__{self.out_file_suffix}.csv"))
 
-    def _bp_clustering_effect_on_bp_emergent_srnas(self):
+    def _bp_clustering_effect_on_bp_emergent_srnas(self, field: str):
         df = read_df(join(self.out_path_analysis_tool_2, f"Tool_2__BP-emergent_sRNAs__{self.out_file_suffix}.csv"))
         
-        relevant_cluster_ids = df['bp_cluster'][df['bp_id']==0].tolist()
+        # ------------------- BP-emergent sRNAs stats -------------------
+        num_bp_clusters = len(df['bp_cluster_id'].unique())
+        num_bp_clusters_with_emergent_srnas = len(df[df[f'num_{field}'] > 0]['bp_cluster_id'].unique())
+        self.logger.info(f"out of {num_bp_clusters} BP-clusters, {num_bp_clusters_with_emergent_srnas} ({num_bp_clusters_with_emergent_srnas/num_bp_clusters*100:.2f}%) include a BP ID with {field}.")
+
+        # ------------------- clustering effect on BP-emergent sRNAs -------------------
+        relevant_cluster_ids = df['bp_cluster_id'][df['bp_id']==0].tolist()
         num_clusters = len(relevant_cluster_ids)
         clusters_union, clusters_less_than_union = set(), set()
         
         for cluster_id in relevant_cluster_ids:
-            c_df = df[df['bp_cluster'] == cluster_id]
-            c_dict = ast.literal_eval(c_df[c_df['bp_id'] == 0]['BP-emergent_sRNAs'][c_df.index[0]])
+            c_df = df[df['bp_cluster_id'] == cluster_id]
+            c_dict = ast.literal_eval(c_df[c_df['bp_id'] == 0][field][c_df.index[0]])
             
             u_dict = {}
             bp_df = c_df[c_df['bp_id'] != 0]
-            for bp_dict in bp_df['BP-emergent_sRNAs']:
+            for bp_dict in bp_df[field]:
                 bp_dict = ast.literal_eval(bp_dict)
                 for strain, srnas in bp_dict.items():
                     if strain not in u_dict:
@@ -1299,8 +1305,27 @@ class Analyzer:
                     continue
                 else:
                     raise ValueError(f"unexpected: cluster id {cluster_id}: strain {strain}. c_srnas: {c_srnas}, u_srnas: {u_srnas}")
-        self.logger.info(f"out of {num_clusters} BP-clusters (size > 1), in {len(clusters_less_than_union)} BP-clusters the number of BP-emergent sRNAs (in some or all strains) is less than the union of BP-emergent sRNAs of the BPs in the cluster.")
-        print()
+        self.logger.info(f"out of {num_clusters} BP-clusters (size > 1), in {len(clusters_less_than_union)} BP-clusters the number of {field} (in some or all strains) is less than the union of {field} of the BPs in the cluster.")
+
+    def _ad_hoc(self):
+        df = read_df(join(self.out_path_analysis_tool_2, f"Tool_2__BP-emergent_sRNAs__{self.out_file_suffix}.csv"))
+        # -- Convergent regulation of iron ion transport
+        mask = (df['num_strains_sRNAs'] >= 5) & (df['BP-emergent_lineage-specific_sRNAs'].apply(lambda x: sorted(ast.literal_eval(x).keys()) == ['pseudomonas', 'vibrio']))
+        relevant_bp_clusters = df[mask]['bp_cluster_id'].unique()
+        num_relevant = len(relevant_bp_clusters)
+        num_relevant_not_singletons = len(df[(df['bp_cluster_id'].isin(relevant_bp_clusters)) & (df['bp_id'] == 0)])
+
+        # -- Lineage-specific Functional Specialization of Bacterial sRNA Networks 
+        # --- by sRNA
+        mask = (df['associated_sRNAs'].apply(lambda x: 'vibrio' in sorted(ast.literal_eval(x).keys())) & df['num_strains_sRNAs'] == 1)
+        relevant_bp_clusters = df[mask]['bp_cluster_id'].unique()
+        num_relevant = len(relevant_bp_clusters)
+        num_relevant_not_singletons = len(df[(df['bp_cluster_id'].isin(relevant_bp_clusters)) & (df['bp_id'] == 0)])
+        # --- by mRNA
+        mask = (df['associated_sRNAs'].apply(lambda x: sorted(ast.literal_eval(x).keys()) == ['vibrio']))
+        relevant_bp_clusters = df[mask]['bp_cluster_id'].unique()
+        num_relevant = len(relevant_bp_clusters)
+        num_relevant_not_singletons = len(df[(df['bp_cluster_id'].isin(relevant_bp_clusters)) & (df['bp_id'] == 0)])
 
     def _dump_bps_of_annotated_mrnas(self):
         # 1 - Find all BP nodes that are annotated to at least one mRNA
