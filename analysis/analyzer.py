@@ -967,53 +967,6 @@ class Analyzer:
                 f"  Number of unique BPs: {strain_to_info[strain]['num_bp_nodes']} \n"
                 f"  & {len(strain_to_rnas[strain]['srnas'])} & {len(strain_to_rnas[strain]['mrnas'])} & {strain_to_info[strain]['num_mrna_bp_edges']} & {strain_to_info[strain]['num_bp_nodes']}"
             )
-        
-    # def _get_orthologs_clusters(self, rna_list: List[str], rna_str: str) -> List[Tuple[str]]:
-    #     """
-    #     for each RNA in rna_list, find its orthologs cluster from homologs_df['cluster'].
-
-    #     Args:
-    #         rna_list (list): [<RNA_id1>, <RNA_id2>, ...]
-    #     """
-
-    #     homologs_df = self.srna_homologs if rna_str == 'sRNA' else self.mrna_homologs
-
-    #     orthologs_clusters = []
-    #     for rna in rna_list:
-    #         # find the cluster that contains this RNA
-    #         for cluster in homologs_df['cluster']:
-    #             cluster = cluster if type(cluster) == tuple else ast.literal_eval(cluster)
-    #             if rna in cluster:
-    #                 orthologs_clusters.append(tuple(sorted(cluster)))
-    #                 break
-
-    #     return sorted(set(orthologs_clusters))
-
-    # def _find_homologs(self, strain_to_rna_list: Dict[str, List[str]], rna_str: str) -> List[Tuple[str]]:
-    #     """
-    #     For each cluster in homologs_df['cluster'], find which RNAs from strain_to_rna_list are homologs, i.e., belong to the same cluster.
-
-    #     Args:
-    #         strain_to_rna_list (dict): A dictionary in the following format:
-    #         {
-    #             <strain_id>: [<RNA_id1>, <RNA_id2>, ...],
-    #             ...
-    #         }
-    #     """
-    #     homologs_df = self.srna_homologs if rna_str == 'sRNA' else self.mrna_homologs
-    #     # Flatten all RNAs from strain_to_rna_list
-    #     all_rnas = set()
-    #     for rna_list in strain_to_rna_list.values():
-    #         all_rnas.update(rna_list)
-    #     # Iterate over clusters
-    #     all_rna_homologs = []
-    #     for cluster in homologs_df['cluster']:
-    #         cluster = cluster if type(cluster) == tuple else ast.literal_eval(cluster)
-    #         # Find intersection with all_rnas
-    #         rna_orthologs = tuple(sorted(set(cluster).intersection(all_rnas)))
-    #         if len(rna_orthologs) > 1:
-    #             all_rna_homologs.append(rna_orthologs)
-    #     return sorted(set(all_rna_homologs))
     
     def _find_homolog_targets(self, all_targets: Set[str], rna_str: str) -> Tuple[List[Tuple[str]], List[str]]:
         """
@@ -1083,7 +1036,7 @@ class Analyzer:
             if strain not in d:
                 d[strain] = []
             d[strain].append(f"{rna}__{self.G.nodes[rna]['name']}")
-        d = dict(sorted({strain: sorted(rnas) for strain, rnas in d.items()}.items()))
+        d = {strain: sorted(d[strain]) for strain in self.U.strains if strain in d}
         return d
     
     def _analyze_targets_of_specific_srnas(self, strain_dict, specific_srnas: List[str]) -> Tuple[dict, dict]:
@@ -1121,6 +1074,7 @@ class Analyzer:
             dict: tree of BP-emergent sRNAs
             dict: info
         """
+        strain_dict = {strain: strain_dict[strain] for strain in self.U.strains if strain in strain_dict}
         strains = sorted(strain_dict.keys())
         num_strains = len(strains)
 
@@ -1146,13 +1100,13 @@ class Analyzer:
 
         num_strains_associated_srnas = len([s for s in strains if num_associated_sRNAs.get(s)])
         bp_emergent_srnas_lst = self._get_bp_emergent_srnas(all_bp_associated_srnas, srna_clusters)
-        num_bp_emergent_srnas = len(bp_emergent_srnas_lst)
         bp_emergent_srnas = self._add_strains_n_names_to_rnas(bp_emergent_srnas_lst)
+        num_bp_emergent_srnas = {strain: len(srnas) for strain, srnas in bp_emergent_srnas.items()}.update({"all": len(bp_emergent_srnas_lst)})
         
         bp_emergent_srnas_no_orthologs_lst = sorted(set(bp_emergent_srnas_lst).intersection(set(srnas_no_orthologs)))
         assert bp_emergent_srnas_no_orthologs_lst == sorted(set(all_bp_associated_srnas).intersection(set(srnas_no_orthologs)))
-        num_bp_emergent_srnas_no_orthologs = len(bp_emergent_srnas_no_orthologs_lst)
         bp_emergent_srnas_no_orthologs = self._add_strains_n_names_to_rnas(bp_emergent_srnas_no_orthologs_lst)
+        num_bp_emergent_srnas_no_orthologs = {strain: len(srnas) for strain, srnas in bp_emergent_srnas_no_orthologs.items()}.update({"all": len(bp_emergent_srnas_no_orthologs_lst)})
 
         info = {
             'num_annotated_mRNAs': num_annotated_mRNAs,
@@ -1271,7 +1225,10 @@ class Analyzer:
         write_df(df, join(self.out_path_analysis_tool_2, f"BP-to-sRNA__Output__{self.out_file_suffix}.csv"))
 
     def _bp_clustering_effect_on_bp_emergent_srnas(self, field: str):
-        df = read_df(join(self.out_path_analysis_tool_2, f"BP-to-sRNA__Output__{self.out_file_suffix}.csv"))
+        out_file_suffix = 'v_k12_curated_ips_w_Enrichment'
+        # out_file_suffix = 'v_k12_curated_ips'
+        self.logger.info(f"---> {out_file_suffix} - bp_clustering_effect_on_bp_emergent_srnas")
+        df = read_df(join(self.out_path_analysis_tool_2, f"BP-to-sRNA__Output__{out_file_suffix}.csv"))
         
         # ------------------- BP-emergent sRNAs stats -------------------
         num_bp_clusters = len(df['bp_cluster_id'].unique())
@@ -1311,24 +1268,29 @@ class Analyzer:
         self.logger.info(f"out of {num_clusters} BP-clusters (size > 1), in {len(clusters_less_than_union)} BP-clusters the number of {field} (in some or all strains) is less than the union of {field} of the BPs in the cluster.")
 
     def _specific_examples(self):
-        df = read_df(join(self.out_path_analysis_tool_2, f"BP-to-sRNA__Output__{self.out_file_suffix}.csv"))
+        # out_file_suffix = 'v_k12_curated_ips_w_Enrichment'
+        out_file_suffix = 'v_k12_curated_ips'
+        df = read_df(join(self.out_path_analysis_tool_2, f"BP-to-sRNA__Output__{out_file_suffix}.csv"))
         # -- Convergent regulation of iron ion transport
         mask = (df['num_strains_sRNAs'] >= 5) & (df['BP-emergent_lineage-specific_sRNAs'].apply(lambda x: sorted(ast.literal_eval(x).keys()) == ['pseudomonas', 'vibrio']))
         relevant_bp_clusters = df[mask]['bp_cluster_id'].unique()
         num_relevant = len(relevant_bp_clusters)
+
         num_relevant_not_singletons = len(df[(df['bp_cluster_id'].isin(relevant_bp_clusters)) & (df['bp_go_id'] == 0)])
 
         # -- Lineage-specific Functional Specialization of Bacterial sRNA Networks 
-        # --- by sRNA
-        mask = (df['associated_sRNAs'].apply(lambda x: 'vibrio' in sorted(ast.literal_eval(x).keys())) & df['num_strains_sRNAs'] == 1)
-        relevant_bp_clusters = df[mask]['bp_cluster_id'].unique()
+        # --- by sRNA, vibrio only
+        mask_srna_v = df['associated_sRNAs'].apply(lambda x: list(ast.literal_eval(x).keys()) == ['vibrio'])
+        relevant_bp_clusters = df[mask_srna_v]['bp_cluster_id'].unique()
+        df_tmp = df[(df['bp_cluster_id'].isin(relevant_bp_clusters))]
         num_relevant = len(relevant_bp_clusters)
         num_relevant_not_singletons = len(df[(df['bp_cluster_id'].isin(relevant_bp_clusters)) & (df['bp_go_id'] == 0)])
-        # --- by mRNA
-        mask = (df['associated_sRNAs'].apply(lambda x: sorted(ast.literal_eval(x).keys()) == ['vibrio']))
+        # --- by mRNA and sRNA vibrio only
+        mask_mrna_v = df['strains_mRNAs'].apply(lambda x: ast.literal_eval(x) == ['vibrio'])
+        mask = mask_srna_v & mask_mrna_v
         relevant_bp_clusters = df[mask]['bp_cluster_id'].unique()
-        num_relevant = len(relevant_bp_clusters)
-        num_relevant_not_singletons = len(df[(df['bp_cluster_id'].isin(relevant_bp_clusters)) & (df['bp_go_id'] == 0)])
+        df_tmp2 = df[(df['bp_cluster_id'].isin(relevant_bp_clusters))]
+        num_relevant = len(relevant_bp_clusters)        
 
     def _dump_bps_of_annotated_mrnas(self):
         # 1 - Find all BP nodes that are annotated to at least one mRNA
