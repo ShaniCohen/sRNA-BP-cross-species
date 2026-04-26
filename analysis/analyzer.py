@@ -1075,7 +1075,7 @@ class Analyzer:
             dict: info
         """
         strain_dict = {strain: strain_dict[strain] for strain in self.U.strains if strain in strain_dict}
-        strains = sorted(strain_dict.keys())
+        strains = list(strain_dict.keys())
         num_strains = len(strains)
 
         tree = {}
@@ -1101,12 +1101,14 @@ class Analyzer:
         num_strains_associated_srnas = len([s for s in strains if num_associated_sRNAs.get(s)])
         bp_emergent_srnas_lst = self._get_bp_emergent_srnas(all_bp_associated_srnas, srna_clusters)
         bp_emergent_srnas = self._add_strains_n_names_to_rnas(bp_emergent_srnas_lst)
-        num_bp_emergent_srnas = {strain: len(srnas) for strain, srnas in bp_emergent_srnas.items()}.update({"all": len(bp_emergent_srnas_lst)})
+        num_bp_emergent_srnas = {strain: len(srnas) for strain, srnas in bp_emergent_srnas.items()}
+        num_bp_emergent_srnas.update({"all": len(bp_emergent_srnas_lst)})
         
         bp_emergent_srnas_no_orthologs_lst = sorted(set(bp_emergent_srnas_lst).intersection(set(srnas_no_orthologs)))
         assert bp_emergent_srnas_no_orthologs_lst == sorted(set(all_bp_associated_srnas).intersection(set(srnas_no_orthologs)))
         bp_emergent_srnas_no_orthologs = self._add_strains_n_names_to_rnas(bp_emergent_srnas_no_orthologs_lst)
-        num_bp_emergent_srnas_no_orthologs = {strain: len(srnas) for strain, srnas in bp_emergent_srnas_no_orthologs.items()}.update({"all": len(bp_emergent_srnas_no_orthologs_lst)})
+        num_bp_emergent_srnas_no_orthologs = {strain: len(srnas) for strain, srnas in bp_emergent_srnas_no_orthologs.items()}
+        num_bp_emergent_srnas_no_orthologs.update({"all": len(bp_emergent_srnas_no_orthologs_lst)})
 
         info = {
             'num_annotated_mRNAs': num_annotated_mRNAs,
