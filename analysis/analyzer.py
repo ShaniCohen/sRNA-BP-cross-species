@@ -110,29 +110,27 @@ class Analyzer:
             self._dump_stats_rna_homolog_clusters_strains_composition(val_type = 'ratio', min_val_limit = 0.020)
 
         # 4 - Map sRNAs to biological processes (BPs)
-        # 4.1 - extract subgraphs
+        # 4.1 - extract subgraph G hat
         srna_bp_mapping = self._generate_srna_bp_mapping()
+        
+        # 5 - Enrichment (per strain): per sRNA, find and keep only significant biological processes (BPs) that its targets are invovlved in.
+        if self.run_enrichment:
+            # 5.1 - extract subgraph G hat
+            srna_bp_mapping, meta_en = self._apply_enrichment(srna_bp_mapping)
+            # 5.2 - log and dump
+            self.logger.info(f"--------------   Enrichment Results   --------------")
+            self._dump_metadata(meta_en)
+
+        # 4.2 - extract subgraph G tilde
         bp_rna_mapping = self._generate_bp_rna_mapping(srna_bp_mapping)
-        # 4.2 - log
+        # 4.3 - log
         self._log_srna_bp_mapping(srna_bp_mapping)
         self._log_bp_rna_mapping(bp_rna_mapping)
 
-        # 5 - run Wang similarity on all BPs
+        # 6 - run Wang similarity on all BPs
         bp_to_cluster, cluster_to_bps = self._run_wang_similarity_between_bps(bp_rna_mapping)
         self._log_bp_clustering_stats(bp_to_cluster)
-        
-        # 6 - Enrichment (per strain): per sRNA, find and keep only significant biological processes (BPs) that its targets are invovlved in.
-        if self.run_enrichment:
-            # 6.1 - extract subgraphs
-            srna_bp_mapping_en, meta_en = self._apply_enrichment(srna_bp_mapping)
-            bp_rna_mapping_en = self._generate_bp_rna_mapping(srna_bp_mapping_en)
-            # 6.2 - log and dump
-            self.logger.info(f"--------------   Enrichment Results   --------------")
-            self._log_srna_bp_mapping(srna_bp_mapping_en)
-            self._dump_metadata(meta_en)
-            # 6.3 - update mappings for further analysis
-            srna_bp_mapping = srna_bp_mapping_en
-            bp_rna_mapping = bp_rna_mapping_en
+
 
         self.logger.info(f"--------------   Analysis Tools   --------------")
         # ------   Analysis 1 - Cross-Species Conservation of sRNAs' Functionality
@@ -1051,7 +1049,7 @@ class Analyzer:
                     targets.add(mrna)
 
         homolog_clusters_of_targets, _ = self._find_homolog_targets(targets, 'mRNA')
-        targets = sorted([f"{self.G.nodes[t]['strain']}__{t}" for t in targets])
+        targets = sorted([f"{self.G.nodes[t]['strain']}__{self.G.nodes[t]['name']}" for t in targets])
 
         return tree, targets, homolog_clusters_of_targets
 
@@ -1227,14 +1225,12 @@ class Analyzer:
         write_df(df, join(self.out_path_analysis_tool_2, f"BP-to-sRNA__Output__{self.out_file_suffix}.csv"))
 
     def _bp_clustering_effect_on_bp_emergent_srnas(self, field: str):
-        out_file_suffix = 'v_k12_curated_ips_w_Enrichment'
-        # out_file_suffix = 'v_k12_curated_ips'
-        self.logger.info(f"---> {out_file_suffix} - bp_clustering_effect_on_bp_emergent_srnas")
-        df = read_df(join(self.out_path_analysis_tool_2, f"BP-to-sRNA__Output__{out_file_suffix}.csv"))
+        df = read_df(join(self.out_path_analysis_tool_2, f"BP-to-sRNA__Output__{self.out_file_suffix}.csv"))
+        self.logger.info(f"{self.out_file_suffix} - bp_clustering_effect_on {field}")
         
         # ------------------- BP-emergent sRNAs stats -------------------
         num_bp_clusters = len(df['bp_cluster_id'].unique())
-        num_bp_clusters_with_emergent_srnas = len(df[df[f'num_{field}'] > 0]['bp_cluster_id'].unique())
+        num_bp_clusters_with_emergent_srnas = len(df[df[f'num_strains_{field}'] > 0]['bp_cluster_id'].unique())
         self.logger.info(f"out of {num_bp_clusters} BP-clusters, {num_bp_clusters_with_emergent_srnas} ({num_bp_clusters_with_emergent_srnas/num_bp_clusters*100:.2f}%) include a BP ID with {field}.")
 
         # ------------------- clustering effect on BP-emergent sRNAs -------------------
@@ -1261,7 +1257,7 @@ class Analyzer:
                 c_srnas = c_dict.get(strain, [])
                 u_srnas = u_dict.get(strain, [])
                 if len(c_srnas) < len(u_srnas):
-                    self.logger.info(f"NOTE!  cluster id {cluster_id}: strain {strain}. removed {set(u_srnas) - set(c_srnas)}")
+                    # self.logger.info(f"NOTE!  cluster id {cluster_id}: strain {strain}. removed {set(u_srnas) - set(c_srnas)}")
                     clusters_less_than_union.add(cluster_id)
                 elif set(c_srnas) == set(u_srnas):
                     continue
@@ -1270,9 +1266,9 @@ class Analyzer:
         self.logger.info(f"out of {num_clusters} BP-clusters (size > 1), in {len(clusters_less_than_union)} BP-clusters the number of {field} (in some or all strains) is less than the union of {field} of the BPs in the cluster.")
 
     def _specific_examples(self):
-        # out_file_suffix = 'v_k12_curated_ips_w_Enrichment'
-        out_file_suffix = 'v_k12_curated_ips'
-        df = read_df(join(self.out_path_analysis_tool_2, f"BP-to-sRNA__Output__{out_file_suffix}.csv"))
+        df = read_df(join(self.out_path_analysis_tool_2, f"BP-to-sRNA__Output__{self.out_file_suffix}.csv"))
+        self.logger.info(f"{self.out_file_suffix} - specific examples")
+
         # -- Convergent regulation of iron ion transport
         mask = (df['num_strains_sRNAs'] >= 5) & (df['BP-emergent_lineage-specific_sRNAs'].apply(lambda x: sorted(ast.literal_eval(x).keys()) == ['pseudomonas', 'vibrio']))
         relevant_bp_clusters = df[mask]['bp_cluster_id'].unique()
