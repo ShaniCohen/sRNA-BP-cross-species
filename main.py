@@ -14,7 +14,6 @@ from analysis.analyzer import Analyzer
 import logging
 logging.basicConfig(level=logging.DEBUG, stream=sys.stdout, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-# from utils.logger import create_logger
 
 
 ROOT_PATH = os.path.realpath(os.path.dirname(__file__))  # the root of the repository
@@ -23,12 +22,10 @@ if ROOT_PATH not in sys.path:
 print(f"\nROOT_PATH: {ROOT_PATH}")
 
 
-class AnalysisRunner:
+class Pipeline:
     def __init__(self, version: str, config_path: str):
-        print(f"running main, version = {version}")
-        # self.logger = create_logger(logger_nm='AnalysisRunner')
         self.logger = logger
-        self.logger.info(f"initializing AnalysisRunner, version = {version}")
+        self.logger.info(f"initializing Pipeline, version = {version}")
         self.version = version
 
         # load & update configurations on-the-fly
@@ -55,7 +52,7 @@ class AnalysisRunner:
         for _dir in ['analysis_output_dir']:
             configs['analyzer'][_dir] = join(configs['runner']['output_data_path'], configs['analyzer'][_dir])
         self.configs = configs
-
+    
     def run(self):
         self.logger.info(f"--------------   run starts   --------------")
 
@@ -79,5 +76,5 @@ class AnalysisRunner:
 
 if __name__ == "__main__":
     config_path = os.path.join(ROOT_PATH, 'configurations', 'config.json')
-    analysis_runner = AnalysisRunner(version='0.0.1', config_path=config_path)
-    analysis_runner.run()
+    pipeline = Pipeline(version='0.0.1', config_path=config_path)
+    pipeline.run()
