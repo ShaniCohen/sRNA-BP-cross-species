@@ -44,8 +44,8 @@ class Analyzer:
         self.U = graph_utils
 
         # ---------  RUNTIME FLAGS  ---------
-        self.run_clustering_of_rna_homologs = False        # Chapter 4.3.3: Clustering of RNA Homologs Across Multiple Strains
-        self.run_clustering_of_rna_paralogs_only = False   # Chapter 4.3.3: Clustering of RNA Homologs Across Multiple Strains
+        self.run_clustering_of_rna_homologs = True        # Chapter 4.3.3: Clustering of RNA Homologs Across Multiple Strains
+        self.run_clustering_of_rna_paralogs_only = True   # Chapter 4.3.3: Clustering of RNA Homologs Across Multiple Strains
 
         self.run_homolog_clusters_stats = True            # Chapter 4.3.3: Clustering of RNA Homologs Across Multiple Strains
         

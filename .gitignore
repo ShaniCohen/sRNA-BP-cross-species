@@ -107,3 +107,5 @@ ENV/
 .vscode/
 **/_logs/** */
 condaenv.39kyamrz.requirements.txt
+.obo
+.png
