@@ -47,6 +47,9 @@ class Pipeline:
         #   output dirs
         for _dir in ['analysis_output_dir']:
             configs['analyzer'][_dir] = join(configs['runner']['output_data_path'], configs['analyzer'][_dir])
+        #   add ontology info
+        configs['analyzer'].update(configs['ontology'])
+
         self.configs = configs
     
     def run(self):

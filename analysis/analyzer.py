@@ -309,7 +309,9 @@ class Analyzer:
         
         # load and verify go DAG for wang
         self.logger.debug("loading GO DAG for Wang similarity...")
-        godag = get_godag("go-basic.obo", optional_attrs={'relationship'})
+        # gene_ontology_obo_file = "go-basic.obo"
+        gene_ontology_obo_file = join(self.config['gene_ontology_dir'], self.config['gene_ontology_obo_file'])
+        godag = get_godag(gene_ontology_obo_file, optional_attrs={'relationship'})
         for bp in bp_rna_mapping.keys():
             assert self.G.nodes[bp]['lbl'] == godag[f"GO:{bp}"].name, f"GO term name mismatch for {bp}: {self.G.nodes[bp]['lbl']} != {godag[f'GO:{bp}'].name}"
         # Optional relationships. (Relationship, is_a, is required and always used)

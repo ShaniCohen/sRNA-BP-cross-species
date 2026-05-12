@@ -28,7 +28,8 @@
   },
   "ontology": {
     "gene_ontology_dir": "gene_ontology",
-    "gene_ontology_json_file": "go-basic.json"
+    "gene_ontology_json_file": "go-basic.json",
+    "gene_ontology_obo_file": "go-basic.obo"
   },
   "graph_utils": {
   },
