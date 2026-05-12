@@ -44,9 +44,6 @@ pytz==2025.2
 pyvis==0.3.2
 requests==2.32.4
 rich==14.1.0
-rpy2==3.6.4
-rpy2-rinterface==3.6.3
-rpy2-robjects==3.6.3
 scipy==1.16.1
 setuptools==80.0.0
 six==1.17.0
