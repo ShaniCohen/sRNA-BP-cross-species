@@ -41,6 +41,7 @@ class Analyzer:
         # graph and utils
         self.graph_version = graph_builder.get_version()
         self.G = graph_builder.get_graph()
+        self.G_rnd = graph_builder.get_random_graph(seed=42)
         self.U = graph_utils
 
         # ---------  RUNTIME FLAGS  ---------
@@ -313,7 +314,7 @@ class Analyzer:
         gene_ontology_obo_file = join(self.config['gene_ontology_dir'], self.config['gene_ontology_obo_file'])
         godag = get_godag(gene_ontology_obo_file, optional_attrs={'relationship'})
         for bp in bp_rna_mapping.keys():
-            assert self.G.nodes[bp]['lbl'] == godag[f"GO:{bp}"].name, f"GO term name mismatch for {bp}: {self.G.nodes[bp]['lbl']} != {godag[f'GO:{bp}'].name}"
+            assert self.G.nodes[bp]['lbl'] == godag[f"GO:{bp}"].name, f"GO term name mismatch for {bp}: {self.G.nodes[bp]['lbl']} != {godag[f'GO:{bp}'].name}. Please check the compatibility of the GO DAG input file (go-basic.obo) with go-basic.json input."
         # Optional relationships. (Relationship, is_a, is required and always used)
         relationships = {'part_of'}
 

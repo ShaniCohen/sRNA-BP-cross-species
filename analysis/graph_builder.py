@@ -84,6 +84,63 @@ class GraphBuilder:
         if not self.graph_is_built:
             raise Exception("Graph is not built yet. Please call build_graph() first.")
         return self.G
+
+    def get_random_graph(self, seed: int) -> nx.MultiDiGraph:
+        """Return a copy of the built graph where sRNA->mRNA interaction edges
+        (edges with type == self.U.targets) are randomly resampled within each
+        strain while preserving every sRNA's number of targets (degree).
+
+        - All non sRNA->mRNA edges and all node attributes are preserved.
+        - Sampling is done per-strain: each sRNA is assigned random mRNA
+          targets from the pool of mRNAs that belong to the same strain.
+        - If a sRNA's original number of targets is larger than the available
+          mRNAs, sampling is done with replacement to preserve degree.
+
+        Args:
+            seed: optional random seed for reproducibility.
+
+        Returns:
+            A new ``nx.MultiDiGraph`` with randomized sRNA->mRNA interactions.
+        """
+        if not self.graph_is_built:
+            raise Exception("Graph is not built yet. Please call build_graph() first.")
+
+        # RNG
+        rng = np.random.RandomState(seed)
+
+        # shallow copy of graph structure & attributes; we'll modify target edges
+        G_new = self.G.copy()
+
+        # For each strain, collect sRNAs and mRNAs
+        for strain in self.U.strains:
+            srna_nodes = [n for n, d in self.G.nodes(data=True) if d['type'] == self.U.srna and d['strain'] == strain]
+            mrna_nodes = [n for n, d in self.G.nodes(data=True) if d['type'] == self.U.mrna and d['strain'] == strain]
+
+            for srna in srna_nodes:
+                # count original targets (edges from srna to mrna with type == targets)
+                orig_targets = [nbr for nbr in self.G[srna] if self.U.is_target(self.G, srna, nbr)]
+                deg = len(orig_targets)
+
+                # remove existing target edges in the new graph for this srna
+                if G_new.has_node(srna):
+                    for nbr in list(G_new[srna].keys()):
+                        for k in list(G_new[srna][nbr].keys()):
+                            if G_new[srna][nbr][k].get('type') == self.U.targets:
+                                G_new.remove_edge(srna, nbr, k)
+
+                if deg == 0:
+                    continue
+
+                # sample new targets from available mRNAs in the same strain
+                pool = mrna_nodes
+                replace = deg > len(pool)
+                sampled = list(rng.choice(pool, size=deg, replace=replace))
+
+                # add the new target edges
+                for mrna in sampled:
+                    G_new = self.U.add_edge_srna_mrna_inter(G_new, srna, mrna)
+
+        return G_new
     
     def get_ips_go_annotations(self) -> Dict[str, pd.DataFrame]:
         out = {}
@@ -307,58 +364,58 @@ class GraphBuilder:
         # 3 - add PO2Vec-based clusters to BP nodes & dump csv
         self._add_po2vec_clusters_to_bp_nodes_n_dump_csv(bp_to_po2vec_cluster)
 
-    def _run_wang_w_goatools(self):
+    # def _run_wang_w_goatools(self):
 
-        from goatools.base import get_godag
-        from goatools.semsim.termwise.wang import SsWang
+    #     from goatools.base import get_godag
+    #     from goatools.semsim.termwise.wang import SsWang
 
-        print("start")
-        godag = get_godag("go-basic.obo", optional_attrs={'relationship'})
-        # https://github.com/tanghaibao/goatools/blob/main/notebooks/semantic_similarity_wang.ipynb
+    #     print("start")
+    #     godag = get_godag("go-basic.obo", optional_attrs={'relationship'})
+    #     # https://github.com/tanghaibao/goatools/blob/main/notebooks/semantic_similarity_wang.ipynb
         
-        # Researcher-provided GO terms related to smell
-        go_a = 'GO:0007608'
-        go_b = 'GO:0050911'
-        go_c = 'GO:0042221'
-        goids = {go_a, go_b, go_c}
+    #     # Researcher-provided GO terms related to smell
+    #     go_a = 'GO:0007608'
+    #     go_b = 'GO:0050911'
+    #     go_c = 'GO:0042221'
+    #     goids = {go_a, go_b, go_c}
 
-        # Annotations for plotting
-        go2txt = {
-            go_a:'GO TERM A',
-            go_b:'GO TERM B',
-            go_c:'GO TERM C'}
+    #     # Annotations for plotting
+    #     go2txt = {
+    #         go_a:'GO TERM A',
+    #         go_b:'GO TERM B',
+    #         go_c:'GO TERM C'}
 
-        # Optional relationships. (Relationship, is_a, is required and always used)
-        relationships = {'part_of'}
+    #     # Optional relationships. (Relationship, is_a, is required and always used)
+    #     relationships = {'part_of'}
         
-        wang_r1 = SsWang(goids, godag, relationships)
-        pairs = [(go_a, go_b), (go_a, go_c), (go_b, go_c)]
-        for go1, go2 in pairs:
-            sim = wang_r1.get_sim(go1, go2)
-            self.logger.info(f"\n {go1} {godag[go1].name} \n {go2} {godag[go2].name} \n Wang similarity: {sim}")
+    #     wang_r1 = SsWang(goids, godag, relationships)
+    #     pairs = [(go_a, go_b), (go_a, go_c), (go_b, go_c)]
+    #     for go1, go2 in pairs:
+    #         sim = wang_r1.get_sim(go1, go2)
+    #         self.logger.info(f"\n {go1} {godag[go1].name} \n {go2} {godag[go2].name} \n Wang similarity: {sim}")
 
-        # from goatools.gosubdag.gosubdag import GoSubDag
-        # from goatools.gosubdag.plot.gosubdag_plot import GoSubDagPlot
+    #     # from goatools.gosubdag.gosubdag import GoSubDag
+    #     # from goatools.gosubdag.plot.gosubdag_plot import GoSubDagPlot
 
-        # r1_png = 'smell_r1.png'
-        # r1_gosubdag = GoSubDag(goids, godag, relationships)
+    #     # r1_png = 'smell_r1.png'
+    #     # r1_gosubdag = GoSubDag(goids, godag, relationships)
 
-        # GoSubDagPlot(r1_gosubdag, go2txt=go2txt).plt_dag(r1_png)
+    #     # GoSubDagPlot(r1_gosubdag, go2txt=go2txt).plt_dag(r1_png)
 
-        # from goatools.semantic import TermCounts, get_info_content, semantic_similarity
-        # from goatools.obo_parser import GODag
+    #     # from goatools.semantic import TermCounts, get_info_content, semantic_similarity
+    #     # from goatools.obo_parser import GODag
 
-        # obo_dag = GODag("go-basic.obo")
-        # # termcounts = TermCounts(obo_dag, assoc)
-        # go_id1 = "GO:0003677"
-        # go_id2 = "GO:0005524"
+    #     # obo_dag = GODag("go-basic.obo")
+    #     # # termcounts = TermCounts(obo_dag, assoc)
+    #     # go_id1 = "GO:0003677"
+    #     # go_id2 = "GO:0005524"
 
-        # # ic1 = get_info_content(go_id1, termcounts)
-        # # ic2 = get_info_content(go_id2, termcounts)
+    #     # # ic1 = get_info_content(go_id1, termcounts)
+    #     # # ic2 = get_info_content(go_id2, termcounts)
 
-        # sim = semantic_similarity(go_id1, go_id2, obo_dag, method='wang')
-        # print(f"Semantic similarity score (GOATools): {sim}")
-        print("end")
+    #     # sim = semantic_similarity(go_id1, go_id2, obo_dag, method='wang')
+    #     # print(f"Semantic similarity score (GOATools): {sim}")
+    #     print("end")
 
     
     def _add_po2vec_embeddings_to_bp_nodes(self) -> Dict[str, np.ndarray]:
