@@ -374,6 +374,112 @@ class GraphUtils:
     
     def get_short_strain_nm(self, strain_nm: str) -> str:
         return self.strain_nm_to_short[strain_nm]
+
+    def _compare_graphs(self, G1: nx.MultiDiGraph, G2: nx.MultiDiGraph, *, fail_fast: bool = False) -> Tuple[bool, dict]:
+        """Compare two graphs and verify:
+        - identical node sets and matching key attributes (`type`, and `strain` for RNA nodes)
+        - identical `annotated` mRNA->GO edges (compare set of `annot_type` per pair)
+        - same NUMBER of `targets` edges (outgoing count) per sRNA node
+
+        Returns:
+            (all_ok: bool, report: dict)
+
+        report keys: `missing_nodes`, `node_attr_mismatches`, `annotated_edge_mismatches`, `srna_targets_degree_mismatches`
+        """
+        report = {
+            'missing_nodes': {'in_G1_not_in_G2': [], 'in_G2_not_in_G1': []},
+            'node_attr_mismatches': [],
+            'annotated_edge_mismatches': [],
+            'srna_targets_degree_mismatches': []
+        }
+
+        # 1 - nodes
+        nodes1 = set(G1.nodes())
+        nodes2 = set(G2.nodes())
+        in1_not2 = sorted(list(nodes1 - nodes2))
+        in2_not1 = sorted(list(nodes2 - nodes1))
+        report['missing_nodes']['in_G1_not_in_G2'] = in1_not2
+        report['missing_nodes']['in_G2_not_in_G1'] = in2_not1
+        if fail_fast and (in1_not2 or in2_not1):
+            return False, report
+
+        # 2 - node attribute checks (type and strain for RNA)
+        common_nodes = nodes1 & nodes2
+        for n in sorted(common_nodes):
+            a1 = G1.nodes[n].get('type')
+            a2 = G2.nodes[n].get('type')
+            if a1 != a2:
+                report['node_attr_mismatches'].append({'node': n, 'attr': 'type', 'G1': a1, 'G2': a2})
+                if fail_fast:
+                    return False, report
+            # check strain for RNA nodes
+            if a1 in [self.srna, self.mrna]:
+                s1 = G1.nodes[n].get('strain')
+                s2 = G2.nodes[n].get('strain')
+                if s1 != s2:
+                    report['node_attr_mismatches'].append({'node': n, 'attr': 'strain', 'G1': s1, 'G2': s2})
+                    if fail_fast:
+                        return False, report
+
+        # 3 - annotated edges: build mapping (mrna, go) -> set(annot_types)
+        def _collect_annotated(G):
+            m = {}
+            for u, v, data in G.edges(data=True):
+                if data.get('type') != self.annotated:
+                    continue
+                # ensure direction mRNA -> GO
+                if not G.has_node(u) or not G.has_node(v):
+                    continue
+                if G.nodes[u].get('type') != self.mrna or G.nodes[v].get('type') not in self.go_types:
+                    continue
+                annot = data.get('annot_type')
+                m.setdefault((u, v), set())
+                if annot is not None:
+                    m[(u, v)].add(annot)
+            return m
+
+        ann1 = _collect_annotated(G1)
+        ann2 = _collect_annotated(G2)
+        all_pairs = set(list(ann1.keys()) + list(ann2.keys()))
+        for pair in sorted(all_pairs):
+            s1 = ann1.get(pair, set())
+            s2 = ann2.get(pair, set())
+            if s1 != s2:
+                report['annotated_edge_mismatches'].append({'pair': pair, 'G1': s1, 'G2': s2})
+                if fail_fast:
+                    return False, report
+
+        # 4 - sRNA targets degree (outgoing count of edges with type == self.targets)
+        def _srna_targets_count(G):
+            counts = {}
+            for n, d in G.nodes(data=True):
+                if d.get('type') != self.srna:
+                    continue
+                c = 0
+                # iterate over successors to handle MultiDiGraph multiplicity
+                for succ in G.successors(n):
+                    # G[n][succ] is a dict of key->attr
+                    for _, ed in G[n][succ].items():
+                        if ed.get('type') == self.targets:
+                            c += 1
+                counts[n] = c
+            return counts
+
+        cnt1 = _srna_targets_count(G1)
+        cnt2 = _srna_targets_count(G2)
+        # compare for sRNAs present in both counts
+        for srna in sorted(set(list(cnt1.keys()) + list(cnt2.keys()))):
+            v1 = cnt1.get(srna, 0)
+            v2 = cnt2.get(srna, 0)
+            if v1 != v2:
+                report['srna_targets_degree_mismatches'].append({'srna': srna, 'G1_targets_count': v1, 'G2_targets_count': v2})
+                if fail_fast:
+                    return False, report
+
+        all_ok = not (report['missing_nodes']['in_G1_not_in_G2'] or report['missing_nodes']['in_G2_not_in_G1'] or
+                      report['node_attr_mismatches'] or report['annotated_edge_mismatches'] or report['srna_targets_degree_mismatches'])
+
+        return all_ok, report
     
     # def get_common_bps(self, bps1: List[str], bps2: List[str]) -> List[str]:
     #     return np.intersect1d(bps1, bps2).tolist()

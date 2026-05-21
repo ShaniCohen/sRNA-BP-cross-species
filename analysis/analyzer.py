@@ -41,8 +41,11 @@ class Analyzer:
         # graph and utils
         self.graph_version = graph_builder.get_version()
         self.G = graph_builder.get_graph()
-        self.G_rnd = graph_builder.get_random_graph(seed=42)
         self.U = graph_utils
+
+        # self.G_rnd = graph_builder.get_random_graph(seed=42)
+        # res, report = self.U._compare_graphs(self.G, self.G_rnd)
+        # print(f"********************************  Graph comparison: {res}")
 
         # ---------  RUNTIME FLAGS  ---------
         self.run_clustering_of_rna_homologs = True        # Chapter 4.3.3: Clustering of RNA Homologs Across Multiple Strains
