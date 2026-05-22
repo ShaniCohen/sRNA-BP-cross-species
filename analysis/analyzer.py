@@ -570,10 +570,11 @@ class Analyzer:
             sub_df = sub_df.sort_values(by=['subgroup_size', 'subgroup_num_strains'], ascending=False).reset_index(drop=True)
             sub_df[self.srna_subgroup_id_col] = sub_df.index + 1
             # dump tree of each subgroup (and remove col from df)
-            for i, row in sub_df.iterrows():
-                with open(join(self.out_path_analysis_tool_1_trees, f"sRNA-to-BP__Mappings__Cluster_{cluster_id}__Subgroup_{row[self.srna_subgroup_id_col]}.json"), 'w') as f:
-                    tree_w_meta = self._add_metadata_to_tree(row[self.srna_subgroup_tree_col])
-                    json.dump(tree_w_meta, f, indent=4, sort_keys=False)
+            if not self.random_seed:
+                for i, row in sub_df.iterrows():
+                    with open(join(self.out_path_analysis_tool_1_trees, f"sRNA-to-BP__Mappings__Cluster_{cluster_id}__Subgroup_{row[self.srna_subgroup_id_col]}.json"), 'w') as f:
+                        tree_w_meta = self._add_metadata_to_tree(row[self.srna_subgroup_tree_col])
+                        json.dump(tree_w_meta, f, indent=4, sort_keys=False)
             sub_df = sub_df[[self.srna_subgroup_id_col] + [c for c in sub_df.columns if c not in [self.srna_subgroup_id_col, self.srna_subgroup_tree_col]]]
             # merge with out df
             out_df = pd.concat([out_df, sub_df], ignore_index=True)
