@@ -24,7 +24,7 @@ if ROOT_PATH not in sys.path:
     sys.path.append(ROOT_PATH)
 
 class Analyzer:
-    def __init__(self, config, logger, graph_builder, graph_utils):
+    def __init__(self, config, logger, graph_builder, graph_utils, random_seed: int = None):
         """
         GO node is represented as a dict item:
             <id_str> : {'type': <str>, 'lbl': <str>, 'meta': <dict>}
@@ -38,20 +38,18 @@ class Analyzer:
         self.config = config
         self.bp_clustering_config = self.config['bp_clustering_config']
         
-        # graph and utils
+        # UTILS
+        self.U = graph_utils
+        
+        # GRAPH
         self.graph_version = graph_builder.get_version()
         self.G = graph_builder.get_graph()
-        self.U = graph_utils
-
-        # self.G_rnd = graph_builder.get_random_graph(seed=42)
-        # res, report = self.U._compare_graphs(self.G, self.G_rnd)
-        # print(f"********************************  Graph comparison: {res}")
 
         # ---------  RUNTIME FLAGS  ---------
-        self.run_clustering_of_rna_homologs = True        # Chapter 4.3.3: Clustering of RNA Homologs Across Multiple Strains
-        self.run_clustering_of_rna_paralogs_only = True   # Chapter 4.3.3: Clustering of RNA Homologs Across Multiple Strains
+        self.run_clustering_of_rna_homologs = True      
+        self.run_clustering_of_rna_paralogs_only = True
 
-        self.run_homolog_clusters_stats = True            # Chapter 4.3.3: Clustering of RNA Homologs Across Multiple Strains
+        self.run_homolog_clusters_stats = True
         
         # ---------  CONFIGURATIONS  ---------
         self.run_enrichment = self.config['run_enrichment']
@@ -65,25 +63,33 @@ class Analyzer:
         self.out_path_clustering_homologs = create_dir_if_not_exists(join(parent_dir, "Clustering_homologs"))
         self.out_path_clustering_paralogs_only = create_dir_if_not_exists(join(parent_dir, "Clustering_paralogs_only"))
         self.out_path_rna_homologs_multi_strains = create_dir_if_not_exists(join(parent_dir, "RNA_homologs_multi_strains"))
-        if self.run_enrichment:
-            self.out_path_enrichment_metadata = create_dir_if_not_exists(join(parent_dir, "Enrichment_metadata"))
-        self.out_path_summary_tables = create_dir_if_not_exists(join(parent_dir, "Summary_tables"))
-        self.out_path_analysis_tool_1 = create_dir_if_not_exists(join(parent_dir, "Analysis_tool_1"))
-        self.out_path_analysis_tool_1_trees = create_dir_if_not_exists(join(self.out_path_analysis_tool_1, "sRNA_subgroups_trees"))
-        self.out_path_analysis_tool_2 = create_dir_if_not_exists(join(parent_dir, "Analysis_tool_2"))
-        self.out_path_analysis_tool_2_trees = create_dir_if_not_exists(join(self.out_path_analysis_tool_2, "BP_clusters_trees"))
 
         # file names suffix
         self.out_file_suffix = f"v_{conf_str}"
-        
+
         # analysis 1 params
         self.srna_cluster_id_col = 'srna_homologs_cluster_id'
         self.srna_subgroup_id_col = 'subgroup_id'
         self.srna_subgroup_tree_col = 'subgroup_tree'
 
-        # TODO: remove after testing
-        self.strains_data = graph_builder.strains_data
-        self.ips_go_annotations = graph_builder.get_ips_go_annotations()
+        # ---------  RANDOM GRAPH MODE  ---------        
+        self.random_seed = random_seed
+        if self.random_seed is not None:
+            self.logger.info(f"Generating random graph with seed {self.random_seed} for p-value calculation...")
+            G_rnd = graph_builder.get_random_graph(seed=self.random_seed)
+            res, report = self.U._compare_graphs(self.G, G_rnd)
+            print(f"********************************  Graph comparison: {res}")
+            
+            self.G = G_rnd
+            parent_dir = create_dir_if_not_exists(join(parent_dir, f"Random_graphs", f"seed_{self.random_seed}"))
+
+        if self.run_enrichment:
+            self.out_path_enrichment_metadata = create_dir_if_not_exists(join(parent_dir, "Enrichment_metadata"))
+        self.out_path_summary_tables = create_dir_if_not_exists(join(parent_dir, "Summary_tables"))
+        self.out_path_analysis_tool_1 = create_dir_if_not_exists(join(parent_dir, "Analysis_tool_1_sRNA_to_BP"))
+        self.out_path_analysis_tool_1_trees = create_dir_if_not_exists(join(self.out_path_analysis_tool_1, "sRNA_subgroups_trees"))
+        self.out_path_analysis_tool_2 = create_dir_if_not_exists(join(parent_dir, "Analysis_tool_2_BP_to_sRNA"))
+        self.out_path_analysis_tool_2_trees = create_dir_if_not_exists(join(self.out_path_analysis_tool_2, "BP_clusters_trees"))
 
     def run_analysis(self):
         """
@@ -137,17 +143,20 @@ class Analyzer:
 
 
         self.logger.info(f"--------------   Analysis Tools   --------------")
-        # ------   Analysis 1 - Cross-Species Conservation of sRNAs' Functionality
-        self._analysis_1_srna_homologs_to_commom_bps(srna_bp_mapping, bp_to_cluster)
-
-        # ------   Analysis 2 - sRNA Regulation of Biological Processes (BPs)
-        self._analysis_2_bp_rna_mapping(bp_rna_mapping, cluster_to_bps)
+        # ------   sRNA-to-BP
+        self.tool_1_srna_to_bp(srna_bp_mapping, bp_to_cluster)
+        # ------   BP-to-sRNA
+        self.tool_2_bp_to_srna(bp_rna_mapping, cluster_to_bps)
 
     def _cluster_rna_homologs(self):
+        if self.random_seed:
+            return
         self._cluster_homologs('sRNA', self.U.srna)
         self._cluster_homologs('mRNA', self.U.mrna)
     
     def _cluster_rna_paralogs_only(self):
+        if self.random_seed:
+            return
         self._cluster_paralogs_only('sRNA', self.U.srna)
         self._cluster_paralogs_only('mRNA', self.U.mrna)
 
@@ -391,7 +400,7 @@ class Analyzer:
             f"   {cluster_size_dist}"
         )
 
-    def _analysis_1_srna_homologs_to_commom_bps(self, srna_bp_mapping: dict, bp_to_cluster: dict, add_pairs_info: bool = False):
+    def tool_1_srna_to_bp(self, srna_bp_mapping: dict, bp_to_cluster: dict, add_pairs_info: bool = False):
         self.logger.info(f"##############   Analsis 1 - Cross-Species Conservation of sRNAs' Functionality   ##############")
         self.logger.debug("Main output")
         # 1 - load clusters of sRNA homologs
@@ -418,9 +427,11 @@ class Analyzer:
                 }
                 if len(all_unq_bps) > 0:
                     cluster_srnas_to_bps[srna_complete] = all_unq_bps
-            cluster_tree_w_meta = self._add_metadata_to_tree(cluster_tree)
-            with open(join(self.out_path_analysis_tool_1_trees, f"sRNA-to-BP__Mappings__Cluster_{cluster_id}__All.json"), 'w') as f:
-                json.dump(cluster_tree_w_meta, f, indent=4, sort_keys=False)
+            
+            if not self.random_seed:
+                cluster_tree_w_meta = self._add_metadata_to_tree(cluster_tree)
+                with open(join(self.out_path_analysis_tool_1_trees, f"sRNA-to-BP__Mappings__Cluster_{cluster_id}__All.json"), 'w') as f:
+                    json.dump(cluster_tree_w_meta, f, indent=4, sort_keys=False)
 
             # 3 - generate cluster df
             # 3.1 - generate the cluster record
@@ -449,43 +460,43 @@ class Analyzer:
         write_df(out_df, join(self.out_path_analysis_tool_1, f"sRNA-to-BP__Output__{self.out_file_suffix}.csv"))
 
         # 5 - generate supplementay table and dump
-        self.logger.debug("Supplementay output")
-        sup_df = out_df[[self.srna_cluster_id_col, 'cluster', 'num_strains', 'sRNA_info']][pd.notnull(out_df['sRNA_info'])].copy().reset_index(drop=True)
-        shared_clusters = set(out_df[self.srna_cluster_id_col][out_df['shared_bp_clusters'].apply(lambda x: isinstance(x, list) and len(x) > 0)])
-        expanded_clusters = set(out_df[self.srna_cluster_id_col][out_df['expanded_bp_clusters'].apply(lambda x: isinstance(x, list) and len(x) > 0)])
-        emergent_clusters = set(out_df[self.srna_cluster_id_col][out_df['emergent_bp_clusters'].apply(lambda x: isinstance(x, list) and len(x) > 0)])
-        records = []
-        for _, row in sup_df.iterrows():
-            rec = {
-                self.srna_cluster_id_col: row[self.srna_cluster_id_col],
-                'cluster': row['cluster'],
-                'num_strains': row['num_strains']
-            }
-            strain_to_num_targets, strain_to_num_bp_ids = {}, {}
-            for srna_complete, info in row['sRNA_info'].items():
-                strain, _, _ = srna_complete.split('__')
-                strain_to_num_targets[strain] = strain_to_num_targets.get(strain, 0) + info['num_targets']
-                strain_to_num_bp_ids[strain] = strain_to_num_bp_ids.get(strain, 0) + info['num_bp_terms']
+        if not self.random_seed:
+            self.logger.debug("Supplementay output")
+            sup_df = out_df[[self.srna_cluster_id_col, 'cluster', 'num_strains', 'sRNA_info']][pd.notnull(out_df['sRNA_info'])].copy().reset_index(drop=True)
+            shared_clusters = set(out_df[self.srna_cluster_id_col][out_df['shared_bp_clusters'].apply(lambda x: isinstance(x, list) and len(x) > 0)])
+            expanded_clusters = set(out_df[self.srna_cluster_id_col][out_df['expanded_bp_clusters'].apply(lambda x: isinstance(x, list) and len(x) > 0)])
+            emergent_clusters = set(out_df[self.srna_cluster_id_col][out_df['emergent_bp_clusters'].apply(lambda x: isinstance(x, list) and len(x) > 0)])
+            records = []
+            for _, row in sup_df.iterrows():
+                rec = {
+                    self.srna_cluster_id_col: row[self.srna_cluster_id_col],
+                    'cluster': row['cluster'],
+                    'num_strains': row['num_strains']
+                }
+                strain_to_num_targets, strain_to_num_bp_ids = {}, {}
+                for srna_complete, info in row['sRNA_info'].items():
+                    strain, _, _ = srna_complete.split('__')
+                    strain_to_num_targets[strain] = strain_to_num_targets.get(strain, 0) + info['num_targets']
+                    strain_to_num_bp_ids[strain] = strain_to_num_bp_ids.get(strain, 0) + info['num_bp_terms']
 
-            rec["num_targets"] = sum(strain_to_num_targets.values())
-            rec["num_strains_with_targets"] = sum(1 for v in strain_to_num_targets.values() if v > 0)
-            num_strains_with_bp_ids = sum(1 for v in strain_to_num_bp_ids.values() if v > 0)
-            rec["num_bp_terms"] = sum(strain_to_num_bp_ids.values())
-            rec["num_strains_with_bp_terms"] = num_strains_with_bp_ids
-            rec["at_least_two_strains_with_bp_terms"] = num_strains_with_bp_ids >= 2
-            rec["has_shared_bp_clusters"] = row[self.srna_cluster_id_col] in shared_clusters
-            rec["has_expanded_bp_clusters"] = row[self.srna_cluster_id_col] in expanded_clusters
-            rec["has_emergent_bp_clusters"] = row[self.srna_cluster_id_col] in emergent_clusters
+                rec["num_targets"] = sum(strain_to_num_targets.values())
+                rec["num_strains_with_targets"] = sum(1 for v in strain_to_num_targets.values() if v > 0)
+                num_strains_with_bp_ids = sum(1 for v in strain_to_num_bp_ids.values() if v > 0)
+                rec["num_bp_terms"] = sum(strain_to_num_bp_ids.values())
+                rec["num_strains_with_bp_terms"] = num_strains_with_bp_ids
+                rec["at_least_two_strains_with_bp_terms"] = num_strains_with_bp_ids >= 2
+                rec["has_shared_bp_clusters"] = row[self.srna_cluster_id_col] in shared_clusters
+                rec["has_expanded_bp_clusters"] = row[self.srna_cluster_id_col] in expanded_clusters
+                rec["has_emergent_bp_clusters"] = row[self.srna_cluster_id_col] in emergent_clusters
 
-            for strain in self.U.strains:
-                rec[f"num_targets__{strain}"] = strain_to_num_targets.get(strain, 0)
-            for strain in self.U.strains:
-                rec[f"num_bp_terms__{strain}"] = strain_to_num_bp_ids.get(strain, 0)
+                for strain in self.U.strains:
+                    rec[f"num_targets__{strain}"] = strain_to_num_targets.get(strain, 0)
+                for strain in self.U.strains:
+                    rec[f"num_bp_terms__{strain}"] = strain_to_num_bp_ids.get(strain, 0)
 
-            records.append(rec)
-        sup_df = pd.DataFrame(records)
-
-        write_df(sup_df, join(self.out_path_analysis_tool_1, f"sRNA-to-BP__Metadata__{self.out_file_suffix}.csv"))
+                records.append(rec)
+            sup_df = pd.DataFrame(records)
+            write_df(sup_df, join(self.out_path_analysis_tool_1, f"sRNA-to-BP__Metadata__{self.out_file_suffix}.csv"))
         self.logger.info(f"Dumped Analysis 1 results")
 
     def _get_cluster_df(self, rec: dict, cluster_srnas_to_bps: dict, srna_bp_mapping: dict) -> pd.DataFrame:
@@ -771,6 +782,8 @@ class Analyzer:
             val_type (str): 'ratio' or 'percentage'
             min_val_limit (float)
         """
+        if self.random_seed:
+            return
         records = []
         for (rna_type, all_homologs_df) in [(self.U.srna, self.srna_homologs.copy()), (self.U.mrna, self.mrna_homologs.copy())]:
             # 1 - num_clusters
@@ -815,6 +828,8 @@ class Analyzer:
             val_type (str): 'ratio' or 'percentage'
             min_val_limit (float)
         """
+        if self.random_seed:
+            return
         records = []
         for (rna_type, all_homologs_df) in [(self.U.srna, self.srna_homologs.copy()), (self.U.mrna, self.mrna_homologs.copy())]:
             # 1 - num_clusters
@@ -863,6 +878,8 @@ class Analyzer:
         Args:
             val_type (str): 'ratio' or 'percentage'
         """
+        if self.random_seed:
+            return
         # -----------------   sRNA, mRNA rows   -----------------
         _map = {}
         records = []
@@ -1145,7 +1162,7 @@ class Analyzer:
 
         return tree, tree_of_bp_emergent_srnas, info
 
-    def _analysis_2_bp_rna_mapping(self, bp_rna_mapping: dict, cluster_to_bps: dict) -> pd.DataFrame:
+    def tool_2_bp_to_srna(self, bp_rna_mapping: dict, cluster_to_bps: dict) -> pd.DataFrame:
         """
         Generate a DataFrame with information about BPs and their annotated mRNAs and sRNAs
 
@@ -1167,6 +1184,9 @@ class Analyzer:
                 ...
             } 
         """
+        if self.random_seed:
+            return
+        
         self.logger.info(f"##############   Analsis 2 - Cross-Species Conservation of Biological Processes   ##############")
         
         srna_clusters = self.srna_homologs[self.srna_homologs['num_strains'] > 1]['cluster'].apply(ast.literal_eval).tolist()
@@ -1297,6 +1317,8 @@ class Analyzer:
         num_relevant = len(relevant_bp_clusters)        
 
     def _dump_bps_of_annotated_mrnas(self):
+        if self.random_seed:
+            return
         # 1 - Find all BP nodes that are annotated to at least one mRNA
         bp_nodes_with_annotation = [
             node for node, data in self.G.nodes(data=True)
@@ -1316,7 +1338,6 @@ class Analyzer:
         bps_of_annotated_mrnas = pd.DataFrame(records)
         # 3 - Dump the DataFrame to a CSV file
         write_df(bps_of_annotated_mrnas, join(self.out_path_summary_tables, f"BPs_of_annotated_mrnas__{self.out_file_suffix}.csv"))
-        return
     
     def _dump_metadata(self, metadata: dict):
         """

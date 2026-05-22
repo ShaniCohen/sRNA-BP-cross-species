@@ -52,8 +52,10 @@ class Pipeline:
 
         self.configs = configs
     
-    def run(self):
+    def run(self, random_graph_seed: int = None):
         self.logger.info(f"--------------   run starts   --------------")
+        if random_graph_seed is not None:
+            self.logger.info(f"*****  Running analysis on a RANDOM graph (seed = {random_graph_seed})  *****")
 
         data_loader = DataLoader(self.configs['data_loader'], self.logger)
         data_loader.load_and_process_data()
@@ -67,13 +69,18 @@ class Pipeline:
         graph_builder = GraphBuilder(self.configs['graph_builder'], self.logger, data_loader, ontology, graph_utils)
         graph_builder.build_graph()
 
-        analyzer = Analyzer(self.configs['analyzer'], self.logger, graph_builder, graph_utils)
+        analyzer = Analyzer(self.configs['analyzer'], self.logger, graph_builder, graph_utils, random_graph_seed)
         analyzer.run_analysis()
         
         self.logger.info(f"--------------   run completed   --------------")
 
 
 if __name__ == "__main__":
+    ##### Random Graph Mode (for p-value calculation):  
+    #   set a seed to get analysis results over a RANDOM graph
+    #   otherwise results are provided for the real graph (seed=None)
+    seed = int(os.getenv('SLURM_ARRAY_TASK_ID')) if os.getenv('SLURM_ARRAY_TASK_ID') else None
+
     config_path = os.path.join(ROOT_PATH, 'configurations', 'config.json')
     pipeline = Pipeline(version='0.0.1', config_path=config_path)
-    pipeline.run()
+    pipeline.run(random_graph_seed=seed)
