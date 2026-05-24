@@ -105,8 +105,7 @@ class Pipeline:
 
 if __name__ == "__main__":
     ##### Random Graph Mode (for p-value calculation):  
-    #   set a seed to get analysis results over a RANDOM graph
-    #   otherwise results are provided for the real graph (seed=None)
+    #   set a seed to get analysis results over a RANDOM graph, otherwise results are provided for the real graph (seed=None)
     seed = int(os.getenv('SLURM_ARRAY_TASK_ID')) if os.getenv('SLURM_ARRAY_TASK_ID') else None
     # seed = seed + 500 if seed is not None else None
 
@@ -114,11 +113,3 @@ if __name__ == "__main__":
     pipeline = Pipeline(version='0.0.1', config_path=config_path)
     # pipeline.run(random_graph_seed=seed)
     pipeline.run_p_value_calculation()
-
-    print("done")
-
-
-    # file_path = join(pipeline.configs['analyzer']['analysis_output_dir'], 'k12_curated_ips', 'Analysis_tool_1', 'sRNA-to-BP__Output__v_k12_curated_ips.csv')
-    # import pandas as pd
-    # df = pd.read_csv(file_path, encoding='utf-8')
-    # pipeline.run()
