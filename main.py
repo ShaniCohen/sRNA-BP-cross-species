@@ -2,6 +2,8 @@ from os.path import join
 import json
 import sys
 import os
+import pandas as pd
+from typing import List
 from analysis.data_loader import DataLoader
 from analysis.ontology import Ontology
 from analysis.graph_utils import GraphUtils
@@ -74,13 +76,43 @@ class Pipeline:
         
         self.logger.info(f"--------------   run completed   --------------")
 
+    def run_p_value_calculation(self, dir_original_graph: str = None, dir_random_graphs: str = None, conf_str: str = 'k12_curated_ips', seeds: List[int] = list(range(1, 1001))):
+        """_summary_
+
+        Args:
+            conf_str (str, optional): Can be either 'k12_curated_ips' or 'k12_curated_ips_w_Enrichment'.
+        """
+        self.logger.info(f"--------------   p-value calculation starts   --------------")
+        dir_original_graph = dir_original_graph if dir_original_graph else join(self.configs['analyzer']['analysis_output_dir'], conf_str, 'Analysis_tool_1_sRNA_to_BP')
+        dir_random_graphs = dir_random_graphs if dir_random_graphs else join(self.configs['analyzer']['analysis_output_dir'], conf_str, 'Random_graphs')
+        
+        original_res = pd.read_csv(join(dir_original_graph, f'sRNA-to-BP__Output__{conf_str}.csv'))
+        for seed in seeds:
+            dir_seed = join(dir_random_graphs, f'seed_{seed}', 'Analysis_tool_1_sRNA_to_BP')
+            random_res = pd.read_csv(join(dir_seed, f'sRNA-to-BP__Output__{conf_str}.csv'))
+            
+            merged = original_res.merge(random_res, on=['sRNA', 'BP'], suffixes=('_original', '_random'))
+            merged['p_value'] = merged.apply(lambda row: 1 if row['p_value_random'] <= row['p_value_original'] else 0, axis=1)
+            merged.to_csv(join(dir_random_graphs, f'sRNA-to-BP__Output__v_random_graph_seed_{seed}__{conf_str}_with_p_values.csv'), index=False)
+        self.logger.info(f"--------------   p-value calculation completed   --------------")
+
 
 if __name__ == "__main__":
     ##### Random Graph Mode (for p-value calculation):  
     #   set a seed to get analysis results over a RANDOM graph
     #   otherwise results are provided for the real graph (seed=None)
     seed = int(os.getenv('SLURM_ARRAY_TASK_ID')) if os.getenv('SLURM_ARRAY_TASK_ID') else None
+    # seed = seed + 500 if seed is not None else None
 
     config_path = os.path.join(ROOT_PATH, 'configurations', 'config.json')
     pipeline = Pipeline(version='0.0.1', config_path=config_path)
-    pipeline.run(random_graph_seed=seed)
+    # pipeline.run(random_graph_seed=seed)
+    pipeline.run_p_value_calculation()
+
+    print("done")
+
+
+    # file_path = join(pipeline.configs['analyzer']['analysis_output_dir'], 'k12_curated_ips', 'Analysis_tool_1', 'sRNA-to-BP__Output__v_k12_curated_ips.csv')
+    # import pandas as pd
+    # df = pd.read_csv(file_path, encoding='utf-8')
+    # pipeline.run()
