@@ -107,8 +107,6 @@ if __name__ == "__main__":
     ##### Random Graph Mode (for p-value calculation):  
     #   set a seed to get analysis results over a RANDOM graph, otherwise results are provided for the real graph (seed=None)
     seed = int(os.getenv('SLURM_ARRAY_TASK_ID')) if os.getenv('SLURM_ARRAY_TASK_ID') else None
-    seed = 2
-    # seed = seed + 500 if seed is not None else None
 
     config_path = os.path.join(ROOT_PATH, 'configurations', 'config.json')
     pipeline = Pipeline(version='0.0.1', config_path=config_path)
