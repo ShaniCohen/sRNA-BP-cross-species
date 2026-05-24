@@ -76,7 +76,7 @@ class Pipeline:
         
         self.logger.info(f"--------------   run completed   --------------")
 
-    def run_p_value_calculation(self, dir_original_graph: str = None, dir_random_graphs: str = None, conf_str: str = 'k12_curated_ips', seeds: List[int] = list(range(1, 1001))):
+    def run_p_value_calculation(self, numeric_col: str = 'num_shared_bp_clusters', dir_original_graph: str = None, dir_random_graphs: str = None, conf_str: str = 'k12_curated_ips', seeds: List[int] = list(range(1, 1001))):
         """_summary_
 
         Args:
@@ -86,14 +86,20 @@ class Pipeline:
         dir_original_graph = dir_original_graph if dir_original_graph else join(self.configs['analyzer']['analysis_output_dir'], conf_str, 'Analysis_tool_1_sRNA_to_BP')
         dir_random_graphs = dir_random_graphs if dir_random_graphs else join(self.configs['analyzer']['analysis_output_dir'], conf_str, 'Random_graphs')
         
-        original_res = pd.read_csv(join(dir_original_graph, f'sRNA-to-BP__Output__{conf_str}.csv'))
+        original_res = pd.read_csv(join(dir_original_graph, f'sRNA-to-BP__Output__v_{conf_str}.csv'))
+        pv_df = original_res[pd.notnull(original_res['srna_subgroup'])][['srna_subgroup', numeric_col]].reset_index(drop=True).copy()
         for seed in seeds:
             dir_seed = join(dir_random_graphs, f'seed_{seed}', 'Analysis_tool_1_sRNA_to_BP')
-            random_res = pd.read_csv(join(dir_seed, f'sRNA-to-BP__Output__{conf_str}.csv'))
-            
-            merged = original_res.merge(random_res, on=['sRNA', 'BP'], suffixes=('_original', '_random'))
-            merged['p_value'] = merged.apply(lambda row: 1 if row['p_value_random'] <= row['p_value_original'] else 0, axis=1)
-            merged.to_csv(join(dir_random_graphs, f'sRNA-to-BP__Output__v_random_graph_seed_{seed}__{conf_str}_with_p_values.csv'), index=False)
+            random_res = pd.read_csv(join(dir_seed, f'sRNA-to-BP__Output__v_{conf_str}.csv'))
+            random_res = random_res[['srna_subgroup', numeric_col]].rename(columns={numeric_col: f'{numeric_col}_random_seed_{seed}'})
+            pv_df = pv_df.merge(random_res, on='srna_subgroup', how='left')
+
+        pv_df.fillna(0, inplace=True)
+        pv_df[f"{numeric_col}_p_value"] = (pv_df.filter(regex=f'{numeric_col}_random_seed_').ge(pv_df[numeric_col], axis=0).sum(axis=1) / len(seeds))        
+        _len = len(original_res)
+        original_res = original_res.merge(pv_df[['srna_subgroup', f"{numeric_col}_p_value"]], on='srna_subgroup', how='left')
+        assert len(original_res) == _len, "duplications post merge"
+        original_res.to_csv(join(dir_original_graph, f'sRNA-to-BP__Output__v_{conf_str}_with_p_values.csv'), index=False)
         self.logger.info(f"--------------   p-value calculation completed   --------------")
 
 
