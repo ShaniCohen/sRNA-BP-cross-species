@@ -75,13 +75,13 @@ class Analyzer:
         # ---------  RANDOM GRAPH MODE  ---------        
         self.random_seed = random_seed
         if self.random_seed is not None:
-            self.logger.info(f"Generating random graph with seed {self.random_seed} for p-value calculation...")
-            G_rnd = graph_builder.get_random_graph(seed=self.random_seed)
+            self.logger.info(f"Generating random graph with seed {self.random_seed} for p-value calculation. mRNA sampling space: {self.config['random_graph_mrna_sampling_space']}")
+            G_rnd = graph_builder.get_random_graph(seed=self.random_seed, mrna_sampling_space=self.config['random_graph_mrna_sampling_space'])
             res, report = self.U._compare_graphs(self.G, G_rnd)
             print(f"********************************  Graph comparison: {res}")
             
             self.G = G_rnd
-            parent_dir = create_dir_if_not_exists(join(parent_dir, f"Random_graphs", f"seed_{self.random_seed}"))
+            parent_dir = create_dir_if_not_exists(join(parent_dir, f"Random_graphs_{self.config['random_graph_mrna_sampling_space']}", f"seed_{self.random_seed}"))
 
         if self.run_enrichment:
             self.out_path_enrichment_metadata = create_dir_if_not_exists(join(parent_dir, "Enrichment_metadata"))

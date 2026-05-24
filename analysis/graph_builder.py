@@ -85,7 +85,7 @@ class GraphBuilder:
             raise Exception("Graph is not built yet. Please call build_graph() first.")
         return self.G
 
-    def get_random_graph(self, seed: int) -> nx.MultiDiGraph:
+    def get_random_graph(self, seed: int, mrna_sampling_space: str) -> nx.MultiDiGraph:
         """Return a copy of the built graph where sRNA->mRNA interaction edges
         (edges with type == self.U.targets) are randomly resampled within each
         strain while preserving every sRNA's number of targets (degree).
@@ -113,8 +113,19 @@ class GraphBuilder:
 
         # For each strain, collect sRNAs and mRNAs
         for strain in self.U.strains:
-            srna_nodes = [n for n, d in self.G.nodes(data=True) if d['type'] == self.U.srna and d['strain'] == strain]
-            mrna_nodes = [n for n, d in self.G.nodes(data=True) if d['type'] == self.U.mrna and d['strain'] == strain]
+            # sRNAs
+            srna_nodes = self.U.get_all_srna_nodes(self.G, strain)
+            # mRNAs
+            if mrna_sampling_space == 'all':
+                mrna_nodes = self.U.get_all_mrna_nodes(self.G, strain)
+            elif mrna_sampling_space == 'annotated':
+                # only consider mRNAs that have at least one BP annotation
+                mrna_nodes = self.U.get_all_mrna_nodes_annotated_to_bp(self.G, strain)
+            elif mrna_sampling_space == 'annotated_targets':
+                # consider mRNAs that have at least one BP annotation and are targets
+                mrna_nodes = self.U.get_all_mrna_nodes_annotated_and_targeted(self.G, strain)
+            else:
+                raise ValueError(f"Invalid mrna_sampling_space: {mrna_sampling_space}. Must be one of 'all', 'annotated', or 'annotated_and_targets'.")
 
             for srna in srna_nodes:
                 # count original targets (edges from srna to mrna with type == targets)
@@ -363,61 +374,7 @@ class GraphBuilder:
         bp_to_po2vec_cluster = self._load_n_validate_po2vec_bp_clustering(bp_to_po2vec_emb)
         # 3 - add PO2Vec-based clusters to BP nodes & dump csv
         self._add_po2vec_clusters_to_bp_nodes_n_dump_csv(bp_to_po2vec_cluster)
-
-    # def _run_wang_w_goatools(self):
-
-    #     from goatools.base import get_godag
-    #     from goatools.semsim.termwise.wang import SsWang
-
-    #     print("start")
-    #     godag = get_godag("go-basic.obo", optional_attrs={'relationship'})
-    #     # https://github.com/tanghaibao/goatools/blob/main/notebooks/semantic_similarity_wang.ipynb
-        
-    #     # Researcher-provided GO terms related to smell
-    #     go_a = 'GO:0007608'
-    #     go_b = 'GO:0050911'
-    #     go_c = 'GO:0042221'
-    #     goids = {go_a, go_b, go_c}
-
-    #     # Annotations for plotting
-    #     go2txt = {
-    #         go_a:'GO TERM A',
-    #         go_b:'GO TERM B',
-    #         go_c:'GO TERM C'}
-
-    #     # Optional relationships. (Relationship, is_a, is required and always used)
-    #     relationships = {'part_of'}
-        
-    #     wang_r1 = SsWang(goids, godag, relationships)
-    #     pairs = [(go_a, go_b), (go_a, go_c), (go_b, go_c)]
-    #     for go1, go2 in pairs:
-    #         sim = wang_r1.get_sim(go1, go2)
-    #         self.logger.info(f"\n {go1} {godag[go1].name} \n {go2} {godag[go2].name} \n Wang similarity: {sim}")
-
-    #     # from goatools.gosubdag.gosubdag import GoSubDag
-    #     # from goatools.gosubdag.plot.gosubdag_plot import GoSubDagPlot
-
-    #     # r1_png = 'smell_r1.png'
-    #     # r1_gosubdag = GoSubDag(goids, godag, relationships)
-
-    #     # GoSubDagPlot(r1_gosubdag, go2txt=go2txt).plt_dag(r1_png)
-
-    #     # from goatools.semantic import TermCounts, get_info_content, semantic_similarity
-    #     # from goatools.obo_parser import GODag
-
-    #     # obo_dag = GODag("go-basic.obo")
-    #     # # termcounts = TermCounts(obo_dag, assoc)
-    #     # go_id1 = "GO:0003677"
-    #     # go_id2 = "GO:0005524"
-
-    #     # # ic1 = get_info_content(go_id1, termcounts)
-    #     # # ic2 = get_info_content(go_id2, termcounts)
-
-    #     # sim = semantic_similarity(go_id1, go_id2, obo_dag, method='wang')
-    #     # print(f"Semantic similarity score (GOATools): {sim}")
-    #     print("end")
-
-    
+ 
     def _add_po2vec_embeddings_to_bp_nodes(self) -> Dict[str, np.ndarray]:
         self.logger.info(f"adding PO2Vec embeddings to BP nodes")
         node_id_to_po2vec_emb = self.go_embeddings_data['po2vec_embeddings']
@@ -513,51 +470,6 @@ class GraphBuilder:
 
         # # Map GO IDs to their cluster labels
         # go_id_to_cluster = dict(zip(go_ids, cluster_labels))
-
-
-    # def _add_po2vec_embeddings_to_go_nodes(self):
-    #     """
-    #     Iterates over all nodes in self.BP, self.MF, and self.CC and add their embeddings vectors.
-    #     node_id_to_emb: Dict[str, np.ndarray]
-
-    #     """
-    #     self.logger.info(f"adding PO2Vec embeddings to GO nodes")
-    #     # 1 - add PO2Vec embeddings to GO nodes
-    #     node_id_to_po2vec_emb = self.go_embeddings_data['po2vec_embeddings']
-    #     for go_id, po2vec_emb in node_id_to_po2vec_emb.items():
-    #         if self.G.has_node(go_id):
-    #             self.G = self.U.add_node_property_po2vec_embedding(self.G, go_id, po2vec_emb)
-    #     # 2 - log stats
-    #     bp_nodes, bp_nodes_w_emb = 0, 0 
-    #     for n, d in self.G.nodes(data=True):
-    #         if d['type'] == self.U.bp:
-    #             bp_nodes += 1
-    #             if self.U.po2vec_emb in d:
-    #                 bp_nodes_with_emb += 1
-    #     self.logger.info(f"BP: out of {bp_nodes} nodes, {bp_nodes_w_emb} have PO2Vec embeddings ({(bp_nodes_w_emb/bp_nodes)*100:.2f}%)")
-
-    def _add_po2vec_similarity_edges_between_go_nodes(self):
-        self.logger.info(f"adding PO2Vec-based similarity edges between GO nodes")
-
-        # emb_type = self.ontology.emb_type_po2vec
-        # go_ids_with_emb = [n for n, d in self.G.nodes(data=True) if d['type'] == self.U.bp and emb_type in d]
-        # self.logger.info(f"total GO terms with {emb_type}: {len(go_ids_with_emb)}")
-        
-        # # build KDTree for fast nearest neighbor search
-        # go_id_to_emb = {n: self.G.nodes[n][emb_type] for n in go_ids_with_emb}
-        # emb_matrix = np.array([go_id_to_emb[n] for n in go_ids_with_emb])
-        # from sklearn.neighbors import NearestNeighbors
-        # nbrs = NearestNeighbors(n_neighbors=self.config['num_similar_go_terms'] + 1, algorithm='auto').fit(emb_matrix)
-        # distances, indices = nbrs.kneighbors(emb_matrix)
-
-        # # add similarity edges
-        # for i, go_id in enumerate(go_ids_with_emb):
-        #     similar_indices = indices[i][1:]  # skip the first one (itself)
-        #     similar_go_ids = [go_ids_with_emb[idx] for idx in similar_indices]
-        #     for sim_go_id in similar_go_ids:
-        #         # if not self.U.has_similarity_edge(self.G, go_id, sim_go_id):
-        #         if not self.U.are_similar_by_po2vec(self.G, curr_go_id, other_go_id):
-        #             self.G = self.U.add_edges_po2vec_similarity(self.G, curr_go_id, other_go_id, po2vec_similarity_score)
 
     def _log_graph_info(self, dump=False):
         self.logger.info("Logging graph information...")

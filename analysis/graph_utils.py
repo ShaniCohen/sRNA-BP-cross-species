@@ -218,6 +218,32 @@ class GraphUtils:
         both_mf = (G.nodes[go_node_id_1]['type'] == self.mf) & (G.nodes[go_node_id_2]['type'] == self.mf)
         both_cc = (G.nodes[go_node_id_1]['type'] == self.cc) & (G.nodes[go_node_id_2]['type'] == self.cc)
         assert both_bp or both_mf or both_cc
+    
+    def get_all_srna_nodes(self, G, strain):
+        """ Get all sRNA node ids of a given strain in the graph G """
+        assert strain in self.strains, f"strain {strain} is not in the list of strains: {self.strains}"
+        srna_nodes = [n for n, d in G.nodes(data=True) if d['type'] == self.srna and d['strain'] == strain]
+        return srna_nodes
+    
+    def get_all_mrna_nodes(self, G, strain):
+        """ Get all mRNA node ids of a given strain in the graph G """
+        assert strain in self.strains, f"strain {strain} is not in the list of strains: {self.strains}"
+        mrna_nodes = [n for n, d in G.nodes(data=True) if d['type'] == self.mrna and d['strain'] == strain]
+        return mrna_nodes
+    
+    def get_all_mrna_nodes_annotated_to_bp(self, G, strain):
+        """ Get all mRNA node ids of a given strain in the graph G that have at least one annotation edge to a BP GO node """
+        assert strain in self.strains, f"strain {strain} is not in the list of strains: {self.strains}"
+        mrna_nodes = self.get_all_mrna_nodes(G, strain)
+        mrna_nodes_annotated_to_bp = [n for n in mrna_nodes if any(d['type'] == self.annotated and G.nodes[go_node_id]['type'] == self.bp for _, go_node_id, d in G.out_edges(n, data=True))]
+        return mrna_nodes_annotated_to_bp
+    
+    def get_all_mrna_nodes_annotated_and_targeted(self, G, strain):
+        """ Get all mRNA node ids of a given strain in the graph G that have at least one annotation edge to a BP GO node and at least one incoming targets edge from an sRNA node """
+        assert strain in self.strains, f"strain {strain} is not in the list of strains: {self.strains}"
+        mrna_nodes_annotated = self.get_all_mrna_nodes_annotated_to_bp(G, strain)
+        mrna_nodes_annotated_and_targeted = [n for n in mrna_nodes_annotated if any(d['type'] == self.targets for _, _, d in G.in_edges(n, data=True))]
+        return mrna_nodes_annotated_and_targeted
 
     def is_target(self, G, srna_node_id, mrna_node_id):
         """ Check if there is an interaction edge between sRNA and mRNA nodes """
