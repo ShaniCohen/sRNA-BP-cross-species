@@ -3,10 +3,8 @@
 This repository is the official implementation of the paper 
 [*"A multi-layer, multi-species graph-based framework for comparative analysis of sRNA-mediated regulation"*]().
 
-![Pipeline](docs/Pipeline.png)
-
 <p align="center">
-	<img src="https://raw.githubusercontent.com/ShaniCohen/sRNA-BP-cross-species/main/docs/Pipeline.png" width="800" />
+	<img src="/docs/Pipeline.png" width="800" />
 </p>
 
 
