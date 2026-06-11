@@ -49,6 +49,6 @@
       "linkage_method": "complete",
       "threshold_distance_percentile": 0.05
     },
-    "random_graph_mrna_sampling_space": "annotated_targets"
+    "random_graph_mrna_sampling_space": "all"
   }
 }
