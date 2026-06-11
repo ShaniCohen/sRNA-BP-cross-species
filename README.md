@@ -3,7 +3,10 @@
 This repository is the official implementation of the paper 
 [*"A multi-layer, multi-species graph-based framework for comparative analysis of sRNA-mediated regulation"*]().
 
-![Pipeline diagram](docs/Pipeline.png)
+<p align="center">
+	<img src="/docs/Pipeline.png" width="800" />
+</p>
+
 
 ## Overview
 
