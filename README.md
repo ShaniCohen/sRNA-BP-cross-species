@@ -5,6 +5,11 @@ This repository is the official implementation of the paper
 
 ![Pipeline](docs/Pipeline.png)
 
+<p align="center">
+	<img src="https://raw.githubusercontent.com/ShaniCohen/sRNA-BP-cross-species/main/docs/Pipeline.png" width="800" />
+</p>
+
+
 ## Overview
 
 This repository provides a modular pipeline for integrating experimentally derived sRNA–mRNA interactions, orthology, functional annotations, and GO biological process clustering. It supports two analyses: (1) functional conservation among orthologous sRNAs and (2) convergent regulation by distinct sRNAs across species, uncovering signals that emerge only through multi-layer, cross-species integration.
