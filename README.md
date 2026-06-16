@@ -103,8 +103,9 @@ analyzer.run_analysis()
 ```
 
 Notes:
-- Each component expects configuration keys under `configurations/config.json`. Adjust paths and flags there to switch behavior (e.g. running enrichment or set a linkage method for clustering).
-- Typical workflow: run `DataLoader` → `Ontology` → `GraphUtils` → `GraphBuilder.build_graph()` → `Analyzer.run_analysis()` (top-level `main.py` orchestrates this).
+- All components read their settings from `configurations/config.json`. Update this file to control behavior (such as enabling enrichment or selecting the clustering linkage method).
+- The set of strains to analyze is defined within the `DataLoader` module.
+- The standard pipeline is: `DataLoader` → `Ontology` → `GraphUtils` → `GraphBuilder.build_graph()` → `Analyzer.run_analysis()` (coordinated by the top-level `main.py`).
 
 
 ## Data
