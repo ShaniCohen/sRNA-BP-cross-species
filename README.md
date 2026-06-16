@@ -105,22 +105,22 @@ analyzer.run_analysis()
 Notes:
 - All components read their settings from `configurations/config.json`. Update this file to control behavior (such as enabling enrichment or selecting the clustering linkage method).
 - The set of strains to analyze is defined within the `DataLoader` module.
-- The standard pipeline is:
+- The standard `Pipeline.run()` is:
 ```py
-        data_loader = DataLoader(self.configs['data_loader'], self.logger)
-        data_loader.load_and_process_data()
+    data_loader = DataLoader(self.configs['data_loader'], self.logger)
+    data_loader.load_and_process_data()
         
-        ontology = Ontology(self.configs['ontology'], self.logger)
-        ontology.load_go_ontology()
-        ontology.create_ontology_nx_graphs()
+    ontology = Ontology(self.configs['ontology'], self.logger)
+    ontology.load_go_ontology()
+    ontology.create_ontology_nx_graphs()
 
-        graph_utils = GraphUtils(self.configs['graph_utils'], self.logger, data_loader, ontology)
+    graph_utils = GraphUtils(self.configs['graph_utils'], self.logger, data_loader, ontology)
 
-        graph_builder = GraphBuilder(self.configs['graph_builder'], self.logger, data_loader, ontology, graph_utils)
-        graph_builder.build_graph()
+    graph_builder = GraphBuilder(self.configs['graph_builder'], self.logger, data_loader, ontology, graph_utils)
+    graph_builder.build_graph()
 
-        analyzer = Analyzer(self.configs['analyzer'], self.logger, graph_builder, graph_utils, random_graph_seed)
-        analyzer.run_analysis()
+    analyzer = Analyzer(self.configs['analyzer'], self.logger, graph_builder, graph_utils, random_graph_seed)
+    analyzer.run_analysis()
 ```
 
 ## Data
