@@ -25,10 +25,6 @@ conda activate pipeline-env
 python main.py
 ```
 
-## Data
-
-The complete input and output datasets are available at [Zenodo](https://zenodo.org/records/20718221).
-
 ## Modules
 
 - **Configurations**: [configurations/config.json](configurations/config.json)
@@ -110,6 +106,10 @@ Notes:
 - Each component expects configuration keys under `configurations/config.json`. Adjust paths and flags there to switch behavior (e.g. running enrichment or set a linkage method for clustering).
 - Typical workflow: run `DataLoader` → `Ontology` → `GraphUtils` → `GraphBuilder.build_graph()` → `Analyzer.run_analysis()` (top-level `main.py` orchestrates this).
 
+
+## Data
+
+The complete input and output datasets are available at [Zenodo](https://zenodo.org/records/20718221).
 
 ---
 
