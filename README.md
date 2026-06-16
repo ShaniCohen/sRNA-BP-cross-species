@@ -25,6 +25,10 @@ conda activate pipeline-env
 python main.py
 ```
 
+## Data
+
+The complete input and output datasets are available at [Zenodo](https://zenodo.org/records/20718221).
+
 ## Modules
 
 - **Configurations**: [configurations/config.json](configurations/config.json)
