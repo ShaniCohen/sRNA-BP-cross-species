@@ -123,6 +123,15 @@ class Pipeline:
             pv_df[random_cols].ge(pv_df[numeric_col], axis=0).sum(axis=1) / len(random_cols)
         )
 
+        rounded_columns = [
+            f'{numeric_col}_random_mean',
+            f'{numeric_col}_random_std',
+            f'{numeric_col}_z_score',
+            f'{numeric_col}_fold_change',
+            f'{numeric_col}_p_value',
+        ]
+        pv_df[rounded_columns] = pv_df[rounded_columns].round(3)
+
         _len = len(original_res)
         original_res = original_res.merge(pv_df[
                 [
@@ -136,7 +145,7 @@ class Pipeline:
             ], on='srna_subgroup', how='left'
         )
         assert len(original_res) == _len, "duplications post merge"
-        original_res.to_csv(join(dir_original_graph, f'sRNA-to-BP__Output__v_{conf_str}_with_p_values_and_fc_{mrna_sampling_space}.csv'), index=False)
+        original_res.to_csv(join(dir_original_graph, f'sRNA-to-BP__Output__v_{conf_str}_with_p_values_and_z-scores_{mrna_sampling_space}.csv'), index=False)
         self.logger.info(f"--------------   p-value calculation completed   --------------")
 
 
