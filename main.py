@@ -3,6 +3,7 @@ import json
 import sys
 import os
 import pandas as pd
+import numpy as np
 from typing import List
 from analysis.data_loader import DataLoader
 from analysis.ontology import Ontology
@@ -83,8 +84,9 @@ class Pipeline:
             conf_str (str, optional): Can be either 'k12_curated_ips' or 'k12_curated_ips_w_Enrichment'.
         """
         self.logger.info(f"--------------   p-value calculation starts   --------------")
+        mrna_sampling_space = self.configs['analyzer']["random_graph_mrna_sampling_space"]
         dir_original_graph = dir_original_graph if dir_original_graph else join(self.configs['analyzer']['analysis_output_dir'], conf_str, 'Analysis_tool_1_sRNA_to_BP')
-        dir_random_graphs = dir_random_graphs if dir_random_graphs else join(self.configs['analyzer']['analysis_output_dir'], conf_str, f'Random_graphs_{self.configs['analyzer']["random_graph_mrna_sampling_space"]}')
+        dir_random_graphs = dir_random_graphs if dir_random_graphs else join(self.configs['analyzer']['analysis_output_dir'], conf_str, f'Random_graphs_{mrna_sampling_space}')
         
         original_res = pd.read_csv(join(dir_original_graph, f'sRNA-to-BP__Output__v_{conf_str}.csv'))
         pv_df = original_res[pd.notnull(original_res['srna_subgroup'])][['srna_subgroup', numeric_col]].reset_index(drop=True).copy()
@@ -95,11 +97,46 @@ class Pipeline:
             pv_df = pv_df.merge(random_res, on='srna_subgroup', how='left')
 
         pv_df.fillna(0, inplace=True)
-        pv_df[f"{numeric_col}_p_value"] = (pv_df.filter(regex=f'{numeric_col}_random_seed_').ge(pv_df[numeric_col], axis=0).sum(axis=1) / len(seeds))        
+
+        random_cols = [c for c in pv_df.columns if c.startswith(f'{numeric_col}_random_seed_')]
+
+        # random summary per subgroup
+        pv_df[f'{numeric_col}_random_mean'] = pv_df[random_cols].mean(axis=1)
+        pv_df[f'{numeric_col}_random_std'] = pv_df[random_cols].std(axis=1, ddof=1)
+
+        # z-score: (observed - mean_random) / std_random
+        pv_df[f'{numeric_col}_z_score'] = np.where(
+            pv_df[f'{numeric_col}_random_std'] == 0,
+            np.nan,
+            (pv_df[numeric_col] - pv_df[f'{numeric_col}_random_mean']) / pv_df[f'{numeric_col}_random_std']
+        )
+
+        # fold change: observed / mean_random
+        pv_df[f'{numeric_col}_fold_change'] = np.where(
+            pv_df[f'{numeric_col}_random_mean'] == 0,
+            np.nan,
+            pv_df[numeric_col] / pv_df[f'{numeric_col}_random_mean']
+        )
+
+        # empirical p-value: fraction of random runs >= observed
+        pv_df[f'{numeric_col}_p_value'] = (
+            pv_df[random_cols].ge(pv_df[numeric_col], axis=0).sum(axis=1) / len(random_cols)
+        )
+
         _len = len(original_res)
-        original_res = original_res.merge(pv_df[['srna_subgroup', f"{numeric_col}_p_value"]], on='srna_subgroup', how='left')
+        original_res = original_res.merge(pv_df[
+                [
+                    'srna_subgroup',
+                    f'{numeric_col}_random_mean',
+                    f'{numeric_col}_random_std',
+                    f'{numeric_col}_z_score',
+                    f'{numeric_col}_fold_change',
+                    f'{numeric_col}_p_value',
+                ]
+            ], on='srna_subgroup', how='left'
+        )
         assert len(original_res) == _len, "duplications post merge"
-        original_res.to_csv(join(dir_original_graph, f'sRNA-to-BP__Output__v_{conf_str}_with_p_values_{self.configs["analyzer"]["random_graph_mrna_sampling_space"]}.csv'), index=False)
+        original_res.to_csv(join(dir_original_graph, f'sRNA-to-BP__Output__v_{conf_str}_with_p_values_and_fc_{mrna_sampling_space}.csv'), index=False)
         self.logger.info(f"--------------   p-value calculation completed   --------------")
 
 
@@ -110,5 +147,5 @@ if __name__ == "__main__":
 
     config_path = os.path.join(ROOT_PATH, 'configurations', 'config.json')
     pipeline = Pipeline(version='0.0.1', config_path=config_path)
-    pipeline.run(random_graph_seed=seed)
-    # pipeline.run_p_value_calculation()
+    # pipeline.run(random_graph_seed=seed)
+    pipeline.run_p_value_calculation()
