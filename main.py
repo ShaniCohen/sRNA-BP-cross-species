@@ -145,7 +145,7 @@ class Pipeline:
             ], on='srna_subgroup', how='left'
         )
         assert len(original_res) == _len, "duplications post merge"
-        original_res.to_csv(join(dir_original_graph, f'sRNA-to-BP__Output__v_{conf_str}_with_p_values_and_z-scores_{mrna_sampling_space}.csv'), index=False)
+        original_res.to_csv(join(dir_original_graph, f'sRNA-to-BP__Output__v_{conf_str}_with_pv_{mrna_sampling_space}.csv'), index=False)
         self.logger.info(f"--------------   p-value calculation completed   --------------")
 
 
@@ -156,5 +156,5 @@ if __name__ == "__main__":
 
     config_path = os.path.join(ROOT_PATH, 'configurations', 'config.json')
     pipeline = Pipeline(version='0.0.1', config_path=config_path)
-    # pipeline.run(random_graph_seed=seed)
-    pipeline.run_p_value_calculation()
+    pipeline.run(random_graph_seed=seed)
+    # pipeline.run_p_value_calculation()
