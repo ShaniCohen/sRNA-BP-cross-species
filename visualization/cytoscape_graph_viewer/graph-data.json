@@ -1,0 +1,421 @@
+{
+    "nodes": [
+        {
+            "data": {
+                "id": "n0",
+                "label": "ecoli_epec__chix",
+                "type": "sRNA",
+                "cluster": "sRNA-cluster-1",
+                "color": "#d22d2d"
+            }
+        },
+        {
+            "data": {
+                "id": "n1",
+                "label": "ecoli_epec__ybfm",
+                "type": "mRNA",
+                "cluster": "mRNA-cluster-2",
+                "color": "#8d2dd2"
+            }
+        },
+        {
+            "data": {
+                "id": "n2",
+                "label": "oligosaccharide transport",
+                "type": "BP"
+            }
+        },
+        {
+            "data": {
+                "id": "n3",
+                "label": "ecoli_epec__rplk",
+                "type": "mRNA",
+                "cluster": "mRNA-cluster-1",
+                "color": "#2dd25d"
+            }
+        },
+        {
+            "data": {
+                "id": "n4",
+                "label": "translation",
+                "type": "BP",
+                "cluster": "BP-cluster-1",
+                "color": "#2db7d2"
+            }
+        },
+        {
+            "data": {
+                "id": "n5",
+                "label": "ecoli_k12__chix",
+                "type": "sRNA",
+                "cluster": "sRNA-cluster-1",
+                "color": "#d22d2d"
+            }
+        },
+        {
+            "data": {
+                "id": "n6",
+                "label": "ecoli_k12__pros",
+                "type": "mRNA"
+            }
+        },
+        {
+            "data": {
+                "id": "n7",
+                "label": "ecoli_k12__rpln",
+                "type": "mRNA"
+            }
+        },
+        {
+            "data": {
+                "id": "n8",
+                "label": "ecoli_k12__rplt",
+                "type": "mRNA"
+            }
+        },
+        {
+            "data": {
+                "id": "n9",
+                "label": "ecoli_k12__rpsh",
+                "type": "mRNA"
+            }
+        },
+        {
+            "data": {
+                "id": "n10",
+                "label": "ecoli_k12__rpsu",
+                "type": "mRNA"
+            }
+        },
+        {
+            "data": {
+                "id": "n11",
+                "label": "ecoli_k12__tufb",
+                "type": "mRNA",
+                "cluster": "mRNA-cluster-3",
+                "color": "#d2be2d"
+            }
+        },
+        {
+            "data": {
+                "id": "n12",
+                "label": "translational elongation",
+                "type": "BP",
+                "cluster": "BP-cluster-1",
+                "color": "#2db7d2"
+            }
+        },
+        {
+            "data": {
+                "id": "n13",
+                "label": "ecoli_k12__efp",
+                "type": "mRNA"
+            }
+        },
+        {
+            "data": {
+                "id": "n14",
+                "label": "ecoli_k12__chip",
+                "type": "mRNA",
+                "cluster": "mRNA-cluster-2",
+                "color": "#8d2dd2"
+            }
+        },
+        {
+            "data": {
+                "id": "n15",
+                "label": "klebsiella__chix",
+                "type": "sRNA",
+                "cluster": "sRNA-cluster-1",
+                "color": "#d22d2d"
+            }
+        },
+        {
+            "data": {
+                "id": "n16",
+                "label": "klebsiella__tuf",
+                "type": "mRNA",
+                "cluster": "mRNA-cluster-3",
+                "color": "#d2be2d"
+            }
+        },
+        {
+            "data": {
+                "id": "n17",
+                "label": "klebsiella__chip",
+                "type": "mRNA",
+                "cluster": "mRNA-cluster-2",
+                "color": "#8d2dd2"
+            }
+        },
+        {
+            "data": {
+                "id": "n18",
+                "label": "salmonella__chix",
+                "type": "sRNA",
+                "cluster": "sRNA-cluster-1",
+                "color": "#d22d2d"
+            }
+        },
+        {
+            "data": {
+                "id": "n19",
+                "label": "salmonella__ybfm",
+                "type": "mRNA",
+                "cluster": "mRNA-cluster-2",
+                "color": "#8d2dd2"
+            }
+        },
+        {
+            "data": {
+                "id": "n20",
+                "label": "salmonella__rplk",
+                "type": "mRNA",
+                "cluster": "mRNA-cluster-1",
+                "color": "#2dd25d"
+            }
+        }
+    ],
+    "edges": [
+        {
+            "data": {
+                "id": "e0",
+                "source": "n0",
+                "target": "n1",
+                "edgeType": "interacts with"
+            }
+        },
+        {
+            "data": {
+                "id": "e1",
+                "source": "n1",
+                "target": "n2",
+                "edgeType": "annotated"
+            }
+        },
+        {
+            "data": {
+                "id": "e2",
+                "source": "n0",
+                "target": "n3",
+                "edgeType": "interacts with"
+            }
+        },
+        {
+            "data": {
+                "id": "e3",
+                "source": "n3",
+                "target": "n4",
+                "edgeType": "annotated"
+            }
+        },
+        {
+            "data": {
+                "id": "e4",
+                "source": "n5",
+                "target": "n6",
+                "edgeType": "interacts with"
+            }
+        },
+        {
+            "data": {
+                "id": "e5",
+                "source": "n6",
+                "target": "n4",
+                "edgeType": "annotated"
+            }
+        },
+        {
+            "data": {
+                "id": "e6",
+                "source": "n5",
+                "target": "n7",
+                "edgeType": "interacts with"
+            }
+        },
+        {
+            "data": {
+                "id": "e7",
+                "source": "n7",
+                "target": "n4",
+                "edgeType": "annotated"
+            }
+        },
+        {
+            "data": {
+                "id": "e8",
+                "source": "n5",
+                "target": "n8",
+                "edgeType": "interacts with"
+            }
+        },
+        {
+            "data": {
+                "id": "e9",
+                "source": "n8",
+                "target": "n4",
+                "edgeType": "annotated"
+            }
+        },
+        {
+            "data": {
+                "id": "e10",
+                "source": "n5",
+                "target": "n9",
+                "edgeType": "interacts with"
+            }
+        },
+        {
+            "data": {
+                "id": "e11",
+                "source": "n9",
+                "target": "n4",
+                "edgeType": "annotated"
+            }
+        },
+        {
+            "data": {
+                "id": "e12",
+                "source": "n5",
+                "target": "n10",
+                "edgeType": "interacts with"
+            }
+        },
+        {
+            "data": {
+                "id": "e13",
+                "source": "n10",
+                "target": "n4",
+                "edgeType": "annotated"
+            }
+        },
+        {
+            "data": {
+                "id": "e14",
+                "source": "n5",
+                "target": "n11",
+                "edgeType": "interacts with"
+            }
+        },
+        {
+            "data": {
+                "id": "e15",
+                "source": "n11",
+                "target": "n4",
+                "edgeType": "annotated"
+            }
+        },
+        {
+            "data": {
+                "id": "e16",
+                "source": "n11",
+                "target": "n12",
+                "edgeType": "annotated"
+            }
+        },
+        {
+            "data": {
+                "id": "e17",
+                "source": "n5",
+                "target": "n13",
+                "edgeType": "interacts with"
+            }
+        },
+        {
+            "data": {
+                "id": "e18",
+                "source": "n13",
+                "target": "n4",
+                "edgeType": "annotated"
+            }
+        },
+        {
+            "data": {
+                "id": "e19",
+                "source": "n13",
+                "target": "n12",
+                "edgeType": "annotated"
+            }
+        },
+        {
+            "data": {
+                "id": "e20",
+                "source": "n5",
+                "target": "n14",
+                "edgeType": "interacts with"
+            }
+        },
+        {
+            "data": {
+                "id": "e21",
+                "source": "n14",
+                "target": "n2",
+                "edgeType": "annotated"
+            }
+        },
+        {
+            "data": {
+                "id": "e22",
+                "source": "n15",
+                "target": "n16",
+                "edgeType": "interacts with"
+            }
+        },
+        {
+            "data": {
+                "id": "e23",
+                "source": "n16",
+                "target": "n12",
+                "edgeType": "annotated"
+            }
+        },
+        {
+            "data": {
+                "id": "e24",
+                "source": "n15",
+                "target": "n17",
+                "edgeType": "interacts with"
+            }
+        },
+        {
+            "data": {
+                "id": "e25",
+                "source": "n17",
+                "target": "n2",
+                "edgeType": "annotated"
+            }
+        },
+        {
+            "data": {
+                "id": "e26",
+                "source": "n18",
+                "target": "n19",
+                "edgeType": "interacts with"
+            }
+        },
+        {
+            "data": {
+                "id": "e27",
+                "source": "n19",
+                "target": "n2",
+                "edgeType": "annotated"
+            }
+        },
+        {
+            "data": {
+                "id": "e28",
+                "source": "n18",
+                "target": "n20",
+                "edgeType": "interacts with"
+            }
+        },
+        {
+            "data": {
+                "id": "e29",
+                "source": "n20",
+                "target": "n4",
+                "edgeType": "annotated"
+            }
+        }
+    ]
+}

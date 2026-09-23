@@ -30,8 +30,8 @@
 <div id="legend">
   <div class="legend-title">Node type (shape)</div>
   <div><span class="swatch" style="background:#9CA3AF; border-radius:50%;"></span>sRNA (circle)</div>
-  <div><span class="swatch" style="background:#9CA3AF; border-radius:0;"></span>BP (square)</div>
   <div><span class="swatch" style="width:0; height:0; border-left:6px solid transparent; border-right:6px solid transparent; border-bottom:10px solid #9CA3AF; background:none;"></span>mRNA (triangle)</div>
+  <div><span class="swatch" style="background:#9CA3AF; border-radius:0;"></span>BP (square)</div>
   <div class="legend-section">
     <div class="legend-title">Edge type</div>
     <div><span class="line-swatch" style="background:#9CA3AF;"></span>interacts with</div>
@@ -116,12 +116,14 @@
         title.className = 'legend-title';
         title.textContent = titleText;
         section.appendChild(title);
-        clusterColors.forEach((color, clusterName) => {
+        [...clusterColors.entries()]
+          .sort(([nameA], [nameB]) => nameA.localeCompare(nameB, undefined, { numeric: true }))
+          .forEach(([clusterName, color]) => {
           const row = document.createElement('div');
           row.appendChild(makeShapeSwatch(shape, color));
           row.appendChild(document.createTextNode(clusterName));
           section.appendChild(row);
-        });
+          });
         legendEl.appendChild(section);
       });
 
