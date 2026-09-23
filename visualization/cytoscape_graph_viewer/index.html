@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Cytoscape.js — Large Graph via Live Server</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+<style>
+  html, body { margin: 0; height: 100%; font-family: sans-serif; }
+  #cy { width: 100%; height: 100%; display: block; }
+  #status {
+    position: absolute; top: 10px; left: 10px; z-index: 10;
+    background: #fff; padding: 6px 10px; border-radius: 4px;
+    font-size: 13px; box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  }
+  #legend {
+    position: absolute; top: 10px; right: 10px; z-index: 10;
+    background: #fff; padding: 8px 12px; border-radius: 4px;
+    font-size: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    line-height: 1.6;
+  }
+  .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
+  .line-swatch { display: inline-block; width: 16px; height: 2px; margin-right: 6px; vertical-align: middle; }
+  .legend-section { margin-top: 6px; padding-top: 6px; border-top: 1px solid #eee; }
+  .legend-title { font-weight: 600; font-size: 11px; color: #666; margin-bottom: 2px; }
+</style>
+</head>
+<body>
+
+<div id="status">Loading graph…</div>
+<div id="legend">
+  <div class="legend-title">Node type (shape)</div>
+  <div><span class="swatch" style="background:#9CA3AF; border-radius:50%;"></span>sRNA (circle)</div>
+  <div><span class="swatch" style="background:#9CA3AF; border-radius:0;"></span>BP (square)</div>
+  <div><span class="swatch" style="width:0; height:0; border-left:6px solid transparent; border-right:6px solid transparent; border-bottom:10px solid #9CA3AF; background:none;"></span>mRNA (triangle)</div>
+  <div class="legend-section">
+    <div class="legend-title">Edge type</div>
+    <div><span class="line-swatch" style="background:#9CA3AF;"></span>interacts with</div>
+    <div><span class="line-swatch" style="border-top:2px dashed #9CA3AF; background:none; height:0;"></span>annotated</div>
+  </div>
+</div>
+<div id="cy"></div>
+
+<script>
+  // Types are arranged left-to-right in this order, so edges generally
+  // flow from an earlier column toward a later one.
+  const typeOrder = ['sRNA', 'mRNA', 'BP'];
+  const columnSpacingX = 260;   // horizontal distance between type columns
+  const rowSpacingY = 60;       // vertical distance between nodes of the same type
+
+  const statusEl = document.getElementById('status');
+  const t0 = performance.now();
+
+  // Guard against a silent hang (e.g. graph-data.json missing, server not
+  // actually running, wrong relative path) — surface an error after 8s.
+  const fetchTimeout = setTimeout(() => {
+    statusEl.textContent = 'Still waiting on graph-data.json — check it exists next to index.html and the dev server is running.';
+  }, 8000);
+
+  fetch('graph-data.json')
+    .then(res => {
+      clearTimeout(fetchTimeout);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    })
+    .then(data => {
+      const fetchMs = Math.round(performance.now() - t0);
+      statusEl.textContent = `Fetched ${data.nodes.length} nodes, ${data.edges.length} edges in ${fetchMs}ms — laying out…`;
+
+      // Build a "cluster" legend section per node type on the fly from
+      // whatever cluster names/colors show up in the data (colors are
+      // assigned by the Python generator, not hardcoded here). Each
+      // section's swatch matches that type's node shape (circle/
+      // triangle/square) so it's visually tied to the shape legend above.
+      const CLUSTER_LEGEND_CONFIG = {
+        sRNA: { title: 'sRNA homolog clusters', shape: 'circle' },
+        mRNA: { title: 'mRNA homolog clusters', shape: 'triangle' },
+        BP:   { title: 'BP clusters',   shape: 'square' }
+      };
+
+      function makeShapeSwatch(shape, color) {
+        if (shape === 'triangle') {
+          const swatch = document.createElement('span');
+          swatch.style.display = 'inline-block';
+          swatch.style.width = '0';
+          swatch.style.height = '0';
+          swatch.style.marginRight = '6px';
+          swatch.style.borderLeft = '6px solid transparent';
+          swatch.style.borderRight = '6px solid transparent';
+          swatch.style.borderBottom = `10px solid ${color}`;
+          return swatch;
+        }
+        const swatch = document.createElement('span');
+        swatch.className = 'swatch';
+        swatch.style.background = color;
+        swatch.style.borderRadius = shape === 'circle' ? '50%' : '0';
+        return swatch;
+      }
+
+      const legendEl = document.getElementById('legend');
+
+      Object.keys(CLUSTER_LEGEND_CONFIG).forEach(nodeType => {
+        const clusterColors = new Map();
+        data.nodes
+          .filter(n => n.data.type === nodeType)
+          .forEach(n => {
+            if (n.data.cluster && n.data.color && !clusterColors.has(n.data.cluster)) {
+              clusterColors.set(n.data.cluster, n.data.color);
+            }
+          });
+        if (clusterColors.size === 0) return;
+
+        const { title: titleText, shape } = CLUSTER_LEGEND_CONFIG[nodeType];
+        const section = document.createElement('div');
+        section.className = 'legend-section';
+        const title = document.createElement('div');
+        title.className = 'legend-title';
+        title.textContent = titleText;
+        section.appendChild(title);
+        clusterColors.forEach((color, clusterName) => {
+          const row = document.createElement('div');
+          row.appendChild(makeShapeSwatch(shape, color));
+          row.appendChild(document.createTextNode(clusterName));
+          section.appendChild(row);
+        });
+        legendEl.appendChild(section);
+      });
+
+      // Group nodes by type, in the column order defined above. Any type
+      // not listed in typeOrder gets appended as an extra column so the
+      // layout still works if the data introduces a new type later.
+      const seenTypes = [...new Set(data.nodes.map(n => n.data.type))];
+      const columns = typeOrder.filter(t => seenTypes.includes(t))
+        .concat(seenTypes.filter(t => !typeOrder.includes(t)));
+
+      columns.forEach((type, colIndex) => {
+        const nodesOfType = data.nodes.filter(n => n.data.type === type);
+        const x = colIndex * columnSpacingX;
+        nodesOfType.forEach((node, rowIndex) => {
+          // Center the column vertically around y=0
+          const y = (rowIndex - (nodesOfType.length - 1) / 2) * rowSpacingY;
+          node.position = { x, y };
+        });
+      });
+
+      const cy = cytoscape({
+        container: document.getElementById('cy'),
+
+        elements: {
+          nodes: data.nodes,
+          edges: data.edges
+        },
+
+        style: [
+          {
+            selector: 'node',
+            style: {
+              'label': 'data(label)',
+              'font-size': 8,
+              'text-valign': 'bottom',
+              'text-margin-y': 4,
+              'width': 18,
+              'height': 18,
+              'color': '#333',
+              'background-color': '#9CA3AF'
+            }
+          },
+          { selector: 'node[type = "sRNA"]', style: { 'shape': 'ellipse' } },
+          { selector: 'node[type = "mRNA"]', style: { 'shape': 'triangle' } },
+          { selector: 'node[type = "BP"]',   style: { 'shape': 'rectangle' } },
+          // Nodes belonging to a homolog cluster (data.color is set by
+          // the Python generator, with colors guaranteed unique across
+          // sRNA/mRNA/BP) are colored by cluster instead of the default
+          // gray.
+          { selector: 'node[color]', style: { 'background-color': 'data(color)' } },
+          {
+            selector: 'edge',
+            style: {
+              'width': 1,
+              'curve-style': 'bezier',
+              'target-arrow-shape': 'triangle',
+              'arrow-scale': 0.6,
+              'line-color': '#9CA3AF',
+              'target-arrow-color': '#9CA3AF'
+            }
+          },
+          { selector: 'edge[edgeType = "interacts with"]', style: { 'line-style': 'solid' }},
+          { selector: 'edge[edgeType = "annotated"]', style: { 'line-style': 'dashed' }},
+          { selector: '.faded', style: { 'opacity': 0.1 } },
+          { selector: '.highlighted', style: { 'line-color': '#EF4444', 'target-arrow-color': '#EF4444', 'width': 2 } }
+        ],
+
+        // Positions were assigned explicitly above (grouped by type into
+        // columns), so 'preset' just respects them rather than computing
+        // a force-directed layout.
+        layout: {
+          name: 'preset',
+          fit: true,
+          padding: 50
+        }
+      });
+
+      cy.ready(() => {
+        const totalMs = Math.round(performance.now() - t0);
+        statusEl.textContent = `${data.nodes.length} nodes, ${data.edges.length} edges — rendered in ${totalMs}ms total`;
+      });
+
+      // Click a node -> highlight its neighborhood, fade the rest
+      cy.on('tap', 'node', function (evt) {
+        const node = evt.target;
+        const neighborhood = node.closedNeighborhood();
+        cy.elements().addClass('faded');
+        neighborhood.removeClass('faded');
+        neighborhood.edges().addClass('highlighted');
+      });
+
+      cy.on('tap', function (evt) {
+        if (evt.target === cy) {
+          cy.elements().removeClass('faded highlighted');
+        }
+      });
+    })
+    .catch(err => {
+      clearTimeout(fetchTimeout);
+      statusEl.textContent = 'Failed to load graph: ' + err.message;
+      console.error(err);
+    });
+</script>
+
+</body>
+</html>

@@ -8,6 +8,7 @@ from os.path import join
 import itertools
 from pathlib import Path
 from utils.general import read_df, write_df, create_dir_if_not_exists
+from visualization.cytoscape_viz import adjust_data_for_cytoscape_graph_viewer
 from preprocessing.general_pr import convert_count_to_val
 import networkx as nx
 from pyvis.network import Network
@@ -575,6 +576,9 @@ class Analyzer:
                     with open(join(self.out_path_analysis_tool_1_trees, f"sRNA-to-BP__Mappings__Cluster_{cluster_id}__Subgroup_{row[self.srna_subgroup_id_col]}.json"), 'w') as f:
                         tree_w_meta = self._add_metadata_to_tree(row[self.srna_subgroup_tree_col])
                         json.dump(tree_w_meta, f, indent=4, sort_keys=False)
+                    with open(join(self.out_path_analysis_tool_1_trees, f"sRNA-to-BP__Mappings__Cluster_{cluster_id}__Subgroup_{row[self.srna_subgroup_id_col]}__cytoscape.json"), 'w') as f:
+                        graph_data = adjust_data_for_cytoscape_graph_viewer(tree_w_meta, row)
+                        json.dump(graph_data, f, indent=4, sort_keys=False)
             sub_df = sub_df[[self.srna_subgroup_id_col] + [c for c in sub_df.columns if c not in [self.srna_subgroup_id_col, self.srna_subgroup_tree_col]]]
             # merge with out df
             out_df = pd.concat([out_df, sub_df], ignore_index=True)
