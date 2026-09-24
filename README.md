@@ -134,6 +134,10 @@ Interactive viewer for the sRNA → mRNA → BP regulatory graph, built with
 columns by type (sRNA → mRNA → BP-terms), colored by cluster where applicable,
 and edges are styled by relationship type.
 
+<p align="center">
+	<img src="/docs/Cytoscape_example.png" width="800" />
+</p>
+
 ### Folder contents
 
 ```
@@ -189,7 +193,7 @@ Works regardless of editor, and is the most reliable fallback.
 
    **Python (most common):**
    ```bash
-   python3 -m http.server 8000
+   python3 -m http.server 8000 --bind 127.0.0.1
    ```
    *(On Windows, use `python` or `py` instead of `python3` if that's
    what resolves on your system.)*
