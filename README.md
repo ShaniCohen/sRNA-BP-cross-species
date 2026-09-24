@@ -170,14 +170,14 @@ The quickest option if you're already working in VS Code.
    the Extensions panel (`Ctrl+Shift+X` / `Cmd+Shift+X`), if not already
    installed.
 2. In the file Explorer sidebar, right-click `index.html`.
-3. Select **"Show Preview"**.
+3. Select **"Open with Live Server"**.
 4. The graph opens in a browser tab *inside* the VS Code window, served
    over a local `http://` address that Live Preview manages
    automatically — no terminal commands needed.
 
-> If you don't see "Show Preview" in the right-click menu, the extension
-> may not be installed yet, or you may be looking at the "Open with Live
-> Server" option from a different extension instead — see Option 2 if
+> If you don't see "Open with Live Server" in the right-click menu, the extension
+> may not be installed yet, or you may be looking at the "Show Preview"
+> option from a different extension instead — see Option 2 if
 > so, since that one launches an external browser tab rather than an
 > integrated one.
 
