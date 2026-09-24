@@ -111,8 +111,8 @@ class Analyzer:
             self._cluster_rna_homologs()
         if self.run_clustering_of_rna_paralogs_only:   
             self._cluster_rna_paralogs_only()
-        self.srna_homologs = read_df(join(self.out_path_clustering_homologs, f"sRNA_homologs__{self.out_file_suffix}.csv"))
-        self.mrna_homologs = read_df(join(self.out_path_clustering_homologs, f"mRNA_homologs__{self.out_file_suffix}.csv"))
+        self.srna_homologs = read_df(join(self.out_path_clustering_homologs, f"sRNA_homologs__{self.out_file_suffix}.csv")).sort_values(by=['cluster']).reset_index(drop=True)
+        self.mrna_homologs = read_df(join(self.out_path_clustering_homologs, f"mRNA_homologs__{self.out_file_suffix}.csv")).sort_values(by=['cluster']).reset_index(drop=True)
 
         # 3 - Calculate and dump statistics of homolog clusters
         if self.run_homolog_clusters_stats:
