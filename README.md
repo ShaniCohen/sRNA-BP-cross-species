@@ -150,8 +150,7 @@ to load the graph.
 **Example.** For each sRNA subgroup, the analysis pipeline exports a
 dedicated JSON file for Cytoscape visualization, named
 `sRNA-to-BP__Mappings__Cluster_<N>__Subgroup_<M>__cytoscape.json` (the
-trailing `cytoscape` marks it as the Cytoscape-ready export, as opposed
-to other output formats for the same subgroup). To visualize the
+trailing `cytoscape` marks it as the Cytoscape-ready export). To visualize the
 subgroup containing sRNA homologs `ecoli_epec__E2348C_ncR06__chix`,
 `ecoli_k12__G0-9382__chix`, `klebsiella__chiX__chix`, and
 `salmonella__ncRNA0003__chix` (Cluster 16, Subgroup 1), take the
