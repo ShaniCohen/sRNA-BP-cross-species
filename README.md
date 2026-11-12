@@ -125,7 +125,7 @@ Notes:
 
 ## Data
 
-The complete input and output datasets are available at [Zenodo](https://zenodo.org/records/20718221).
+The complete input and output datasets are available at [Zenodo](https://zenodo.org/records/24160779).
 
 ## Cytoscape Graph Viewer
 
